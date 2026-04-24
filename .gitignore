@@ -88,6 +88,8 @@ frontend/test-results/
 # Local dev notes / scratch files
 .dev-docs/
 id_file
+# Local scratch exports and screenshots (do not commit)
+/output/
 
 # Runtime-generated volume data and configuration
 volume/lucene/
