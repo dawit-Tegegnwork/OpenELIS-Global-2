@@ -92,7 +92,7 @@ function TraditionalMedicineAuthenticationPage({
     {
       id: "molecular_identification",
       label: "Molecular identification (DNA barcoding: ITS, rbcL, matK genes)",
-    },
+    }
   ];
 
   // Authentication result options
