@@ -15,7 +15,7 @@ import {
 import { FormattedMessage, useIntl } from "react-intl";
 import { NotificationContext } from "../layout/Layout";
 import { NotificationKinds } from "../common/CustomNotification";
-import { InventoryItemAPI, NotebookDataAPI } from "./InventoryService";
+import { InventoryItemAPI, InventoryItemTypeAPI, NotebookDataAPI } from "./InventoryService";
 
 /**
  * Convert date string from DatePickerInput (mm/dd/yyyy) to ISO format for backend
@@ -129,12 +129,10 @@ const InventoryItemForm = ({ open, onClose, onSave, item = null }) => {
   useEffect(() => {
     const loadItemTypes = async () => {
       try {
-        const types = await InventoryItemAPI.getItemTypes();
-        const formattedTypes = types.map((type) => ({
-          id: type,
-          text: getItemTypeLabel(type),
-        }));
-        setItemTypes(formattedTypes);
+        const types = await InventoryItemTypeAPI.getAllActive();
+        setItemTypes(
+          types.map((t) => ({ id: t.code, text: t.name })),
+        );
       } catch (err) {
         console.error("Error loading item types:", err);
         notify({

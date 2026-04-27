@@ -1,0 +1,86 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+    xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+      http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-3.8.xsd">
+
+    <!-- Create inventory_item_type table to replace hardcoded ItemType enum -->
+    <changeSet id="081-create-inventory-item-type-table" author="kiro">
+        <createSequence sequenceName="inventory_item_type_seq" startValue="1" incrementBy="1"/>
+
+        <createTable tableName="inventory_item_type">
+            <column name="id" type="BIGINT" defaultValueSequenceNext="inventory_item_type_seq">
+                <constraints primaryKey="true" nullable="false"/>
+            </column>
+            <column name="code" type="VARCHAR(50)">
+                <constraints nullable="false" unique="true"/>
+            </column>
+            <column name="name" type="VARCHAR(100)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="description" type="VARCHAR(255)"/>
+            <column name="is_active" type="CHAR(1)" defaultValue="Y">
+                <constraints nullable="false"/>
+            </column>
+            <column name="version" type="INTEGER" defaultValueNumeric="0">
+                <constraints nullable="false"/>
+            </column>
+            <column name="last_updated" type="TIMESTAMP"/>
+            <column name="sys_user_id" type="VARCHAR(255)"/>
+        </createTable>
+
+        <!-- Seed existing enum values -->
+        <insert tableName="inventory_item_type">
+            <column name="code" value="REAGENT"/>
+            <column name="name" value="Reagent"/>
+            <column name="is_active" value="Y"/>
+            <column name="version" valueNumeric="0"/>
+        </insert>
+        <insert tableName="inventory_item_type">
+            <column name="code" value="RDT"/>
+            <column name="name" value="RDT (Rapid Diagnostic Test)"/>
+            <column name="is_active" value="Y"/>
+            <column name="version" valueNumeric="0"/>
+        </insert>
+        <insert tableName="inventory_item_type">
+            <column name="code" value="CARTRIDGE"/>
+            <column name="name" value="Analyzer Cartridge"/>
+            <column name="is_active" value="Y"/>
+            <column name="version" valueNumeric="0"/>
+        </insert>
+        <insert tableName="inventory_item_type">
+            <column name="code" value="HIV_KIT"/>
+            <column name="name" value="HIV Test Kit"/>
+            <column name="is_active" value="Y"/>
+            <column name="version" valueNumeric="0"/>
+        </insert>
+        <insert tableName="inventory_item_type">
+            <column name="code" value="SYPHILIS_KIT"/>
+            <column name="name" value="Syphilis Test Kit"/>
+            <column name="is_active" value="Y"/>
+            <column name="version" valueNumeric="0"/>
+        </insert>
+        <insert tableName="inventory_item_type">
+            <column name="code" value="ENZYME"/>
+            <column name="name" value="Enzyme"/>
+            <column name="is_active" value="Y"/>
+            <column name="version" valueNumeric="0"/>
+        </insert>
+        <insert tableName="inventory_item_type">
+            <column name="code" value="ANTIBIOTICS"/>
+            <column name="name" value="Antibiotics"/>
+            <column name="is_active" value="Y"/>
+            <column name="version" valueNumeric="0"/>
+        </insert>
+
+        <!-- Change inventory_item.item_type from enum to VARCHAR -->
+        <modifyDataType tableName="inventory_item" columnName="item_type" newDataType="VARCHAR(50)"/>
+
+        <rollback>
+            <dropTable tableName="inventory_item_type"/>
+            <dropSequence sequenceName="inventory_item_type_seq"/>
+        </rollback>
+    </changeSet>
+
+</databaseChangeLog>

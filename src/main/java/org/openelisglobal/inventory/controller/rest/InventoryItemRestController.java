@@ -11,8 +11,9 @@ import lombok.Setter;
 import org.openelisglobal.common.log.LogEvent;
 import org.openelisglobal.common.rest.BaseRestController;
 import org.openelisglobal.inventory.service.InventoryItemService;
-import org.openelisglobal.inventory.valueholder.InventoryEnums.ItemType;
+import org.openelisglobal.inventory.service.InventoryItemTypeService;
 import org.openelisglobal.inventory.valueholder.InventoryItem;
+import org.openelisglobal.inventory.valueholder.InventoryItemType;
 import org.openelisglobal.login.valueholder.UserSessionData;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
@@ -34,11 +35,13 @@ public class InventoryItemRestController extends BaseRestController {
     @Autowired
     private InventoryItemService inventoryItemService;
 
+    @Autowired
+    private InventoryItemTypeService inventoryItemTypeService;
+
     @GetMapping(value = "/types", produces = MediaType.APPLICATION_JSON_VALUE)
-    public ResponseEntity<List<ItemType>> getAllItemTypes() {
+    public ResponseEntity<List<InventoryItemType>> getAllItemTypes() {
         try {
-            List<ItemType> types = inventoryItemService.getAllItemTypes();
-            return ResponseEntity.ok(types);
+            return ResponseEntity.ok(inventoryItemTypeService.getAllActive());
         } catch (Exception e) {
             LogEvent.logError(e);
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
@@ -57,23 +60,16 @@ public class InventoryItemRestController extends BaseRestController {
     }
 
     @GetMapping(value = "/all", produces = MediaType.APPLICATION_JSON_VALUE)
-    public ResponseEntity<List<InventoryItem>> getAll(@RequestParam(required = false) ItemType itemType,
+    public ResponseEntity<List<InventoryItem>> getAll(@RequestParam(required = false) String itemType,
             @RequestParam(required = false) Boolean isActive, @RequestParam(required = false) String projectName) {
         try {
-            List<InventoryItem> items;
-
-            if (itemType != null || isActive != null || projectName != null) {
-                // Use filtered approach
-                items = inventoryItemService.getAll();
-                items = items.stream().filter(item -> itemType == null || item.getItemType().equals(itemType))
-                        .filter(item -> isActive == null || item.isActive() == isActive)
-                        .filter(item -> projectName == null
-                                || (item.getProjectName() != null && item.getProjectName().equals(projectName)))
-                        .toList();
-            } else {
-                items = inventoryItemService.getAll();
-            }
-
+            List<InventoryItem> items = inventoryItemService.getAll();
+            items = items.stream()
+                    .filter(item -> itemType == null || itemType.equals(item.getItemType()))
+                    .filter(item -> isActive == null || item.isActive() == isActive)
+                    .filter(item -> projectName == null
+                            || (item.getProjectName() != null && item.getProjectName().equals(projectName)))
+                    .toList();
             return ResponseEntity.ok(items);
         } catch (Exception e) {
             LogEvent.logError(e);
@@ -100,14 +96,9 @@ public class InventoryItemRestController extends BaseRestController {
             @RequestParam(defaultValue = "asc") String sortOrder, @RequestParam(required = false) String itemType,
             @RequestParam(required = false) Boolean isActive, @RequestParam(required = false) String search) {
         try {
-            ItemType type = null;
-            if (itemType != null && !itemType.trim().isEmpty() && !itemType.equalsIgnoreCase("ALL")) {
-                try {
-                    type = ItemType.valueOf(itemType.toUpperCase());
-                } catch (IllegalArgumentException e) {
-                    return ResponseEntity.badRequest().build();
-                }
-            }
+            String type = (itemType != null && !itemType.trim().isEmpty() && !itemType.equalsIgnoreCase("ALL"))
+                    ? itemType.toUpperCase()
+                    : null;
 
             List<InventoryItem> items = inventoryItemService.getPagedItems(limit, offset, sortBy, sortOrder, type,
                     isActive, search);
@@ -149,7 +140,7 @@ public class InventoryItemRestController extends BaseRestController {
     }
 
     @GetMapping(value = "/type/{itemType}", produces = MediaType.APPLICATION_JSON_VALUE)
-    public ResponseEntity<List<InventoryItem>> getByType(@PathVariable ItemType itemType) {
+    public ResponseEntity<List<InventoryItem>> getByType(@PathVariable String itemType) {
         try {
             List<InventoryItem> items = inventoryItemService.getByItemType(itemType);
             return ResponseEntity.ok(items);

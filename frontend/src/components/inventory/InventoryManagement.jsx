@@ -14,6 +14,7 @@ import InventoryDashboard from "./InventoryDashboard";
 import InventoryCatalog from "./InventoryCatalog";
 import InventoryReports from "./InventoryReports";
 import UnifiedAuditHistory from "./UnifiedAuditHistory";
+import InventoryItemTypeManager from "./InventoryItemTypeManager";
 import "./InventoryList.css";
 
 const breadcrumbs = [
@@ -55,6 +56,9 @@ const InventoryManagement = () => {
                 <Tab>
                   <FormattedMessage id="inventory.tab.auditHistory" />
                 </Tab>
+                <Tab>
+                  <FormattedMessage id="inventory.tab.itemTypes" defaultMessage="Item Types" />
+                </Tab>
               </TabList>
 
               <TabPanels>
@@ -76,6 +80,11 @@ const InventoryManagement = () => {
                 {/* Audit History Tab - Unified Audit Logs */}
                 <TabPanel>
                   <UnifiedAuditHistory />
+                </TabPanel>
+
+                {/* Item Types Tab - Manage Item Types */}
+                <TabPanel>
+                  <InventoryItemTypeManager />
                 </TabPanel>
               </TabPanels>
             </Tabs>
