@@ -24,7 +24,7 @@ import { Add } from "@carbon/icons-react";
 import { FormattedMessage, useIntl } from "react-intl";
 import { NotificationContext } from "../layout/Layout";
 import { AlertDialog, NotificationKinds } from "../common/CustomNotification";
-import { InventoryItemAPI } from "./InventoryService";
+import { InventoryItemAPI, InventoryItemTypeAPI } from "./InventoryService";
 import InventoryItemForm from "./InventoryItemForm";
 
 const InventoryCatalog = () => {
@@ -100,16 +100,13 @@ const InventoryCatalog = () => {
   useEffect(() => {
     const loadItemTypes = async () => {
       try {
-        const types = await InventoryItemAPI.getItemTypes();
+        const types = await InventoryItemTypeAPI.getAllActive();
         const formattedTypes = [
           {
             id: "ALL",
             text: intl.formatMessage({ id: "inventory.filter.all" }),
           },
-          ...types.map((type) => ({
-            id: type,
-            text: getItemTypeLabel(type),
-          })),
+          ...types.map((t) => ({ id: t.code, text: t.name })),
         ];
         setItemTypes(formattedTypes);
       } catch (err) {
@@ -215,14 +212,15 @@ const InventoryCatalog = () => {
 
   // Server-side pagination - no need for client-side filtering
   const rows = items.map((item) => {
-    // Get unit name from unit map using the unit ID
     const unitId = item.units;
     const unitsDisplay = unitMap[unitId] || unitId || "";
+    const typeEntry = itemTypes.find((t) => t.id === item.itemType);
+    const itemTypeDisplay = typeEntry ? typeEntry.text : item.itemType;
 
     return {
       id: String(item.id),
       name: item.name,
-      itemType: item.itemType,
+      itemType: itemTypeDisplay,
       units: unitsDisplay,
       lowStockThreshold: item.lowStockThreshold || "-",
       status: item.isActive ? "Active" : "Inactive",

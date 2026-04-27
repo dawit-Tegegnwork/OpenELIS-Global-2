@@ -8,7 +8,6 @@ import org.openelisglobal.common.log.LogEvent;
 import org.openelisglobal.common.rest.BaseRestController;
 import org.openelisglobal.inventory.service.InventoryItemService;
 import org.openelisglobal.inventory.service.InventoryLotService;
-import org.openelisglobal.inventory.valueholder.InventoryEnums.ItemType;
 import org.openelisglobal.inventory.valueholder.InventoryItem;
 import org.openelisglobal.inventory.valueholder.InventoryLot;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -49,7 +48,7 @@ public class InventoryReagentRestController extends BaseRestController {
             List<ReagentDTO> reagentDTOs = new ArrayList<>();
 
             // Get reagent items
-            List<InventoryItem> reagentItems = inventoryItemService.getByItemType(ItemType.REAGENT);
+            List<InventoryItem> reagentItems = inventoryItemService.getByItemType("REAGENT");
 
             // Filter by active status if requested
             if ("active".equalsIgnoreCase(status)) {
@@ -111,7 +110,7 @@ public class InventoryReagentRestController extends BaseRestController {
             List<InstrumentDTO> instrumentDTOs = new ArrayList<>();
 
             // Get cartridge items (instruments/analyzers)
-            List<InventoryItem> cartridgeItems = inventoryItemService.getByItemType(ItemType.CARTRIDGE);
+            List<InventoryItem> cartridgeItems = inventoryItemService.getByItemType("CARTRIDGE");
 
             // Filter by active status if requested
             if ("active".equalsIgnoreCase(status)) {

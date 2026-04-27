@@ -148,4 +148,10 @@
     <!-- Pathology Specimen Types: Tissue, Cytology, Body Fluid, Blood, Bone Marrow -->
     <include file="liquibase/3.4.x.x/072-pathology-specimen-types.xml"/>
 
+    <!-- Inventory Item Type: managed table replacing hardcoded enum -->
+    <include file="liquibase/3.4.x.x/081-inventory-item-type-table.xml"/>
+
+    <!-- Fix inventory_item_type column name to match BaseObject mapping -->
+    <include file="liquibase/3.4.x.x/082-fix-inventory-item-type-column-name.xml"/>
+
 </databaseChangeLog>

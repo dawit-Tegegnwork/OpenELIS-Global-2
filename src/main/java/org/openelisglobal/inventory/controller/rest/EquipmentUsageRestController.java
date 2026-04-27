@@ -291,7 +291,7 @@ public class EquipmentUsageRestController extends BaseRestController {
 
             // Get total equipment count (CARTRIDGE items)
             Integer totalEquipmentCount = inventoryItemService.getAllActive().stream()
-                    .filter(item -> "CARTRIDGE".equals(item.getItemType().name())).map(item -> 1)
+                    .filter(item -> "CARTRIDGE".equals(item.getItemType())).map(item -> 1)
                     .reduce(0, Integer::sum);
 
             // Aggregate by equipment

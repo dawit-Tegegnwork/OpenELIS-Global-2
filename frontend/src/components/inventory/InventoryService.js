@@ -99,6 +99,15 @@ const put = (endpoint, data) => {
   });
 };
 
+export const InventoryItemTypeAPI = {
+  getAll: () => get("/item-types/all"),
+  getAllActive: () => get("/item-types"),
+  getById: (id) => get(`/item-types/${id}`),
+  create: (itemType) => post("/item-types", itemType),
+  update: (id, itemType) => put(`/item-types/${id}`, itemType),
+  deactivate: (id) => put(`/item-types/${id}`, { isActive: "N" }),
+};
+
 export const InventoryItemAPI = {
   getAll: (filters = {}) => {
     const params = new URLSearchParams();

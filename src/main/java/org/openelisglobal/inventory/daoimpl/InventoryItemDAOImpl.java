@@ -7,7 +7,6 @@ import java.util.List;
 import org.openelisglobal.common.daoimpl.BaseDAOImpl;
 import org.openelisglobal.common.exception.LIMSRuntimeException;
 import org.openelisglobal.inventory.dao.InventoryItemDAO;
-import org.openelisglobal.inventory.valueholder.InventoryEnums.ItemType;
 import org.openelisglobal.inventory.valueholder.InventoryItem;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
@@ -22,8 +21,10 @@ public class InventoryItemDAOImpl extends BaseDAOImpl<InventoryItem, Long> imple
 
     @Override
     @Transactional(readOnly = true)
-    public List<ItemType> getAllItemTypes() {
-        return java.util.Arrays.asList(ItemType.values());
+    public List<String> getAllItemTypes() {
+        return entityManager
+                .createQuery("SELECT DISTINCT i.itemType FROM InventoryItem i ORDER BY i.itemType", String.class)
+                .getResultList();
     }
 
     @Override
@@ -44,17 +45,13 @@ public class InventoryItemDAOImpl extends BaseDAOImpl<InventoryItem, Long> imple
 
     @Override
     @Transactional(readOnly = true)
-    public List<InventoryItem> getByItemType(ItemType itemType) throws LIMSRuntimeException {
+    public List<InventoryItem> getByItemType(String itemType) throws LIMSRuntimeException {
         try {
-            // Use native SQL to avoid type conversion issues with enum
-            String sql = "SELECT * FROM clinlims.inventory_item " + "WHERE item_type = :itemType AND is_active = 'Y' "
-                    + "ORDER BY name";
-
-            @SuppressWarnings("unchecked")
-            List<InventoryItem> results = entityManager.createNativeQuery(sql, InventoryItem.class)
-                    .setParameter("itemType", itemType.name()).getResultList();
-
-            return results;
+            return entityManager
+                    .createQuery("FROM InventoryItem i WHERE i.itemType = :itemType AND i.isActive = 'Y' ORDER BY i.name",
+                            InventoryItem.class)
+                    .setParameter("itemType", itemType)
+                    .getResultList();
         } catch (Exception e) {
             throw new LIMSRuntimeException("Error getting inventory items by type", e);
         }
@@ -135,48 +132,32 @@ public class InventoryItemDAOImpl extends BaseDAOImpl<InventoryItem, Long> imple
 
     @Override
     @Transactional(readOnly = true)
-    public List<InventoryItem> getPagedItems(int limit, int offset, String sortBy, String sortOrder, ItemType itemType,
+    public List<InventoryItem> getPagedItems(int limit, int offset, String sortBy, String sortOrder, String itemType,
             Boolean isActive, String searchTerm) throws LIMSRuntimeException {
         try {
             CriteriaBuilder cb = entityManager.getCriteriaBuilder();
             CriteriaQuery<InventoryItem> cq = cb.createQuery(InventoryItem.class);
             Root<InventoryItem> root = cq.from(InventoryItem.class);
 
-            // Build predicates for filtering
             var predicates = new java.util.ArrayList<jakarta.persistence.criteria.Predicate>();
 
-            // Apply filters
             if (itemType != null) {
-                predicates.add(cb.equal(root.get("itemType").as(String.class), itemType.name()));
+                predicates.add(cb.equal(root.get("itemType"), itemType));
             }
             if (isActive != null) {
-                String activeValue = isActive ? "Y" : "N";
-                predicates.add(cb.equal(root.get("isActive"), activeValue));
+                predicates.add(cb.equal(root.get("isActive"), isActive ? "Y" : "N"));
             }
             if (searchTerm != null && !searchTerm.trim().isEmpty()) {
-                String searchPattern = "%" + searchTerm.toLowerCase() + "%";
-                predicates.add(cb.like(cb.lower(root.get("name")), searchPattern));
+                predicates.add(cb.like(cb.lower(root.get("name")), "%" + searchTerm.toLowerCase() + "%"));
             }
 
-            // Apply predicates
             if (!predicates.isEmpty()) {
                 cq.where(predicates.toArray(new jakarta.persistence.criteria.Predicate[0]));
             }
 
-            // Apply sorting
-            if (sortBy != null && !sortBy.trim().isEmpty()) {
-                String validatedSortBy = validateAndMapItemSortField(sortBy);
-                if ("desc".equalsIgnoreCase(sortOrder)) {
-                    cq.orderBy(cb.desc(root.get(validatedSortBy)));
-                } else {
-                    cq.orderBy(cb.asc(root.get(validatedSortBy)));
-                }
-            } else {
-                // Default sort by name
-                cq.orderBy(cb.asc(root.get("name")));
-            }
+            String field = validateAndMapItemSortField(sortBy != null ? sortBy : "name");
+            cq.orderBy("desc".equalsIgnoreCase(sortOrder) ? cb.desc(root.get(field)) : cb.asc(root.get(field)));
 
-            // Apply pagination
             return entityManager.createQuery(cq).setFirstResult(offset).setMaxResults(limit).getResultList();
         } catch (Exception e) {
             throw new LIMSRuntimeException("Error getting paged inventory items", e);
@@ -185,30 +166,25 @@ public class InventoryItemDAOImpl extends BaseDAOImpl<InventoryItem, Long> imple
 
     @Override
     @Transactional(readOnly = true)
-    public Long getPagedItemsCount(ItemType itemType, Boolean isActive, String searchTerm) throws LIMSRuntimeException {
+    public Long getPagedItemsCount(String itemType, Boolean isActive, String searchTerm) throws LIMSRuntimeException {
         try {
             CriteriaBuilder cb = entityManager.getCriteriaBuilder();
             CriteriaQuery<Long> cq = cb.createQuery(Long.class);
             Root<InventoryItem> root = cq.from(InventoryItem.class);
-
             cq.select(cb.count(root));
 
-            // Build same predicates as getPagedItems
             var predicates = new java.util.ArrayList<jakarta.persistence.criteria.Predicate>();
 
             if (itemType != null) {
-                predicates.add(cb.equal(root.get("itemType").as(String.class), itemType.name()));
+                predicates.add(cb.equal(root.get("itemType"), itemType));
             }
             if (isActive != null) {
-                String activeValue = isActive ? "Y" : "N";
-                predicates.add(cb.equal(root.get("isActive"), activeValue));
+                predicates.add(cb.equal(root.get("isActive"), isActive ? "Y" : "N"));
             }
             if (searchTerm != null && !searchTerm.trim().isEmpty()) {
-                String searchPattern = "%" + searchTerm.toLowerCase() + "%";
-                predicates.add(cb.like(cb.lower(root.get("name")), searchPattern));
+                predicates.add(cb.like(cb.lower(root.get("name")), "%" + searchTerm.toLowerCase() + "%"));
             }
 
-            // Apply predicates
             if (!predicates.isEmpty()) {
                 cq.where(predicates.toArray(new jakarta.persistence.criteria.Predicate[0]));
             }
