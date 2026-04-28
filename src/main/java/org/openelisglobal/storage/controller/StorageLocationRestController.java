@@ -25,6 +25,9 @@ import org.openelisglobal.storage.service.StorageDashboardService;
 import org.openelisglobal.storage.service.StorageLocationService;
 import org.openelisglobal.storage.service.StorageSearchService;
 import org.openelisglobal.storage.valueholder.*;
+import org.openelisglobal.rbac.context.RbacContext;
+import org.openelisglobal.rbac.service.RbacAuditService;
+import org.openelisglobal.rbac.service.RbacPermissionService;
 import org.openelisglobal.userrole.service.UserRoleService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -67,6 +70,12 @@ public class StorageLocationRestController extends BaseRestController {
     @Autowired
     private UserRoleService userRoleService;
 
+    @Autowired
+    private RbacPermissionService rbacPermissionService;
+
+    @Autowired
+    private RbacAuditService rbacAuditService;
+
     @Autowired(required = false)
     private FreezerService freezerService;
 
@@ -92,11 +101,46 @@ public class StorageLocationRestController extends BaseRestController {
         }
     }
 
+    /**
+     * TR-05: Check if user has permission for storage module action.
+     * Logs denied access attempts via TR-06 audit service.
+     */
+    private boolean checkStoragePermission(HttpServletRequest request, String action, String departmentId) {
+        try {
+            String sysUserId = getSysUserId(request);
+            if (sysUserId == null) return false;
+            
+            boolean hasPermission = departmentId != null
+                    ? rbacPermissionService.hasPermission(sysUserId, "STORAGE", action, departmentId)
+                    : rbacPermissionService.hasPermission(sysUserId, "STORAGE", action);
+            
+            if (!hasPermission) {
+                RbacContext ctx = RbacContext.get();
+                rbacAuditService.logDenied(sysUserId,
+                        ctx != null ? ctx.getUsername() : "unknown",
+                        "STORAGE", action, null, null, departmentId, null,
+                        request.getRemoteAddr(), "Access denied");
+            }
+            return hasPermission;
+        } catch (Exception e) {
+            logger.error("Error checking storage permission", e);
+            return false;
+        }
+    }
+
     // ========== Room Endpoints ==========
 
     @PostMapping("/rooms")
-    public ResponseEntity<?> createRoom(@Valid @RequestBody StorageRoomForm form) {
+    public ResponseEntity<?> createRoom(@Valid @RequestBody StorageRoomForm form,
+            HttpServletRequest request) {
         try {
+            // TR-05: Only check permission for write operations
+            String sysUserId = getSysUserId(request);
+            if (sysUserId != null && !checkStoragePermission(request, "CREATE", form.getDepartmentId())) {
+                return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                        .body(Map.of("error", "Access denied: insufficient permissions for storage CREATE"));
+            }
+
             if (!storageLocationService.isNameUniqueWithinParent(form.getName(), null, "room", null)) {
                 Map<String, Object> error = new HashMap<>();
                 error.put("error", "Room name must be unique");
@@ -116,6 +160,7 @@ public class StorageLocationRestController extends BaseRestController {
             room.setFhirUuid(UUID.randomUUID());
             room.setSysUserId("1"); // Default system user for REST API (should come from security context in
                                     // production)
+            room.setDepartmentId(form.getDepartmentId());
 
             StorageRoom createdRoom = storageLocationService.createRoom(room);
 

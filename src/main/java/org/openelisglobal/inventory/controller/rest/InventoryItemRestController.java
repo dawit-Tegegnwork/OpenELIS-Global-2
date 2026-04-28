@@ -14,6 +14,9 @@ import org.openelisglobal.inventory.service.InventoryItemService;
 import org.openelisglobal.inventory.valueholder.InventoryEnums.ItemType;
 import org.openelisglobal.inventory.valueholder.InventoryItem;
 import org.openelisglobal.login.valueholder.UserSessionData;
+import org.openelisglobal.rbac.context.RbacContext;
+import org.openelisglobal.rbac.service.RbacAuditService;
+import org.openelisglobal.rbac.service.RbacPermissionService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
@@ -34,6 +37,32 @@ public class InventoryItemRestController extends BaseRestController {
     @Autowired
     private InventoryItemService inventoryItemService;
 
+    @Autowired
+    private RbacPermissionService rbacPermissionService;
+
+    @Autowired
+    private RbacAuditService rbacAuditService;
+
+    private boolean checkInventoryPermission(HttpServletRequest request, String action, String departmentId) {
+        try {
+            String sysUserId = getSysUserId(request);
+            if (sysUserId == null) return false;
+            boolean hasPermission = departmentId != null
+                    ? rbacPermissionService.hasPermission(sysUserId, "INVENTORY", action, departmentId)
+                    : rbacPermissionService.hasPermission(sysUserId, "INVENTORY", action);
+            if (!hasPermission) {
+                RbacContext ctx = RbacContext.get();
+                rbacAuditService.logDenied(sysUserId,
+                        ctx != null ? ctx.getUsername() : "unknown",
+                        "INVENTORY", action, null, null, departmentId, null,
+                        request.getRemoteAddr(), "Access denied");
+            }
+            return hasPermission;
+        } catch (Exception e) {
+            return false;
+        }
+    }
+
     @GetMapping(value = "/types", produces = MediaType.APPLICATION_JSON_VALUE)
     public ResponseEntity<List<ItemType>> getAllItemTypes() {
         try {
@@ -46,9 +75,23 @@ public class InventoryItemRestController extends BaseRestController {
     }
 
     @GetMapping(produces = MediaType.APPLICATION_JSON_VALUE)
-    public ResponseEntity<List<InventoryItem>> getAllActive() {
+    public ResponseEntity<List<InventoryItem>> getAllActive(HttpServletRequest request) {
         try {
+            // TR-05: any authenticated user with any module permission can read inventory
+            // Department filtering is applied below (TR-04)
+            String sysUserId = getSysUserId(request);
+            if (sysUserId == null) {
+                return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
+            }
             List<InventoryItem> items = inventoryItemService.getAllActive();
+            // TR-04: Filter by allowed departments
+            RbacContext ctx = RbacContext.get();
+            if (ctx != null && !ctx.isUnrestricted()) {
+                items = items.stream()
+                        .filter(i -> i.getDepartmentId() == null
+                                || ctx.canAccessDepartment(i.getDepartmentId()))
+                        .collect(Collectors.toList());
+            }
             return ResponseEntity.ok(items);
         } catch (Exception e) {
             LogEvent.logError(e);
