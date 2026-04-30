@@ -10858,5 +10858,20 @@
   "notebook.gbd.reception.formRunID": "Run ID",
   "notebook.gbd.reception.formOperator": "Operator",
   "notebook.gbd.reception.formProcessingDateTime": "Processing Date & Time",
-  "notebook.gbd.reception.formNotes": "Notes"
+  "notebook.gbd.reception.formNotes": "Notes",
+
+  "notebook.tb.incubation.confirmGrowth": "Confirm Growth",
+  "notebook.tb.incubation.confirmGrowth.title": "Confirm Culture Growth",
+  "notebook.tb.incubation.confirmGrowth.confirm": "Confirm Growth",
+  "notebook.tb.incubation.confirmGrowth.warning.title": "Growth Detected",
+  "notebook.tb.incubation.confirmGrowth.warning.subtitle": "Growth was observed for sample {accession} at week {week}. Please confirm the final result before it is recorded.",
+  "notebook.tb.incubation.confirmGrowth.sample": "Sample:",
+  "notebook.tb.incubation.confirmGrowth.weekLabel": "Week {week}",
+  "notebook.tb.incubation.confirmGrowth.resultLabel": "Confirmed Result *",
+  "notebook.tb.incubation.confirmGrowth.result.positive": "POSITIVE – MTB growth confirmed",
+  "notebook.tb.incubation.confirmGrowth.result.ntm": "NTM – Non-Tuberculous Mycobacteria",
+  "notebook.tb.incubation.confirmGrowth.result.contaminated": "CONTAMINATED – Culture contaminated",
+  "notebook.tb.incubation.confirmGrowth.notesLabel": "Confirmation Notes (optional)",
+  "notebook.tb.incubation.confirmGrowth.notesPlaceholder": "Add any observations or remarks about this confirmation...",
+  "notebook.tb.incubation.growthConfirmed": "Culture growth confirmed as {result}."
 }

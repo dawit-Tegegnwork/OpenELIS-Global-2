@@ -116,4 +116,16 @@ public interface TbCultureReadingService extends BaseObjectService<TbCultureRead
      * Get incubation monitoring summary statistics for a specific notebook entry.
      */
     IncubationSummary getIncubationSummaryByEntry(Integer notebookEntryId);
+
+    /**
+     * Confirm culture growth after a GROWTH_DETECTED observation.
+     * Records the confirming user and notes, then finalizes the culture result.
+     *
+     * @param cultureReadingId the ID of the culture reading to confirm
+     * @param confirmedResult  the confirmed result (POSITIVE, NTM, or CONTAMINATED)
+     * @param confirmationNotes optional notes from the confirming user
+     * @param sysUserId        the ID of the confirming user
+     */
+    TbCultureReading confirmGrowth(Integer cultureReadingId, CultureResult confirmedResult, String confirmationNotes,
+            String sysUserId);
 }

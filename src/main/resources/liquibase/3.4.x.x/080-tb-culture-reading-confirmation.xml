@@ -1,0 +1,52 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+    xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+      http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-3.8.xsd">
+
+    <!-- Add confirmation_notes and confirmed_by columns to tb_culture_reading -->
+    <!-- These support the "Confirm Culture Growth" step in Incubation Monitoring -->
+
+    <changeSet id="add-tb-culture-reading-confirmation-columns" author="openelis-tb">
+        <preConditions onFail="MARK_RAN">
+            <tableExists tableName="tb_culture_reading" schemaName="clinlims"/>
+            <not>
+                <columnExists tableName="tb_culture_reading" columnName="confirmation_notes" schemaName="clinlims"/>
+            </not>
+        </preConditions>
+        <comment>Add confirmation_notes and confirmed_by to tb_culture_reading for the Confirm Culture Growth step.</comment>
+        <addColumn tableName="tb_culture_reading" schemaName="clinlims">
+            <column name="confirmation_notes" type="TEXT">
+                <constraints nullable="true"/>
+            </column>
+            <column name="confirmed_by" type="NUMERIC(10)">
+                <constraints nullable="true"/>
+            </column>
+        </addColumn>
+        <rollback>
+            <dropColumn tableName="tb_culture_reading" schemaName="clinlims" columnName="confirmation_notes"/>
+            <dropColumn tableName="tb_culture_reading" schemaName="clinlims" columnName="confirmed_by"/>
+        </rollback>
+    </changeSet>
+
+    <changeSet id="add-tb-culture-reading-confirmed-by-fk" author="openelis-tb">
+        <preConditions onFail="MARK_RAN">
+            <columnExists tableName="tb_culture_reading" columnName="confirmed_by" schemaName="clinlims"/>
+            <not>
+                <foreignKeyConstraintExists foreignKeyName="fk_tb_culture_confirmed_by" schemaName="clinlims"/>
+            </not>
+        </preConditions>
+        <comment>Add foreign key from confirmed_by to system_user.</comment>
+        <addForeignKeyConstraint
+            baseTableName="tb_culture_reading"
+            baseColumnNames="confirmed_by"
+            referencedTableName="system_user"
+            referencedColumnNames="id"
+            constraintName="fk_tb_culture_confirmed_by"/>
+        <rollback>
+            <dropForeignKeyConstraint baseTableName="tb_culture_reading" constraintName="fk_tb_culture_confirmed_by"/>
+        </rollback>
+    </changeSet>
+
+</databaseChangeLog>
