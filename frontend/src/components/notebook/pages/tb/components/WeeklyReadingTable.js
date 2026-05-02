@@ -39,7 +39,7 @@ const OBSERVATION_CONFIG = {
  * @param {Array} readings - Array of reading objects for this sample
  * @param {number} currentWeek - Current incubation week
  * @param {function} onAddReading - Handler for adding a new reading
- * @param {function} onMarkPositive - Handler for marking culture positive
+ * @param {function} onConfirmGrowth - Handler for confirming detected growth (opens ConfirmGrowthModal)
  * @param {function} onMarkNegative - Handler for marking culture negative
  * @param {string} cultureResult - Current culture result (if finalized)
  */
@@ -47,7 +47,7 @@ function WeeklyReadingTable({
   readings = [],
   currentWeek = 1,
   onAddReading,
-  onMarkPositive,
+  onConfirmGrowth,
   onMarkNegative,
   cultureResult = null,
 }) {
@@ -196,17 +196,17 @@ function WeeklyReadingTable({
             />
           </Button>
 
-          {/* Mark Positive Button (if growth detected) */}
+          {/* Confirm Growth Button (if growth detected) */}
           {hasGrowth && (
             <Button
               kind="danger"
               size="sm"
               renderIcon={Warning}
-              onClick={onMarkPositive}
+              onClick={onConfirmGrowth}
             >
               <FormattedMessage
-                id="notebook.tb.incubation.markPositive"
-                defaultMessage="Mark as Positive"
+                id="notebook.tb.incubation.confirmGrowth"
+                defaultMessage="Confirm Growth"
               />
             </Button>
           )}

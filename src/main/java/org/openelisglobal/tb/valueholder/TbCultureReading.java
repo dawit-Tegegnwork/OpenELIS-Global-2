@@ -104,6 +104,15 @@ public class TbCultureReading extends BaseObject<Integer> {
     @JoinColumn(name = "inoculated_by")
     private SystemUser inoculatedBy;
 
+    // ====== Confirm Culture Growth Fields ======
+
+    @Column(name = "confirmation_notes", columnDefinition = "TEXT")
+    private String confirmationNotes;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "confirmed_by")
+    private SystemUser confirmedBy;
+
     // Getters and setters
     @Override
     public Integer getId() {
@@ -323,5 +332,23 @@ public class TbCultureReading extends BaseObject<Integer> {
         this.cultureResult = CultureResult.CONTAMINATED;
         this.positiveWeek = null;
         this.finalResultDate = new Date(System.currentTimeMillis());
+    }
+
+    // ====== Confirm Culture Growth Getters/Setters ======
+
+    public String getConfirmationNotes() {
+        return confirmationNotes;
+    }
+
+    public void setConfirmationNotes(String confirmationNotes) {
+        this.confirmationNotes = confirmationNotes;
+    }
+
+    public SystemUser getConfirmedBy() {
+        return confirmedBy;
+    }
+
+    public void setConfirmedBy(SystemUser confirmedBy) {
+        this.confirmedBy = confirmedBy;
     }
 }

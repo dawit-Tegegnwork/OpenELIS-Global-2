@@ -209,6 +209,48 @@ public class TbIncubationMonitoringController extends BaseRestController {
         return ResponseEntity.ok(response);
     }
 
+    /**
+     * Confirm culture growth after a GROWTH_DETECTED observation.
+     * Requires the confirming user to select the final result and optionally add notes.
+     *
+     * @param id   the culture reading ID
+     * @param body JSON body with: confirmedResult (POSITIVE|NTM|CONTAMINATED), confirmationNotes (optional)
+     */
+    @PostMapping(value = "/result/{id}/confirm-growth", produces = MediaType.APPLICATION_JSON_VALUE)
+    public ResponseEntity<Map<String, Object>> confirmGrowth(@PathVariable Integer id,
+            @RequestBody Map<String, Object> body, HttpServletRequest request) {
+        String sysUserId = getSysUserId(request);
+        if (sysUserId == null) {
+            return ResponseEntity.status(401).body(Map.of("error", "User session not found"));
+        }
+
+        String confirmedResultStr = (String) body.get("confirmedResult");
+        if (confirmedResultStr == null) {
+            return ResponseEntity.badRequest().body(Map.of("error", "confirmedResult is required"));
+        }
+
+        CultureResult confirmedResult;
+        try {
+            confirmedResult = CultureResult.valueOf(confirmedResultStr);
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest().body(Map.of("error", "Invalid confirmedResult: " + confirmedResultStr));
+        }
+
+        String confirmationNotes = (String) body.get("confirmationNotes");
+
+        TbCultureReading reading = tbCultureReadingService.confirmGrowth(id, confirmedResult, confirmationNotes,
+                sysUserId);
+        if (reading == null) {
+            return ResponseEntity.notFound().build();
+        }
+
+        Map<String, Object> response = new HashMap<>();
+        response.put("id", reading.getId());
+        response.put("confirmedResult", confirmedResult.name());
+        response.put("message", "Culture growth confirmed as " + confirmedResult.name());
+        return ResponseEntity.ok(response);
+    }
+
     // ==================== Statistics Endpoints ====================
 
     /**

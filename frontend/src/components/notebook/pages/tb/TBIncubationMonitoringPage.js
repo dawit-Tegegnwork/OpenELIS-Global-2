@@ -41,6 +41,7 @@ import {
 } from "../../../utils/Utils";
 import WeeklyReadingTable from "./components/WeeklyReadingTable";
 import RecordReadingModal from "./components/RecordReadingModal";
+import ConfirmGrowthModal from "./components/ConfirmGrowthModal";
 import "../../workflow/NotebookWorkflow.css";
 
 /**
@@ -80,6 +81,11 @@ function TBIncubationMonitoringPage({ entryId, pageData, onProgressUpdate }) {
   const [selectedSample, setSelectedSample] = useState(null);
   const [sampleReadings, setSampleReadings] = useState([]);
 
+  // Confirm growth modal state
+  const [confirmModalOpen, setConfirmModalOpen] = useState(false);
+  const [confirmSample, setConfirmSample] = useState(null);
+  const [isConfirming, setIsConfirming] = useState(false);
+
   // Refresh trigger for expanded rows
   const [refreshTrigger, setRefreshTrigger] = useState(0);
 
@@ -88,8 +94,10 @@ function TBIncubationMonitoringPage({ entryId, pageData, onProgressUpdate }) {
     const incubating = samples.filter((s) => !s.cultureResult);
     const positive = samples.filter((s) => s.cultureResult === "POSITIVE");
     const negative = samples.filter((s) => s.cultureResult === "NEGATIVE");
+    const contaminated = samples.filter(
+      (s) => s.cultureResult === "CONTAMINATED",
+    );
 
-    // Week ranges based on current week number
     const week1to4 = incubating.filter(
       (s) => s.weekNumber >= 1 && s.weekNumber <= 4,
     );
@@ -103,6 +111,7 @@ function TBIncubationMonitoringPage({ entryId, pageData, onProgressUpdate }) {
       week5to8: week5to8.length,
       positive: positive.length,
       negative: negative.length,
+      contaminated: contaminated.length,
     });
   }, []);
 
@@ -168,8 +177,10 @@ function TBIncubationMonitoringPage({ entryId, pageData, onProgressUpdate }) {
             // Get all samples (including finalized ones for summary stats)
             const allSamples = Array.from(sampleMap.values());
 
-            // Filter to only show incubating samples (those without cultureResult)
-            const samples = allSamples.filter((s) => !s.cultureResult);
+            // Show incubating + contaminated samples (contaminated stay visible for traceability)
+            const samples = allSamples.filter(
+              (s) => !s.cultureResult || s.cultureResult === "CONTAMINATED",
+            );
             setIncubatingSamples(samples);
             // Use allSamples for summary so positive/negative counts are correct
             computeSummary(allSamples);
@@ -269,37 +280,48 @@ function TBIncubationMonitoringPage({ entryId, pageData, onProgressUpdate }) {
     [intl, loadIncubatingSamples, onProgressUpdate],
   );
 
-  // Mark culture as positive
-  const handleMarkPositive = useCallback(
-    (sample) => {
-      const currentWeek = calculateCurrentWeek(sample.inoculationDate);
-      // Use the first reading's ID since sample.id is now sampleItemId after grouping
-      const cultureReadingId = sample.readings?.[0]?.id || sample.id;
+  // Open confirm growth modal (replaces direct mark-positive)
+  const handleOpenConfirmGrowth = useCallback((sample) => {
+    setConfirmSample(sample);
+    setConfirmModalOpen(true);
+  }, []);
 
-      putToOpenElisServer(
-        `/rest/tb/incubation/result/${cultureReadingId}/positive`,
-        JSON.stringify({ positiveWeek: currentWeek }),
+  // Submit confirmed growth result
+  const handleConfirmGrowth = useCallback(
+    ({ confirmedResult, confirmationNotes }) => {
+      const cultureReadingId = confirmSample?.readings?.[0]?.id || confirmSample?.id;
+      setIsConfirming(true);
+
+      postToOpenElisServer(
+        `/rest/tb/incubation/result/${cultureReadingId}/confirm-growth`,
+        JSON.stringify({ confirmedResult, confirmationNotes }),
         (response) => {
           if (componentMounted.current) {
+            setIsConfirming(false);
             if (response && !response.error) {
               setSuccess(
-                intl.formatMessage({
-                  id: "notebook.tb.incubation.markedPositive",
-                  defaultMessage:
-                    "Culture marked as POSITIVE. Sample is ready for further testing.",
-                }),
+                intl.formatMessage(
+                  {
+                    id: "notebook.tb.incubation.growthConfirmed",
+                    defaultMessage:
+                      "Culture growth confirmed as {result}.",
+                  },
+                  { result: confirmedResult },
+                ),
               );
+              setConfirmModalOpen(false);
+              setConfirmSample(null);
               loadIncubatingSamples();
               setRefreshTrigger((prev) => prev + 1);
               if (onProgressUpdate) onProgressUpdate();
             } else {
-              setError(response?.error || "Failed to mark as positive.");
+              setError(response?.error || "Failed to confirm growth.");
             }
           }
         },
       );
     },
-    [calculateCurrentWeek, intl, loadIncubatingSamples, onProgressUpdate],
+    [confirmSample, intl, loadIncubatingSamples, onProgressUpdate],
   );
 
   // Mark culture as negative
@@ -427,7 +449,7 @@ function TBIncubationMonitoringPage({ entryId, pageData, onProgressUpdate }) {
         sample={sample}
         currentWeek={currentWeek}
         onAddReading={() => handleOpenReadingModal(sample)}
-        onMarkPositive={() => handleMarkPositive(sample)}
+        onConfirmGrowth={() => handleOpenConfirmGrowth(sample)}
         onMarkNegative={() => handleMarkNegative(sample)}
         loadSampleReadings={loadSampleReadings}
         refreshTrigger={refreshTrigger}
@@ -506,6 +528,17 @@ function TBIncubationMonitoringPage({ entryId, pageData, onProgressUpdate }) {
               </span>
               <span className="progress-value">{summary.negative}</span>
             </Tile>
+            {summary.contaminated > 0 && (
+              <Tile className="progress-tile">
+                <span className="progress-label">
+                  <FormattedMessage
+                    id="notebook.tb.incubation.contaminated"
+                    defaultMessage="Contaminated"
+                  />
+                </span>
+                <span className="progress-value">{summary.contaminated}</span>
+              </Tile>
+            )}
           </div>
         </Column>
       </Grid>
@@ -655,6 +688,25 @@ function TBIncubationMonitoringPage({ entryId, pageData, onProgressUpdate }) {
             : 1
         }
       />
+
+      {/* Confirm Growth Modal */}
+      <ConfirmGrowthModal
+        open={confirmModalOpen}
+        onClose={() => {
+          setConfirmModalOpen(false);
+          setConfirmSample(null);
+        }}
+        onConfirm={handleConfirmGrowth}
+        sample={
+          confirmSample
+            ? {
+                accessionNumber: confirmSample.accessionNumber,
+                weekNumber: confirmSample.weekNumber,
+              }
+            : null
+        }
+        isSaving={isConfirming}
+      />
     </div>
   );
 }
@@ -666,7 +718,7 @@ function ExpandedRowContent({
   sample,
   currentWeek,
   onAddReading,
-  onMarkPositive,
+  onConfirmGrowth,
   onMarkNegative,
   loadSampleReadings,
   refreshTrigger,
@@ -700,7 +752,7 @@ function ExpandedRowContent({
       readings={readings}
       currentWeek={currentWeek}
       onAddReading={onAddReading}
-      onMarkPositive={onMarkPositive}
+      onConfirmGrowth={onConfirmGrowth}
       onMarkNegative={onMarkNegative}
       cultureResult={sample?.cultureResult}
     />

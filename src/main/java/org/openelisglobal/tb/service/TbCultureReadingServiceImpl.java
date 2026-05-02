@@ -277,4 +277,30 @@ public class TbCultureReadingServiceImpl extends AuditableBaseObjectServiceImpl<
 
         return new IncubationSummary(totalIncubating, week1to4, week5to8, positive, negative);
     }
+
+    @Override
+    @Transactional
+    public TbCultureReading confirmGrowth(Integer cultureReadingId, CultureResult confirmedResult,
+            String confirmationNotes, String sysUserId) {
+        TbCultureReading reading = get(cultureReadingId);
+        if (reading == null) {
+            throw new IllegalArgumentException("Culture reading not found: " + cultureReadingId);
+        }
+
+        reading.setCultureResult(confirmedResult);
+        reading.setFinalResultDate(new Date(System.currentTimeMillis()));
+        reading.setConfirmationNotes(confirmationNotes);
+
+        if (sysUserId != null) {
+            SystemUser confirmedBy = systemUserService.get(sysUserId);
+            reading.setConfirmedBy(confirmedBy);
+        }
+
+        if (confirmedResult == CultureResult.POSITIVE) {
+            reading.setPositiveWeek(reading.getWeekNumber());
+        }
+
+        reading.setSysUserId(sysUserId);
+        return update(reading);
+    }
 }
