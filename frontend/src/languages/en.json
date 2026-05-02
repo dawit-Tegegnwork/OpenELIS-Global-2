@@ -10873,5 +10873,6 @@
   "notebook.tb.incubation.confirmGrowth.result.contaminated": "CONTAMINATED – Culture contaminated",
   "notebook.tb.incubation.confirmGrowth.notesLabel": "Confirmation Notes (optional)",
   "notebook.tb.incubation.confirmGrowth.notesPlaceholder": "Add any observations or remarks about this confirmation...",
-  "notebook.tb.incubation.growthConfirmed": "Culture growth confirmed as {result}."
+  "notebook.tb.incubation.growthConfirmed": "Culture growth confirmed as {result}.",
+  "notebook.tb.incubation.contaminated": "Contaminated"
 }

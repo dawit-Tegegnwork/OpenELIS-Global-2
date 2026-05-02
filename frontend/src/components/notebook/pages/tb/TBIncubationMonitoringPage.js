@@ -94,8 +94,10 @@ function TBIncubationMonitoringPage({ entryId, pageData, onProgressUpdate }) {
     const incubating = samples.filter((s) => !s.cultureResult);
     const positive = samples.filter((s) => s.cultureResult === "POSITIVE");
     const negative = samples.filter((s) => s.cultureResult === "NEGATIVE");
+    const contaminated = samples.filter(
+      (s) => s.cultureResult === "CONTAMINATED",
+    );
 
-    // Week ranges based on current week number
     const week1to4 = incubating.filter(
       (s) => s.weekNumber >= 1 && s.weekNumber <= 4,
     );
@@ -109,6 +111,7 @@ function TBIncubationMonitoringPage({ entryId, pageData, onProgressUpdate }) {
       week5to8: week5to8.length,
       positive: positive.length,
       negative: negative.length,
+      contaminated: contaminated.length,
     });
   }, []);
 
@@ -174,8 +177,10 @@ function TBIncubationMonitoringPage({ entryId, pageData, onProgressUpdate }) {
             // Get all samples (including finalized ones for summary stats)
             const allSamples = Array.from(sampleMap.values());
 
-            // Filter to only show incubating samples (those without cultureResult)
-            const samples = allSamples.filter((s) => !s.cultureResult);
+            // Show incubating + contaminated samples (contaminated stay visible for traceability)
+            const samples = allSamples.filter(
+              (s) => !s.cultureResult || s.cultureResult === "CONTAMINATED",
+            );
             setIncubatingSamples(samples);
             // Use allSamples for summary so positive/negative counts are correct
             computeSummary(allSamples);
@@ -523,6 +528,17 @@ function TBIncubationMonitoringPage({ entryId, pageData, onProgressUpdate }) {
               </span>
               <span className="progress-value">{summary.negative}</span>
             </Tile>
+            {summary.contaminated > 0 && (
+              <Tile className="progress-tile">
+                <span className="progress-label">
+                  <FormattedMessage
+                    id="notebook.tb.incubation.contaminated"
+                    defaultMessage="Contaminated"
+                  />
+                </span>
+                <span className="progress-value">{summary.contaminated}</span>
+              </Tile>
+            )}
           </div>
         </Column>
       </Grid>
