@@ -51,8 +51,10 @@ export const Roles = {
   // Job Title / Persona Groupings (for reference, typically not used directly)
   SAMPLE_COLLECTOR: "Sample Collector",
   LABORATORY_TECHNICIAN: "Laboratory Technician",
+  LABORATORY_TECHNICIANS: "Laboratory Technicians",
   JUNIOR_SENIOR_RESEARCHER: "Junior Senior Researcher",
   LAB_MANAGER_SUPERVISOR: "Lab Manager Supervisor",
+  LAB_MANAGERS: "Lab Managers",
 
   // Sample Registration Privileges
   REGISTER_SAMPLES: "Register Samples",
@@ -280,6 +282,7 @@ export const Permissions = {
     Roles.GLOBAL_ADMIN,
     Roles.MANAGE_EQUIPMENT,
     Roles.LAB_MANAGER_SUPERVISOR,
+    Roles.LAB_MANAGERS,
   ],
 
   // Can manage quality assurance

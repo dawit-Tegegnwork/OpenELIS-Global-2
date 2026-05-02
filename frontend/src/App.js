@@ -50,6 +50,7 @@ import AuditTrailReportIndex from "./components/reports/auditTrailReport/Index.j
 import ReferredOutTests from "./components/resultPage/resultsReferredOut/ReferredOutTests.js";
 import ChangePassword from "./components/ChangePassword.js";
 import { Roles } from "./components/utils/Utils";
+import { Permissions } from "./constants/roles";
 import NoteBookInstanceEntryForm from "./components/notebook/NoteBookInstanceEntryForm.js";
 import NotebookSampleOrder from "./components/notebook/NotebookSampleOrder.js";
 import FreezerMonitoringDashboard from "./components/coldStorage/FreezerMonitoringDashboard";
@@ -482,13 +483,13 @@ export default function App() {
                   path="/inventory"
                   exact
                   component={() => <InventoryManagement />}
-                  role={[Roles.RESULTS, Roles.GLOBAL_ADMIN]}
+                  role={Permissions.MANAGE_EQUIPMENT}
                 />
                 <SecureRoute
                   path="/equipment-usage"
                   exact
                   component={() => <EquipmentUsageManagement />}
-                  role={[Roles.RESULTS, Roles.GLOBAL_ADMIN]}
+                  role={[...Permissions.MANAGE_EQUIPMENT, Roles.LABORATORY_TECHNICIAN, Roles.LABORATORY_TECHNICIANS]}
                 />
                 <SecureRoute
                   path="/SampleManagement"
