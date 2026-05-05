@@ -48,6 +48,11 @@ const passwordPatternRegex = /^(?=.*[*$#!])(?=.*[a-zA-Z0-9]).{7,}$/;
 const loginNameRegex = /^[a-zA-Z]+$/;
 const nameRegex = /^(?=.*[a-zA-Z])[a-zA-Z .'_@-]*$/;
 
+/**
+ * Roles relevant per department. Key = department name (as returned by backend).
+ * AllLabUnits shows all roles (no filter applied).
+ */
+
 function UserAddModify() {
   const { notificationVisible, setNotificationVisible, addNotification } =
     useContext(NotificationContext);
@@ -282,15 +287,9 @@ function UserAddModify() {
         if (ID !== "0") {
           setSelectedTestSectionLabUnits(userData.selectedTestSectionLabUnits);
         } else {
-          // For new users: auto-add first department row so it's immediately visible
-          if (userData.testSections && userData.testSections.length > 0) {
-            const firstSection = userData.testSections[0];
-            setSelectedTestSectionLabUnits({ [firstSection.id]: [] });
-            setSelectedTestSectionList([firstSection.id]);
-          } else {
-            setSelectedTestSectionLabUnits({});
-            setSelectedTestSectionList([]);
-          }
+          // For new users: default to AllLabUnits so global roles apply to all departments
+          setSelectedTestSectionLabUnits({ AllLabUnits: [] });
+          setSelectedTestSectionList(["AllLabUnits"]);
         }
       }
     }
@@ -844,11 +843,11 @@ function UserAddModify() {
                       placeholder={intl.formatMessage({
                         id: "login.login.name",
                       })}
-                      invalid={
+                      invalid={Boolean(
                         userDataShow &&
                         userDataShow.userLoginName &&
                         !loginNameRegex.test(userDataShow.userLoginName)
-                      }
+                      )}
                       // invalidText={errors.order}
                       required={true}
                       value={
@@ -904,12 +903,12 @@ function UserAddModify() {
                         id: "login.login.password",
                       })}
                       required={true}
-                      invalid={
+                      invalid={Boolean(
                         passwordTouched.userPassword &&
                         userDataShow &&
                         userDataShow.userPassword &&
                         !passwordPatternRegex.test(userDataShow.userPassword)
-                      }
+                      )}
                       // invalidText={errors.order}
                       value={
                         userDataShow && userDataShow.userPassword
@@ -979,11 +978,11 @@ function UserAddModify() {
                         id: "login.login.first",
                       })}
                       required={true}
-                      invalid={
+                      invalid={Boolean(
                         userDataShow &&
                         userDataShow.userFirstName &&
                         !nameRegex.test(userDataShow.userFirstName)
-                      }
+                      )}
                       // invalidText={errors.order}
                       value={
                         userDataShow && userDataShow.userFirstName
@@ -1012,11 +1011,11 @@ function UserAddModify() {
                         id: "login.login.last",
                       })}
                       required={true}
-                      invalid={
+                      invalid={Boolean(
                         userDataShow &&
                         userDataShow.userLastName &&
                         !nameRegex.test(userDataShow.userLastName)
-                      }
+                      )}
                       // invalidText={errors.order}
                       value={
                         userDataShow && userDataShow.userLastName

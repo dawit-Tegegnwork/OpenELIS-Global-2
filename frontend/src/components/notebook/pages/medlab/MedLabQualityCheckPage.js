@@ -22,6 +22,8 @@ import {
 } from "../../../utils/Utils";
 import SampleGrid from "../../workflow/SampleGrid";
 import "../../workflow/NotebookWorkflow.css";
+import PermissionGate from "../../../../components/security/PermissionGate";
+import { Permissions } from "../../../../constants/roles";
 
 /**
  * QC Criteria checklist items for Medical Laboratory samples
@@ -694,22 +696,28 @@ function MedLabQualityCheckPage({
 
       {/* Action Buttons */}
       <div className="page-actions-bar">
-        <Button
-          kind="primary"
-          size="sm"
-          renderIcon={Edit}
-          onClick={() => {
-            resetBulkApplyValues();
-            setBulkApplyModalOpen(true);
-          }}
-          disabled={selectedSampleIds.length === 0}
+        <PermissionGate
+          roles={Permissions.MANAGE_QA}
+          hideCompletely={false}
+          disabledTooltip="You need EQA Personnel or QC Technician role to perform quality control"
         >
-          <FormattedMessage
-            id="notebook.page.medlab.bulkApply"
-            defaultMessage="Bulk Apply QC ({count})"
-            values={{ count: selectedSampleIds.length }}
-          />
-        </Button>
+          <Button
+            kind="primary"
+            size="sm"
+            renderIcon={Edit}
+            onClick={() => {
+              resetBulkApplyValues();
+              setBulkApplyModalOpen(true);
+            }}
+            disabled={selectedSampleIds.length === 0}
+          >
+            <FormattedMessage
+              id="notebook.page.medlab.bulkApply"
+              defaultMessage="Bulk Apply QC ({count})"
+              values={{ count: selectedSampleIds.length }}
+            />
+          </Button>
+        </PermissionGate>
 
         {selectedSampleIds.length > 0 && (
           <Button

@@ -37,7 +37,7 @@ function SecureRoute(props) {
       if (hasPermission(userSessionDetails)) {
         console.info("Access Allowed");
         if (
-          configurationProperties.REQUIRE_LAB_UNIT_AT_LOGIN === "true" &&
+          configurationProperties?.REQUIRE_LAB_UNIT_AT_LOGIN === "true" &&
           !userSessionDetails.loginLabUnit &&
           !userSessionDetails.roles.includes(Roles.GLOBAL_ADMIN)
         ) {
@@ -67,11 +67,23 @@ function SecureRoute(props) {
   }, [userSessionDetails, errorLoadingSessionDetails]);
 
   const hasPermission = (userDetails = userSessionDetails) => {
+    const rolesToCheck = [].concat(props.role || []);
+    // Check global roles
     var hasRole =
       !props.role ||
-      []
-        .concat(props.role)
-        .some((role) => userDetails.roles && userDetails.roles.includes(role));
+      rolesToCheck.some(
+        (role) => userDetails.roles && userDetails.roles.includes(role),
+      );
+    // Also check AllLabUnits and current lab unit roles
+    if (!hasRole && rolesToCheck.length > 0 && userDetails.userLabRolesMap) {
+      const allLabUnitsRoles = userDetails.userLabRolesMap["AllLabUnits"] || [];
+      hasRole = rolesToCheck.some((role) => allLabUnitsRoles.includes(role));
+      if (!hasRole && userDetails.loginLabUnit) {
+        const labUnitRoles =
+          userDetails.userLabRolesMap[userDetails.loginLabUnit] || [];
+        hasRole = rolesToCheck.some((role) => labUnitRoles.includes(role));
+      }
+    }
     var containsLabUnitRole = false;
     if (props.labUnitRole) {
       Object.keys(props.labUnitRole).forEach((labunit) => {
