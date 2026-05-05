@@ -56,6 +56,8 @@ import {
 import SampleGrid from "../../workflow/SampleGrid";
 import AssayPlateCreator from "../../workflow/AssayPlateCreator";
 import "../../workflow/NotebookWorkflow.css";
+import PermissionGate from "../../../security/PermissionGate";
+import { Permissions } from "../../../../constants/roles";
 
 /**
  * MNTDAliquotingPage - Page 5 of the MNTD workflow.
@@ -934,7 +936,11 @@ function MNTDAliquotingPage({
           <TabPanel>
             {/* Action Buttons for Parent Samples */}
             <div className="page-actions-bar">
-              <Button
+                            <PermissionGate
+                roles={Permissions.PROCESS_SAMPLES}
+                disabledTooltip="You need Laboratory Technician or Lab Manager role to process samples"
+              >
+<Button
                 kind="primary"
                 size="sm"
                 renderIcon={Add}
@@ -947,6 +953,7 @@ function MNTDAliquotingPage({
                   values={{ count: selectedParentIds.length }}
                 />
               </Button>
+              </PermissionGate>
 
               <Button
                 kind="secondary"

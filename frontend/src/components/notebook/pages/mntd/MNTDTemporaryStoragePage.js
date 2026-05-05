@@ -40,6 +40,8 @@ import SampleGrid from "../../workflow/SampleGrid";
 import StorageHierarchySelector from "../../workflow/StorageHierarchySelector";
 import BoxLayoutViewer from "../../workflow/BoxLayoutViewer";
 import "../../workflow/NotebookWorkflow.css";
+import PermissionGate from "../../../security/PermissionGate";
+import { Permissions } from "../../../../constants/roles";";
 
 /**
  * MNTDTemporaryStoragePage - Page 3 of the MNTD workflow.
@@ -818,6 +820,10 @@ function MNTDTemporaryStoragePage({
 
       {/* Action Buttons */}
       <div className="page-actions-bar">
+        <PermissionGate
+          roles={Permissions.MANAGE_QA}
+          disabledTooltip="You need Lab Manager or EQA Personnel role"
+        >
         <Button
           kind="primary"
           size="sm"
@@ -859,6 +865,7 @@ function MNTDTemporaryStoragePage({
             defaultMessage="Refresh"
           />
         </Button>
+        </PermissionGate>
       </div>
 
       {/* Messages */}

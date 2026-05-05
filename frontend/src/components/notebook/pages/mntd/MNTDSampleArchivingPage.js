@@ -50,6 +50,8 @@ import {
 import StorageHierarchySelector from "../../workflow/StorageHierarchySelector";
 import BoxLayoutViewer from "../../workflow/BoxLayoutViewer";
 import "../../workflow/NotebookWorkflow.css";
+import PermissionGate from "../../../security/PermissionGate";
+import { Permissions } from "../../../../constants/roles";";
 
 /**
  * MNTDSampleArchivingPage - Page 9 of the MNTD workflow.
@@ -849,7 +851,11 @@ function MNTDSampleArchivingPage({ entryId, pageData, onProgressUpdate }) {
           size="sm"
         />
 
-        <Button
+                <PermissionGate
+          roles={Permissions.MANAGE_QA}
+          disabledTooltip="You need Lab Manager or EQA Personnel role"
+        >
+<Button
           kind="primary"
           size="sm"
           renderIcon={Archive}
@@ -862,6 +868,7 @@ function MNTDSampleArchivingPage({ entryId, pageData, onProgressUpdate }) {
             values={{ count: selectedSampleIds.length }}
           />
         </Button>
+        </PermissionGate>
 
         <Button
           kind="ghost"

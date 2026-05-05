@@ -54,6 +54,8 @@ import {
 import { NotificationContext } from "../../layout/Layout";
 import { NotificationKinds } from "../../common/CustomNotification";
 import "../workflow/NotebookWorkflow.css";
+import PermissionGate from "../../security/PermissionGate";
+import { Permissions } from "../../../constants/roles";";
 
 /**
  * ResultEntryPage - Enhanced Result Entry for MedLab workflow.
@@ -628,7 +630,11 @@ function ResultEntryPage({ entryId, pageData, progress, onProgressUpdate }) {
                 }
               />
             </div>
-            <Button
+                        <PermissionGate
+              roles={Permissions.PROCESS_SAMPLES}
+              disabledTooltip="You need Laboratory Technician or Lab Manager role"
+            >
+<Button
               kind="primary"
               onClick={() => setImportStep(3)}
               style={{ marginTop: "1rem" }}
@@ -639,6 +645,7 @@ function ResultEntryPage({ entryId, pageData, progress, onProgressUpdate }) {
                 defaultMessage="Continue"
               />
             </Button>
+            </PermissionGate>
           </div>
         );
 

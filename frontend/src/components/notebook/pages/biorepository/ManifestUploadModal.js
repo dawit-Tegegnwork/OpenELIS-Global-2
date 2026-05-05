@@ -18,6 +18,8 @@ import { Checkmark, Warning, Download } from "@carbon/icons-react";
 import { FormattedMessage, useIntl } from "react-intl";
 import PropTypes from "prop-types";
 import { postToOpenElisServerJsonResponse } from "../../../utils/Utils";
+import PermissionGate from "../../../security/PermissionGate";
+import { Permissions } from "../../../../constants/roles";
 
 /**
  * ManifestUploadModal - CSV manifest upload modal for bulk sample import
@@ -987,7 +989,11 @@ function ManifestUploadModal({ open, onClose, shipmentId, onImportComplete }) {
                   defaultMessage="Upload Different File"
                 />
               </Button>
-              <Button
+                            <PermissionGate
+                roles={Permissions.REGISTER_SAMPLES}
+                disabledTooltip="You need Sample Collector or Reception role"
+              >
+<Button
                 kind="primary"
                 size="md"
                 onClick={handlePreviewValidation}
@@ -1008,6 +1014,7 @@ function ManifestUploadModal({ open, onClose, shipmentId, onImportComplete }) {
                   />
                 )}
               </Button>
+              </PermissionGate>
             </div>
           </div>
         )}

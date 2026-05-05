@@ -30,6 +30,8 @@ import { NotificationContext } from "../../../layout/Layout";
 import { NotificationKinds } from "../../../common/CustomNotification";
 import SampleGrid from "../../workflow/SampleGrid";
 import "../../workflow/NotebookWorkflow.css";
+import PermissionGate from "../../../security/PermissionGate";
+import { Permissions } from "../../../../constants/roles";";
 
 /**
  * VirologyDarkRoomImagingPage - Page 6 of the Virology & Vaccine Unit workflow.
@@ -598,7 +600,11 @@ function VirologyDarkRoomImagingPage({
 
       {/* Action Buttons */}
       <div className="action-buttons-section">
-        <Button
+                <PermissionGate
+          roles={Permissions.PROCESS_SAMPLES}
+          disabledTooltip="You need Laboratory Technician or Lab Manager role"
+        >
+<Button
           kind="primary"
           size="md"
           renderIcon={Save}
@@ -610,6 +616,7 @@ function VirologyDarkRoomImagingPage({
             defaultMessage="Log Imaging Data"
           />
         </Button>
+        </PermissionGate>
         <Button
           kind="tertiary"
           size="md"

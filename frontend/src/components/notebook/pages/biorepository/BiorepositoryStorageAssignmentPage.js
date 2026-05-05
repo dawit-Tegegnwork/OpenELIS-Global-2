@@ -31,6 +31,8 @@ import SampleGrid from "../../workflow/SampleGrid";
 import StorageHierarchySelector from "../../workflow/StorageHierarchySelector";
 import BoxLayoutViewer from "../../workflow/BoxLayoutViewer";
 import "../../workflow/NotebookWorkflow.css";
+import PermissionGate from "../../../security/PermissionGate";
+import { Permissions } from "../../../../constants/roles";";
 
 /**
  * Storage temperature options for Biorepository samples
@@ -971,6 +973,10 @@ function BiorepositoryStorageAssignmentPage({
 
       {/* Action Buttons */}
       <div className="page-actions-bar">
+        <PermissionGate
+          roles={Permissions.UPDATE_SAMPLES}
+          disabledTooltip="You need Laboratory Technician or Lab Manager role"
+        >
         <Button
           kind="primary"
           size="sm"
@@ -1003,6 +1009,7 @@ function BiorepositoryStorageAssignmentPage({
             defaultMessage="Refresh"
           />
         </Button>
+        </PermissionGate>
       </div>
 
       {/* Messages */}

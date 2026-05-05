@@ -23,6 +23,8 @@ import config from "../../../../config.json";
 import SampleGrid from "../../workflow/SampleGrid";
 import TBManifestImportModal from "../../workflow/TBManifestImportModal";
 import "../../workflow/NotebookWorkflow.css";
+import PermissionGate from "../../../security/PermissionGate";
+import { Permissions } from "../../../../constants/roles";
 
 /**
  * TBSampleCreationPage - Page 1 of the TB workflow.
@@ -381,6 +383,10 @@ function TBSampleCreationPage({
 
       {/* Action Buttons */}
       <div className="page-actions-bar">
+        <PermissionGate
+          roles={Permissions.REGISTER_SAMPLES}
+          disabledTooltip="You need Sample Collector or Reception role to register samples"
+        >
         <Button
           kind="primary"
           size="sm"
@@ -423,6 +429,7 @@ function TBSampleCreationPage({
             </Button>
           </>
         )}
+        </PermissionGate>
       </div>
 
       {/* Errors / Success */}

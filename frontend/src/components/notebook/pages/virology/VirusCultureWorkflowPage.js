@@ -53,6 +53,8 @@ import {
 import { NotificationContext } from "../../../layout/Layout";
 import { NotificationKinds } from "../../../common/CustomNotification";
 import "../../workflow/NotebookWorkflow.css";
+import PermissionGate from "../../../security/PermissionGate";
+import { Permissions } from "../../../../constants/roles";
 
 /**
  * Stage 2: Virus Culture Growth Workflow Page
@@ -2159,7 +2161,11 @@ const VirusCultureWorkflowPage = ({
               : "—",
             actions:
               step.status === "PENDING" ? (
-                <Button
+                                <PermissionGate
+                  roles={Permissions.PROCESS_SAMPLES}
+                  disabledTooltip="You need Laboratory Technician or Lab Manager role"
+                >
+<Button
                   kind="primary"
                   size="sm"
                   renderIcon={Play}
@@ -2169,6 +2175,7 @@ const VirusCultureWorkflowPage = ({
                 >
                   Start
                 </Button>
+                </PermissionGate>
               ) : step.status === "IN_PROGRESS" ? (
                 <Button
                   kind="secondary"

@@ -55,6 +55,8 @@ import {
   postToOpenElisServerJsonResponse,
 } from "../../utils/Utils";
 import "../workflow/NotebookWorkflow.css";
+import PermissionGate from "../../security/PermissionGate";
+import { Permissions } from "../../../constants/roles";";
 
 /**
  * TestingAnalyzerPage - Testing Phase & Analyzer Integration for MedLab workflow.
@@ -909,6 +911,10 @@ function TestingAnalyzerPage({
 
       {/* Action Buttons */}
       <div className="page-actions-bar">
+        <PermissionGate
+          roles={Permissions.PROCESS_SAMPLES}
+          disabledTooltip="You need Laboratory Technician or Lab Manager role"
+        >
         <Button
           kind="primary"
           size="sm"
@@ -1008,6 +1014,7 @@ function TestingAnalyzerPage({
             defaultMessage="Refresh"
           />
         </Button>
+        </PermissionGate>
       </div>
 
       {/* Notifications */}

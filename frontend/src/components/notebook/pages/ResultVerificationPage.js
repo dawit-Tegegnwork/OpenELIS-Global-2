@@ -30,6 +30,8 @@ import { getFromOpenElisServer, postToOpenElisServer } from "../../utils/Utils";
 import { NotificationContext } from "../../layout/Layout";
 import { NotificationKinds } from "../../common/CustomNotification";
 import "../workflow/NotebookWorkflow.css";
+import PermissionGate from "../../security/PermissionGate";
+import { Permissions } from "../../../constants/roles";";
 
 /**
  * ResultVerificationPage - Page 5 of the MedLab workflow.
@@ -438,7 +440,11 @@ function ResultVerificationPage({
                                               gap: "0.5rem",
                                             }}
                                           >
-                                            <Button
+                                                                                        <PermissionGate
+                                              roles={Permissions.PROCESS_SAMPLES}
+                                              disabledTooltip="You need Laboratory Technician or Lab Manager role"
+                                            >
+<Button
                                               kind="primary"
                                               size="sm"
                                               renderIcon={Checkmark}
@@ -454,6 +460,7 @@ function ResultVerificationPage({
                                                 defaultMessage="Approve"
                                               />
                                             </Button>
+                                            </PermissionGate>
                                             <Button
                                               kind="danger"
                                               size="sm"

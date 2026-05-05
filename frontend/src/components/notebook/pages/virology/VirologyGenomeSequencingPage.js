@@ -28,6 +28,8 @@ import { NotificationContext } from "../../../layout/Layout";
 import { NotificationKinds } from "../../../common/CustomNotification";
 import SampleGrid from "../../workflow/SampleGrid";
 import "../../workflow/NotebookWorkflow.css";
+import PermissionGate from "../../../security/PermissionGate";
+import { Permissions } from "../../../../constants/roles";
 
 /**
  * VirologyGenomeSequencingPage - Page for viral genome analysis.
@@ -299,6 +301,10 @@ function VirologyGenomeSequencingPage({
 
       {/* Action Buttons */}
       <div className="page-actions-bar">
+        <PermissionGate
+          roles={Permissions.PROCESS_SAMPLES}
+          disabledTooltip="You need Laboratory Technician or Lab Manager role to process samples"
+        >
         <Button
           kind="primary"
           size="md"
@@ -325,6 +331,7 @@ function VirologyGenomeSequencingPage({
             values={{ count: selectedSampleIds.length }}
           />
         </Button>
+        </PermissionGate>
       </div>
 
       {/* Pending Samples */}

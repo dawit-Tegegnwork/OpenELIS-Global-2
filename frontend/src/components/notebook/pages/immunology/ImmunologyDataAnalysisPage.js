@@ -31,6 +31,8 @@ import { FormattedMessage, useIntl } from "react-intl";
 import { getFromOpenElisServer } from "../../../utils/Utils";
 import config from "../../../../config.json";
 import "../../workflow/NotebookWorkflow.css";
+import PermissionGate from "../../../security/PermissionGate";
+import { Permissions } from "../../../../constants/roles";
 
 /**
  * ImmunologyDataAnalysisPage - Page 10: Data Analysis & Export
@@ -512,7 +514,11 @@ function ImmunologyDataAnalysisPage({
                 />
               </p>
               <div style={{ display: "flex", gap: "1rem", flexWrap: "wrap" }}>
-                <Button
+                                <PermissionGate
+                  roles={Permissions.REVIEW_RESULTS}
+                  disabledTooltip="You need Researcher or Lab Manager role to review results"
+                >
+<Button
                   kind="primary"
                   renderIcon={DocumentExport}
                   onClick={() => handleExport("excel", "processed")}
@@ -530,6 +536,7 @@ function ImmunologyDataAnalysisPage({
                     />
                   )}
                 </Button>
+                </PermissionGate>
 
                 <Button
                   kind="secondary"

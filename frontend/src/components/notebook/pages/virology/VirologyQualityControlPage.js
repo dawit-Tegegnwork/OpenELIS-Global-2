@@ -29,6 +29,8 @@ import { NotificationContext } from "../../../layout/Layout";
 import { NotificationKinds } from "../../../common/CustomNotification";
 import SampleGrid from "../../workflow/SampleGrid";
 import "../../workflow/NotebookWorkflow.css";
+import PermissionGate from "../../../security/PermissionGate";
+import { Permissions } from "../../../../constants/roles";
 
 /**
  * VirologyQualityControlPage - Page 4 of the Virology & Vaccine Unit workflow.
@@ -490,6 +492,10 @@ function VirologyQualityControlPage({
 
       {/* Action Buttons */}
       <div className="page-actions-bar">
+        <PermissionGate
+          roles={Permissions.MANAGE_QA}
+          disabledTooltip="You need QA role to perform quality control"
+        >
         <Button
           kind="primary"
           size="md"
@@ -516,6 +522,7 @@ function VirologyQualityControlPage({
             values={{ count: selectedSampleIds.length }}
           />
         </Button>
+        </PermissionGate>
       </div>
 
       {/* Pending / In Progress Samples Table */}

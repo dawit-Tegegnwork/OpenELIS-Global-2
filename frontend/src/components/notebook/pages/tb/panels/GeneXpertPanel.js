@@ -30,6 +30,8 @@ import {
 import SampleGrid from "../../../workflow/SampleGrid";
 import CustomDatePicker from "../../../../common/CustomDatePicker";
 import { ConfigurationContext } from "../../../../layout/Layout";
+import PermissionGate from "../../../../security/PermissionGate";
+import { Permissions } from "../../../../../constants/roles";
 
 /**
  * GeneXpertPanel - Molecular PCR (GeneXpert MTB/RIF) results panel.
@@ -565,7 +567,11 @@ function GeneXpertPanel({ pageData, onProgressUpdate, cultureSamples = [] }) {
 
       {/* Action Buttons */}
       <div className="page-actions-bar">
-        <Button
+                <PermissionGate
+          roles={Permissions.PROCESS_SAMPLES}
+          disabledTooltip="You need Laboratory Technician or Lab Manager role"
+        >
+<Button
           kind="primary"
           size="sm"
           renderIcon={Add}
@@ -578,6 +584,7 @@ function GeneXpertPanel({ pageData, onProgressUpdate, cultureSamples = [] }) {
             values={{ count: selectedSampleIds.length }}
           />
         </Button>
+        </PermissionGate>
 
         {selectedSampleIds.length > 0 && (
           <Button
