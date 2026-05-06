@@ -219,6 +219,61 @@ public class InventoryItemDAOImpl extends BaseDAOImpl<InventoryItem, Long> imple
         }
     }
 
+    @Override
+    @Transactional(readOnly = true)
+    public List<InventoryItem> getPagedItems(int limit, int offset, String sortBy, String sortOrder, ItemType itemType,
+            Boolean isActive, String searchTerm, String departmentId) throws LIMSRuntimeException {
+        try {
+            CriteriaBuilder cb = entityManager.getCriteriaBuilder();
+            CriteriaQuery<InventoryItem> cq = cb.createQuery(InventoryItem.class);
+            Root<InventoryItem> root = cq.from(InventoryItem.class);
+            var predicates = new java.util.ArrayList<jakarta.persistence.criteria.Predicate>();
+            if (itemType != null)
+                predicates.add(cb.equal(root.get("itemType").as(String.class), itemType.name()));
+            if (isActive != null)
+                predicates.add(cb.equal(root.get("isActive"), isActive ? "Y" : "N"));
+            if (searchTerm != null && !searchTerm.trim().isEmpty())
+                predicates.add(cb.like(cb.lower(root.get("name")), "%" + searchTerm.toLowerCase() + "%"));
+            if (departmentId != null)
+                predicates.add(cb.equal(root.get("departmentId"), departmentId));
+            if (!predicates.isEmpty())
+                cq.where(predicates.toArray(new jakarta.persistence.criteria.Predicate[0]));
+            String validatedSortBy = (sortBy != null && !sortBy.trim().isEmpty()) ? validateAndMapItemSortField(sortBy)
+                    : "name";
+            cq.orderBy("desc".equalsIgnoreCase(sortOrder) ? cb.desc(root.get(validatedSortBy))
+                    : cb.asc(root.get(validatedSortBy)));
+            return entityManager.createQuery(cq).setFirstResult(offset).setMaxResults(limit).getResultList();
+        } catch (Exception e) {
+            throw new LIMSRuntimeException("Error getting paged inventory items", e);
+        }
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public Long getPagedItemsCount(ItemType itemType, Boolean isActive, String searchTerm, String departmentId)
+            throws LIMSRuntimeException {
+        try {
+            CriteriaBuilder cb = entityManager.getCriteriaBuilder();
+            CriteriaQuery<Long> cq = cb.createQuery(Long.class);
+            Root<InventoryItem> root = cq.from(InventoryItem.class);
+            cq.select(cb.count(root));
+            var predicates = new java.util.ArrayList<jakarta.persistence.criteria.Predicate>();
+            if (itemType != null)
+                predicates.add(cb.equal(root.get("itemType").as(String.class), itemType.name()));
+            if (isActive != null)
+                predicates.add(cb.equal(root.get("isActive"), isActive ? "Y" : "N"));
+            if (searchTerm != null && !searchTerm.trim().isEmpty())
+                predicates.add(cb.like(cb.lower(root.get("name")), "%" + searchTerm.toLowerCase() + "%"));
+            if (departmentId != null)
+                predicates.add(cb.equal(root.get("departmentId"), departmentId));
+            if (!predicates.isEmpty())
+                cq.where(predicates.toArray(new jakarta.persistence.criteria.Predicate[0]));
+            return entityManager.createQuery(cq).getSingleResult();
+        } catch (Exception e) {
+            throw new LIMSRuntimeException("Error getting paged inventory items count", e);
+        }
+    }
+
     /**
      * Validates and maps sort field names to prevent injection and ensure valid
      * fields

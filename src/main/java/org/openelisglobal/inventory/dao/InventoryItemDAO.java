@@ -46,8 +46,14 @@ public interface InventoryItemDAO extends BaseDAO<InventoryItem, Long> {
     List<InventoryItem> getPagedItems(int limit, int offset, String sortBy, String sortOrder, ItemType itemType,
             Boolean isActive, String searchTerm) throws LIMSRuntimeException;
 
+    List<InventoryItem> getPagedItems(int limit, int offset, String sortBy, String sortOrder, ItemType itemType,
+            Boolean isActive, String searchTerm, String departmentId) throws LIMSRuntimeException;
+
     /**
      * Get total count of items matching the same filters as getPagedItems
      */
     Long getPagedItemsCount(ItemType itemType, Boolean isActive, String searchTerm) throws LIMSRuntimeException;
+
+    Long getPagedItemsCount(ItemType itemType, Boolean isActive, String searchTerm, String departmentId)
+            throws LIMSRuntimeException;
 }

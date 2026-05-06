@@ -46,16 +46,15 @@ public class InventoryItemRestController extends BaseRestController {
     private boolean checkInventoryPermission(HttpServletRequest request, String action, String departmentId) {
         try {
             String sysUserId = getSysUserId(request);
-            if (sysUserId == null) return false;
+            if (sysUserId == null)
+                return false;
             boolean hasPermission = departmentId != null
                     ? rbacPermissionService.hasPermission(sysUserId, "INVENTORY", action, departmentId)
                     : rbacPermissionService.hasPermission(sysUserId, "INVENTORY", action);
             if (!hasPermission) {
                 RbacContext ctx = RbacContext.get();
-                rbacAuditService.logDenied(sysUserId,
-                        ctx != null ? ctx.getUsername() : "unknown",
-                        "INVENTORY", action, null, null, departmentId, null,
-                        request.getRemoteAddr(), "Access denied");
+                rbacAuditService.logDenied(sysUserId, ctx != null ? ctx.getUsername() : "unknown", "INVENTORY", action,
+                        null, null, departmentId, null, request.getRemoteAddr(), "Access denied");
             }
             return hasPermission;
         } catch (Exception e) {
@@ -77,46 +76,45 @@ public class InventoryItemRestController extends BaseRestController {
     @GetMapping(produces = MediaType.APPLICATION_JSON_VALUE)
     public ResponseEntity<List<InventoryItem>> getAllActive(HttpServletRequest request) {
         try {
-            // TR-05: any authenticated user with any module permission can read inventory
-            // Department filtering is applied below (TR-04)
-            String sysUserId = getSysUserId(request);
-            if (sysUserId == null) {
+            if (!checkInventoryPermission(request, "READ", null)) {
                 return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
             }
-            List<InventoryItem> items = inventoryItemService.getAllActive();
-            // TR-04: Filter by allowed departments
-            RbacContext ctx = RbacContext.get();
-            if (ctx != null && !ctx.isUnrestricted()) {
-                items = items.stream()
-                        .filter(i -> i.getDepartmentId() == null
-                                || ctx.canAccessDepartment(i.getDepartmentId()))
-                        .collect(Collectors.toList());
-            }
-            return ResponseEntity.ok(items);
+            return ResponseEntity.ok(applyDepartmentFilter(inventoryItemService.getAllActive()));
         } catch (Exception e) {
             LogEvent.logError(e);
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
         }
     }
 
+    /**
+     * Apply active-department filter for restricted users. Unrestricted users see
+     * all.
+     */
+    private List<InventoryItem> applyDepartmentFilter(List<InventoryItem> items) {
+        RbacContext ctx = RbacContext.get();
+        if (ctx == null || ctx.isUnrestricted())
+            return items;
+        String activeDept = ctx.getActiveDepartmentId();
+        if (activeDept == null)
+            return items;
+        return items.stream().filter(i -> activeDept.equals(i.getDepartmentId())).collect(Collectors.toList());
+    }
+
     @GetMapping(value = "/all", produces = MediaType.APPLICATION_JSON_VALUE)
     public ResponseEntity<List<InventoryItem>> getAll(@RequestParam(required = false) ItemType itemType,
-            @RequestParam(required = false) Boolean isActive, @RequestParam(required = false) String projectName) {
+            @RequestParam(required = false) Boolean isActive, @RequestParam(required = false) String projectName,
+            HttpServletRequest request) {
         try {
-            List<InventoryItem> items;
-
-            if (itemType != null || isActive != null || projectName != null) {
-                // Use filtered approach
-                items = inventoryItemService.getAll();
-                items = items.stream().filter(item -> itemType == null || item.getItemType().equals(itemType))
-                        .filter(item -> isActive == null || item.isActive() == isActive)
-                        .filter(item -> projectName == null
-                                || (item.getProjectName() != null && item.getProjectName().equals(projectName)))
-                        .toList();
-            } else {
-                items = inventoryItemService.getAll();
+            if (!checkInventoryPermission(request, "READ", null)) {
+                return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
             }
-
+            List<InventoryItem> items = applyDepartmentFilter(inventoryItemService.getAll());
+            if (itemType != null)
+                items = items.stream().filter(i -> i.getItemType().equals(itemType)).toList();
+            if (isActive != null)
+                items = items.stream().filter(i -> i.isActive() == isActive).toList();
+            if (projectName != null)
+                items = items.stream().filter(i -> projectName.equals(i.getProjectName())).toList();
             return ResponseEntity.ok(items);
         } catch (Exception e) {
             LogEvent.logError(e);
@@ -141,8 +139,12 @@ public class InventoryItemRestController extends BaseRestController {
     public ResponseEntity<Map<String, Object>> getPagedItems(@RequestParam(defaultValue = "20") int limit,
             @RequestParam(defaultValue = "0") int offset, @RequestParam(defaultValue = "name") String sortBy,
             @RequestParam(defaultValue = "asc") String sortOrder, @RequestParam(required = false) String itemType,
-            @RequestParam(required = false) Boolean isActive, @RequestParam(required = false) String search) {
+            @RequestParam(required = false) Boolean isActive, @RequestParam(required = false) String search,
+            HttpServletRequest request) {
         try {
+            if (!checkInventoryPermission(request, "READ", null)) {
+                return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
+            }
             ItemType type = null;
             if (itemType != null && !itemType.trim().isEmpty() && !itemType.equalsIgnoreCase("ALL")) {
                 try {
@@ -152,14 +154,16 @@ public class InventoryItemRestController extends BaseRestController {
                 }
             }
 
-            List<InventoryItem> items = inventoryItemService.getPagedItems(limit, offset, sortBy, sortOrder, type,
-                    isActive, search);
+            // Determine active department for restricted users
+            RbacContext ctx = RbacContext.get();
+            String activeDept = (ctx != null && !ctx.isUnrestricted()) ? ctx.getActiveDepartmentId() : null;
 
-            Long totalRecords = inventoryItemService.getPagedItemsCount(type, isActive, search);
+            List<InventoryItem> items = inventoryItemService.getPagedItems(limit, offset, sortBy, sortOrder, type,
+                    isActive, search, activeDept);
+            Long totalRecords = inventoryItemService.getPagedItemsCount(type, isActive, search, activeDept);
 
             int currentPage = (offset / limit) + 1;
             int totalPages = (int) Math.ceil((double) totalRecords / limit);
-            boolean hasMore = offset + limit < totalRecords;
 
             Map<String, Object> response = new HashMap<>();
             response.put("items", items);
@@ -168,7 +172,7 @@ public class InventoryItemRestController extends BaseRestController {
             response.put("offset", offset);
             response.put("currentPage", currentPage);
             response.put("totalPages", totalPages);
-            response.put("hasMore", hasMore);
+            response.put("hasMore", offset + limit < totalRecords);
 
             return ResponseEntity.ok(response);
         } catch (Exception e) {
@@ -178,11 +182,17 @@ public class InventoryItemRestController extends BaseRestController {
     }
 
     @GetMapping(value = "/{id}", produces = MediaType.APPLICATION_JSON_VALUE)
-    public ResponseEntity<InventoryItem> getById(@PathVariable String id) {
+    public ResponseEntity<InventoryItem> getById(@PathVariable String id, HttpServletRequest request) {
         try {
+            if (!checkInventoryPermission(request, "READ", null)) {
+                return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
+            }
             InventoryItem item = inventoryItemService.get(Long.valueOf(id));
-            if (item == null) {
+            if (item == null)
                 return ResponseEntity.notFound().build();
+            RbacContext ctx = RbacContext.get();
+            if (ctx != null && !ctx.isUnrestricted() && !ctx.isInActiveDepartment(item.getDepartmentId())) {
+                return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
             }
             return ResponseEntity.ok(item);
         } catch (Exception e) {
@@ -192,10 +202,12 @@ public class InventoryItemRestController extends BaseRestController {
     }
 
     @GetMapping(value = "/type/{itemType}", produces = MediaType.APPLICATION_JSON_VALUE)
-    public ResponseEntity<List<InventoryItem>> getByType(@PathVariable ItemType itemType) {
+    public ResponseEntity<List<InventoryItem>> getByType(@PathVariable ItemType itemType, HttpServletRequest request) {
         try {
-            List<InventoryItem> items = inventoryItemService.getByItemType(itemType);
-            return ResponseEntity.ok(items);
+            if (!checkInventoryPermission(request, "READ", null)) {
+                return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
+            }
+            return ResponseEntity.ok(applyDepartmentFilter(inventoryItemService.getByItemType(itemType)));
         } catch (Exception e) {
             LogEvent.logError(e);
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
@@ -203,10 +215,13 @@ public class InventoryItemRestController extends BaseRestController {
     }
 
     @GetMapping(value = "/category/{category}", produces = MediaType.APPLICATION_JSON_VALUE)
-    public ResponseEntity<List<InventoryItem>> getByCategory(@PathVariable String category) {
+    public ResponseEntity<List<InventoryItem>> getByCategory(@PathVariable String category,
+            HttpServletRequest request) {
         try {
-            List<InventoryItem> items = inventoryItemService.getByCategory(category);
-            return ResponseEntity.ok(items);
+            if (!checkInventoryPermission(request, "READ", null)) {
+                return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
+            }
+            return ResponseEntity.ok(applyDepartmentFilter(inventoryItemService.getByCategory(category)));
         } catch (Exception e) {
             LogEvent.logError(e);
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
@@ -214,11 +229,15 @@ public class InventoryItemRestController extends BaseRestController {
     }
 
     @GetMapping(value = "/project/{projectName}", produces = MediaType.APPLICATION_JSON_VALUE)
-    public ResponseEntity<List<InventoryItem>> getByProject(@PathVariable String projectName) {
+    public ResponseEntity<List<InventoryItem>> getByProject(@PathVariable String projectName,
+            HttpServletRequest request) {
         try {
+            if (!checkInventoryPermission(request, "READ", null)) {
+                return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
+            }
             List<InventoryItem> items = inventoryItemService.getAll().stream()
                     .filter(item -> projectName.equals(item.getProjectName())).collect(Collectors.toList());
-            return ResponseEntity.ok(items);
+            return ResponseEntity.ok(applyDepartmentFilter(items));
         } catch (Exception e) {
             LogEvent.logError(e);
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
@@ -226,10 +245,12 @@ public class InventoryItemRestController extends BaseRestController {
     }
 
     @GetMapping(value = "/search", produces = MediaType.APPLICATION_JSON_VALUE)
-    public ResponseEntity<List<InventoryItem>> search(@RequestParam String query) {
+    public ResponseEntity<List<InventoryItem>> search(@RequestParam String query, HttpServletRequest request) {
         try {
-            List<InventoryItem> items = inventoryItemService.searchByName(query);
-            return ResponseEntity.ok(items);
+            if (!checkInventoryPermission(request, "READ", null)) {
+                return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
+            }
+            return ResponseEntity.ok(applyDepartmentFilter(inventoryItemService.searchByName(query)));
         } catch (Exception e) {
             LogEvent.logError(e);
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
@@ -237,10 +258,12 @@ public class InventoryItemRestController extends BaseRestController {
     }
 
     @GetMapping(value = "/low-stock", produces = MediaType.APPLICATION_JSON_VALUE)
-    public ResponseEntity<List<InventoryItem>> getLowStockItems() {
+    public ResponseEntity<List<InventoryItem>> getLowStockItems(HttpServletRequest request) {
         try {
-            List<InventoryItem> items = inventoryItemService.getLowStockItems();
-            return ResponseEntity.ok(items);
+            if (!checkInventoryPermission(request, "READ", null)) {
+                return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
+            }
+            return ResponseEntity.ok(applyDepartmentFilter(inventoryItemService.getLowStockItems()));
         } catch (Exception e) {
             LogEvent.logError(e);
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
@@ -248,8 +271,18 @@ public class InventoryItemRestController extends BaseRestController {
     }
 
     @GetMapping(value = "/{id}/stock", produces = MediaType.APPLICATION_JSON_VALUE)
-    public ResponseEntity<StockResponse> getTotalStock(@PathVariable String id) {
+    public ResponseEntity<StockResponse> getTotalStock(@PathVariable String id, HttpServletRequest request) {
         try {
+            if (!checkInventoryPermission(request, "READ", null)) {
+                return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
+            }
+            InventoryItem item = inventoryItemService.get(Long.valueOf(id));
+            if (item == null)
+                return ResponseEntity.notFound().build();
+            RbacContext ctx = RbacContext.get();
+            if (ctx != null && !ctx.isUnrestricted() && !ctx.isInActiveDepartment(item.getDepartmentId())) {
+                return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
+            }
             Double stock = inventoryItemService.getTotalCurrentStock(Long.valueOf(id));
             boolean inStock = inventoryItemService.isInStock(Long.valueOf(id));
             return ResponseEntity.ok(new StockResponse(stock, inStock));
@@ -262,9 +295,19 @@ public class InventoryItemRestController extends BaseRestController {
     @PostMapping(consumes = MediaType.APPLICATION_JSON_VALUE, produces = MediaType.APPLICATION_JSON_VALUE)
     public ResponseEntity<InventoryItem> create(@Valid @RequestBody InventoryItem item, HttpServletRequest request) {
         try {
+            if (!checkInventoryPermission(request, "CREATE", null)) {
+                return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
+            }
             UserSessionData usd = (UserSessionData) request.getSession().getAttribute(USER_SESSION_DATA);
             String sysUserId = String.valueOf(usd.getSystemUserId());
             item.setSysUserId(sysUserId);
+
+            // Anchor department_id server-side for restricted users — never trust client
+            // payload
+            RbacContext ctx = RbacContext.get();
+            if (ctx != null && !ctx.isUnrestricted()) {
+                item.setDepartmentId(ctx.getActiveDepartmentId());
+            }
 
             if (item.getFhirUuid() == null) {
                 item.setFhirUuid(java.util.UUID.randomUUID());
@@ -283,15 +326,25 @@ public class InventoryItemRestController extends BaseRestController {
     public ResponseEntity<InventoryItem> update(@PathVariable String id, @Valid @RequestBody InventoryItem item,
             HttpServletRequest request) {
         try {
-            if (inventoryItemService.get(Long.valueOf(id)) == null) {
+            InventoryItem existing = inventoryItemService.get(Long.valueOf(id));
+            if (existing == null)
                 return ResponseEntity.notFound().build();
+
+            // Verify the existing item belongs to the user's active department
+            RbacContext ctx = RbacContext.get();
+            if (ctx != null && !ctx.isUnrestricted() && !ctx.isInActiveDepartment(existing.getDepartmentId())) {
+                return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
+            }
+            if (!checkInventoryPermission(request, "UPDATE", existing.getDepartmentId())) {
+                return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
             }
 
             item.setId(Long.valueOf(id));
-
             UserSessionData usd = (UserSessionData) request.getSession().getAttribute(USER_SESSION_DATA);
-            String sysUserId = String.valueOf(usd.getSystemUserId());
-            item.setSysUserId(sysUserId);
+            item.setSysUserId(String.valueOf(usd.getSystemUserId()));
+            // Preserve the original department — never allow client to move item to another
+            // dept
+            item.setDepartmentId(existing.getDepartmentId());
 
             InventoryItem updatedItem = inventoryItemService.update(item);
             return ResponseEntity.ok(updatedItem);
@@ -304,10 +357,18 @@ public class InventoryItemRestController extends BaseRestController {
     @PutMapping(value = "/{id}/deactivate", produces = MediaType.APPLICATION_JSON_VALUE)
     public ResponseEntity<Void> deactivate(@PathVariable String id, HttpServletRequest request) {
         try {
+            InventoryItem existing = inventoryItemService.get(Long.valueOf(id));
+            if (existing == null)
+                return ResponseEntity.notFound().build();
+            RbacContext ctx = RbacContext.get();
+            if (ctx != null && !ctx.isUnrestricted() && !ctx.isInActiveDepartment(existing.getDepartmentId())) {
+                return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
+            }
+            if (!checkInventoryPermission(request, "UPDATE", existing.getDepartmentId())) {
+                return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
+            }
             UserSessionData usd = (UserSessionData) request.getSession().getAttribute(USER_SESSION_DATA);
-            String sysUserId = String.valueOf(usd.getSystemUserId());
-
-            inventoryItemService.deactivateItem(Long.valueOf(id), sysUserId);
+            inventoryItemService.deactivateItem(Long.valueOf(id), String.valueOf(usd.getSystemUserId()));
             return ResponseEntity.ok().build();
         } catch (Exception e) {
             LogEvent.logError(e);
@@ -318,10 +379,18 @@ public class InventoryItemRestController extends BaseRestController {
     @PutMapping(value = "/{id}/activate", produces = MediaType.APPLICATION_JSON_VALUE)
     public ResponseEntity<Void> activate(@PathVariable String id, HttpServletRequest request) {
         try {
+            InventoryItem existing = inventoryItemService.get(Long.valueOf(id));
+            if (existing == null)
+                return ResponseEntity.notFound().build();
+            RbacContext ctx = RbacContext.get();
+            if (ctx != null && !ctx.isUnrestricted() && !ctx.isInActiveDepartment(existing.getDepartmentId())) {
+                return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
+            }
+            if (!checkInventoryPermission(request, "UPDATE", existing.getDepartmentId())) {
+                return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
+            }
             UserSessionData usd = (UserSessionData) request.getSession().getAttribute(USER_SESSION_DATA);
-            String sysUserId = String.valueOf(usd.getSystemUserId());
-
-            inventoryItemService.activateItem(Long.valueOf(id), sysUserId);
+            inventoryItemService.activateItem(Long.valueOf(id), String.valueOf(usd.getSystemUserId()));
             return ResponseEntity.ok().build();
         } catch (Exception e) {
             LogEvent.logError(e);
