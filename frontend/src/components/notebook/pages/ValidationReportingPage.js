@@ -56,6 +56,8 @@ import {
 import { NotificationContext } from "../../layout/Layout";
 import { NotificationKinds } from "../../common/CustomNotification";
 import "../workflow/NotebookWorkflow.css";
+import PermissionGate from "../../security/PermissionGate";
+import { Permissions } from "../../../constants/roles";
 
 /**
  * ValidationReportingPage - Validation, Reporting & Performance Monitoring
@@ -651,7 +653,11 @@ function ValidationReportingPage({
                 justifyContent: "flex-end",
               }}
             >
-              <Button
+                            <PermissionGate
+                roles={Permissions.REVIEW_RESULTS}
+                disabledTooltip="You need Researcher or Lab Manager role to review results"
+              >
+<Button
                 kind="primary"
                 size="md"
                 renderIcon={Checkmark}
@@ -670,6 +676,7 @@ function ValidationReportingPage({
                   />
                 )}
               </Button>
+              </PermissionGate>
             </div>
 
             {/* Loading */}

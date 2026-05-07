@@ -27,6 +27,8 @@ import { NotificationContext } from "../../../layout/Layout";
 import { NotificationKinds } from "../../../common/CustomNotification";
 import SampleGrid from "../../workflow/SampleGrid";
 import "../../workflow/NotebookWorkflow.css";
+import PermissionGate from "../../../security/PermissionGate";
+import { Permissions } from "../../../../constants/roles";
 
 /**
  * VirologyFormulationPage - Page 7 of the Virology & Vaccine Unit workflow.
@@ -469,7 +471,11 @@ function VirologyFormulationPage({
 
         <Column lg={16} md={8} sm={4}>
           <div className="notebook-actions-bar">
-            <Button
+                        <PermissionGate
+              roles={Permissions.PROCESS_SAMPLES}
+              disabledTooltip="You need Laboratory Technician or Lab Manager role to process samples"
+            >
+<Button
               kind="primary"
               renderIcon={Save}
               onClick={() => setModalOpen(true)}
@@ -480,6 +486,7 @@ function VirologyFormulationPage({
                 defaultMessage="Log Formulation Data"
               />
             </Button>
+            </PermissionGate>
             <Button
               kind="secondary"
               renderIcon={Checkmark}

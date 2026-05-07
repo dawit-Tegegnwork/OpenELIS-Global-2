@@ -32,6 +32,8 @@ import { NotificationContext } from "../../../layout/Layout";
 import { NotificationKinds } from "../../../common/CustomNotification";
 import SampleGrid from "../../workflow/SampleGrid";
 import "../../workflow/NotebookWorkflow.css";
+import PermissionGate from "../../../security/PermissionGate";
+import { Permissions } from "../../../../constants/roles";
 
 /**
  * VirologyFeedingPage - Page for logging culture feeding and maintenance activities.
@@ -677,6 +679,10 @@ function VirologyFeedingPage({
 
       {/* Action Buttons */}
       <div className="page-actions-bar">
+        <PermissionGate
+          roles={Permissions.PROCESS_SAMPLES}
+          disabledTooltip="You need Laboratory Technician or Lab Manager role to process samples"
+        >
         <Button
           kind="primary"
           size="md"
@@ -703,6 +709,7 @@ function VirologyFeedingPage({
             values={{ count: selectedSampleIds.length }}
           />
         </Button>
+        </PermissionGate>
       </div>
 
       {/* Pending/In-Progress Samples Section */}

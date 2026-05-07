@@ -70,9 +70,9 @@ public class NotebookSecurityServiceImpl implements NotebookSecurityService {
         // Check departments (test sections) first - this is the primary access control
         Set<TestSection> templateDepts = template.getDepartments();
         if (templateDepts != null && !templateDepts.isEmpty()) {
-            // If user has no specific lab unit, check AllLabUnits access
+            // If user has no specific lab unit selected at login, check their assigned units
             if (loginLabUnit == null || loginLabUnit.isEmpty()) {
-                return hasAllLabUnitsAccess(sysUserId);
+                return hasAllLabUnitsAccess(sysUserId) || userHasAnyAssignedDepartment(sysUserId, templateDepts);
             }
             // User's loginLabUnit must match one of the template's departments
             return templateDepts.stream().anyMatch(dept -> matchesLoginLabUnitToDepartment(dept, loginLabUnit));
@@ -82,7 +82,7 @@ public class NotebookSecurityServiceImpl implements NotebookSecurityService {
         Set<Organization> templateOrgs = template.getOrganizations();
         if (templateOrgs != null && !templateOrgs.isEmpty()) {
             if (loginLabUnit == null || loginLabUnit.isEmpty()) {
-                return hasAllLabUnitsAccess(sysUserId);
+                return hasAllLabUnitsAccess(sysUserId) || userHasAnyAssignedOrganization(sysUserId, templateOrgs);
             }
             return templateOrgs.stream().anyMatch(org -> matchesLoginLabUnit(org, loginLabUnit));
         }
@@ -159,9 +159,9 @@ public class NotebookSecurityServiceImpl implements NotebookSecurityService {
                 }
 
                 // If user has no specific lab unit (loginLabUnit is null/empty),
-                // check if they have AllLabUnits access
+                // check if they have AllLabUnits access OR any assigned department matches
                 if (loginLabUnit == null || loginLabUnit.isEmpty()) {
-                    return hasAllLabUnitsAccess(sysUserId);
+                    return hasAllLabUnitsAccess(sysUserId) || userHasAnyAssignedDepartment(sysUserId, templateDepts);
                 }
                 // User's loginLabUnit must match one of the template's departments
                 boolean matches = templateDepts.stream()
@@ -176,7 +176,7 @@ public class NotebookSecurityServiceImpl implements NotebookSecurityService {
             Set<Organization> templateOrgs = noteBookService.getNoteBookOrganizations(effectiveNotebookId);
             if (templateOrgs != null && !templateOrgs.isEmpty()) {
                 if (loginLabUnit == null || loginLabUnit.isEmpty()) {
-                    return hasAllLabUnitsAccess(sysUserId);
+                    return hasAllLabUnitsAccess(sysUserId) || userHasAnyAssignedOrganization(sysUserId, templateOrgs);
                 }
                 return templateOrgs.stream().anyMatch(org -> matchesLoginLabUnit(org, loginLabUnit));
             }
@@ -208,6 +208,46 @@ public class NotebookSecurityServiceImpl implements NotebookSecurityService {
         // Check if user has any role assigned to "AllLabUnits"
         return userLabRoles.getLabUnitRoleMap().stream()
                 .anyMatch(roleMap -> "AllLabUnits".equalsIgnoreCase(roleMap.getLabUnit()));
+    }
+
+    /**
+     * Check if user has any lab unit assignment matching one of the template's departments.
+     * Used when loginLabUnit is null (user didn't select a lab unit at login).
+     */
+    private boolean userHasAnyAssignedDepartment(String sysUserId, Set<TestSection> templateDepts) {
+        if (sysUserId == null || templateDepts == null) return false;
+        UserLabUnitRoles userLabRoles = userRoleService.getUserLabUnitRoles(sysUserId);
+        if (userLabRoles == null || userLabRoles.getLabUnitRoleMap() == null) return false;
+        for (LabUnitRoleMap roleMap : userLabRoles.getLabUnitRoleMap()) {
+            String labUnit = roleMap.getLabUnit();
+            if (labUnit == null) continue;
+            for (TestSection dept : templateDepts) {
+                if (labUnit.equals(String.valueOf(dept.getId()))
+                        || labUnit.equalsIgnoreCase(dept.getTestSectionName())
+                        || labUnit.equalsIgnoreCase(dept.getLocalizedName())) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Check if user has any lab unit assignment matching one of the template's organizations.
+     * Used when loginLabUnit is null (user didn't select a lab unit at login).
+     */
+    private boolean userHasAnyAssignedOrganization(String sysUserId, Set<Organization> templateOrgs) {
+        if (sysUserId == null || templateOrgs == null) return false;
+        UserLabUnitRoles userLabRoles = userRoleService.getUserLabUnitRoles(sysUserId);
+        if (userLabRoles == null || userLabRoles.getLabUnitRoleMap() == null) return false;
+        for (LabUnitRoleMap roleMap : userLabRoles.getLabUnitRoleMap()) {
+            String labUnit = roleMap.getLabUnit();
+            if (labUnit == null) continue;
+            for (Organization org : templateOrgs) {
+                if (matchesLoginLabUnit(org, labUnit)) return true;
+            }
+        }
+        return false;
     }
 
     // ========== ENTRY ACCESS (Role + Location Based) ==========

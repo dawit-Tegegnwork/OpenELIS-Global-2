@@ -59,8 +59,13 @@ public interface InventoryItemService extends BaseObjectService<InventoryItem, L
     List<InventoryItem> getPagedItems(int limit, int offset, String sortBy, String sortOrder, ItemType itemType,
             Boolean isActive, String searchTerm);
 
+    List<InventoryItem> getPagedItems(int limit, int offset, String sortBy, String sortOrder, ItemType itemType,
+            Boolean isActive, String searchTerm, String departmentId);
+
     /**
      * Get total count of items matching the same filters as getPagedItems
      */
     Long getPagedItemsCount(ItemType itemType, Boolean isActive, String searchTerm);
+
+    Long getPagedItemsCount(ItemType itemType, Boolean isActive, String searchTerm, String departmentId);
 }

@@ -28,6 +28,8 @@ import {
 import SampleGrid from "../../../workflow/SampleGrid";
 import CustomDatePicker from "../../../../common/CustomDatePicker";
 import { ConfigurationContext } from "../../../../layout/Layout";
+import PermissionGate from "../../../../security/PermissionGate";
+import { Permissions } from "../../../../../constants/roles";
 
 /**
  * SmearMicroscopyPanel - AFB Smear Microscopy results panel.
@@ -521,7 +523,11 @@ function SmearMicroscopyPanel({
 
       {/* Action Buttons */}
       <div className="page-actions-bar">
-        <Button
+                <PermissionGate
+          roles={Permissions.PROCESS_SAMPLES}
+          disabledTooltip="You need Laboratory Technician or Lab Manager role"
+        >
+<Button
           kind="primary"
           size="sm"
           renderIcon={Add}
@@ -534,6 +540,7 @@ function SmearMicroscopyPanel({
             values={{ count: selectedSampleIds.length }}
           />
         </Button>
+        </PermissionGate>
 
         {selectedSampleIds.length > 0 && (
           <Button

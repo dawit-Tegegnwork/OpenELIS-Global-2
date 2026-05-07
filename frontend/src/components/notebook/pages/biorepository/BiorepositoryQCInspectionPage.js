@@ -29,6 +29,8 @@ import {
 } from "@carbon/react";
 import { Checkmark, Edit, Renew, WarningAlt } from "@carbon/react/icons";
 import { FormattedMessage, useIntl } from "react-intl";
+import PermissionGate from "../../../security/PermissionGate";
+import { Permissions } from "../../../../constants/roles";
 import PropTypes from "prop-types";
 import {
   getFromOpenElisServer,
@@ -560,6 +562,10 @@ function BiorepositoryQCInspectionPage({
                 <TableContainer>
                   <TableToolbar>
                     <TableBatchActions {...getBatchActionProps()}>
+                      <PermissionGate
+                        roles={Permissions.MANAGE_QA}
+                        disabledTooltip="You need QA role to perform quality control"
+                      >
                       <TableBatchAction
                         renderIcon={Edit}
                         iconDescription={intl.formatMessage({
@@ -578,6 +584,7 @@ function BiorepositoryQCInspectionPage({
                           defaultMessage="Bulk Apply QC"
                         />
                       </TableBatchAction>
+                      </PermissionGate>
                     </TableBatchActions>
                     <TableToolbarContent>
                       <Button

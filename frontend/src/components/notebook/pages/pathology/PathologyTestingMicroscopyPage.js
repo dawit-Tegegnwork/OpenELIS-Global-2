@@ -64,6 +64,8 @@ import {
 } from "../../../utils/Utils";
 import config from "../../../../config.json";
 import "../../workflow/NotebookWorkflow.css";
+import PermissionGate from "../../../security/PermissionGate";
+import { Permissions } from "../../../../constants/roles";
 
 /**
  * PathologyTestingMicroscopyPage - Page 8 of the pathology workflow (Microscopy & Diagnosis).
@@ -1600,7 +1602,11 @@ ACC-2024-002,BLK-002-A,"Negative for malignancy",,Benign fibrocystic changes,tru
             className="action-buttons"
             style={{ display: "flex", gap: "1rem", marginBottom: "1rem" }}
           >
-            <Button
+                        <PermissionGate
+              roles={Permissions.PROCESS_SAMPLES}
+              disabledTooltip="You need Laboratory Technician or Lab Manager role to process samples"
+            >
+<Button
               kind="primary"
               size="md"
               renderIcon={Add}
@@ -1613,6 +1619,7 @@ ACC-2024-002,BLK-002-A,"Negative for malignancy",,Benign fibrocystic changes,tru
                 values={{ count: selectedSampleIds.length }}
               />
             </Button>
+            </PermissionGate>
             <Button
               kind="secondary"
               size="md"

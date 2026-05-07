@@ -29,6 +29,8 @@ import { NotificationContext } from "../../../layout/Layout";
 import { NotificationKinds } from "../../../common/CustomNotification";
 import SampleGrid from "../../workflow/SampleGrid";
 import "../../workflow/NotebookWorkflow.css";
+import PermissionGate from "../../../security/PermissionGate";
+import { Permissions } from "../../../../constants/roles";";
 
 /**
  * VirologyCellCulturePage - Page 3 of the Virology & Vaccine Unit workflow.
@@ -549,6 +551,10 @@ function VirologyCellCulturePage({
 
       {/* Action Buttons */}
       <div className="page-actions-bar">
+        <PermissionGate
+          roles={Permissions.PROCESS_SAMPLES}
+          disabledTooltip="You need Laboratory Technician or Lab Manager role"
+        >
         <Button
           kind="primary"
           size="md"
@@ -575,6 +581,7 @@ function VirologyCellCulturePage({
             values={{ count: selectedSampleIds.length }}
           />
         </Button>
+        </PermissionGate>
       </div>
 
       {/* Pending / In Progress Samples Table */}

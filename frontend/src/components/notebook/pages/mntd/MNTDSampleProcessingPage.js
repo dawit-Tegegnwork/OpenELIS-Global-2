@@ -33,6 +33,8 @@ import {
 } from "../../../utils/Utils";
 import SampleGrid from "../../workflow/SampleGrid";
 import "../../workflow/NotebookWorkflow.css";
+import PermissionGate from "../../../security/PermissionGate";
+import { Permissions } from "../../../../constants/roles";
 
 /**
  * MNTDSampleProcessingPage - Page 4 of the MNTD workflow.
@@ -519,6 +521,10 @@ function MNTDSampleProcessingPage({
 
       {/* Action Buttons */}
       <div className="page-actions-bar">
+        <PermissionGate
+          roles={Permissions.PROCESS_SAMPLES}
+          disabledTooltip="You need Laboratory Technician or Lab Manager role to process samples"
+        >
         <Button
           kind="primary"
           size="sm"
@@ -562,6 +568,7 @@ function MNTDSampleProcessingPage({
             />
           </Button>
         )}
+        </PermissionGate>
       </div>
 
       {/* Messages */}

@@ -24,6 +24,9 @@ public class StorageRoomForm {
 
     private Boolean active = true;
 
+    /** TR-01/TR-04: Department this storage room belongs to */
+    private String departmentId;
+
     // Getters and Setters
 
     public String getId() {
@@ -64,5 +67,13 @@ public class StorageRoomForm {
 
     public void setActive(Boolean active) {
         this.active = active;
+    }
+
+    public String getDepartmentId() {
+        return departmentId;
+    }
+
+    public void setDepartmentId(String departmentId) {
+        this.departmentId = departmentId;
     }
 }

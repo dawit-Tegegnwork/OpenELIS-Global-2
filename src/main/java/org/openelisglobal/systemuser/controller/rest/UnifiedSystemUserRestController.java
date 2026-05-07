@@ -147,8 +147,7 @@ public class UnifiedSystemUserRestController extends BaseController {
     }
 
     @GetMapping(value = "/UnifiedSystemUser")
-    public ResponseEntity<UnifiedSystemUserForm> showUnifiedSystemUser(HttpServletRequest request,
-            @RequestParam(name = "ID", defaultValue = "") String id)
+    public ResponseEntity<UnifiedSystemUserForm> showUnifiedSystemUser(HttpServletRequest request,            @RequestParam(name = "ID", defaultValue = "") String id)
             throws IllegalAccessException, InvocationTargetException, NoSuchMethodException {
         UnifiedSystemUserForm form = new UnifiedSystemUserForm();
         form.setFormAction("UnifiedSystemUser");
@@ -191,9 +190,13 @@ public class UnifiedSystemUserRestController extends BaseController {
         String labUnitRoleId = roleService.getRoleByName(Constants.LAB_ROLES_GROUP).getId();
 
         List<DisplayRole> globalRoles = displayRoles.stream().filter(role -> role.getParentRole() != null)
-                .filter(role -> role.getParentRole().equals(globalParentRoleId)).collect(Collectors.toList());
+                .filter(role -> role.getParentRole().equals(globalParentRoleId))
+                .filter(role -> !role.isGroupingRole())
+                .collect(Collectors.toList());
         List<DisplayRole> labUnitRoles = displayRoles.stream().filter(role -> role.getParentRole() != null)
-                .filter(role -> role.getParentRole().equals(labUnitRoleId)).collect(Collectors.toList());
+                .filter(role -> role.getParentRole().equals(labUnitRoleId))
+                .filter(role -> !role.isGroupingRole())
+                .collect(Collectors.toList());
         form.setGlobalRoles(globalRoles);
         form.setLabUnitRoles(labUnitRoles);
     }

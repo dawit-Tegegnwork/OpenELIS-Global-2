@@ -51,6 +51,8 @@ import SampleGrid from "../../workflow/SampleGrid";
 import StorageHierarchySelector from "../../workflow/StorageHierarchySelector";
 import config from "../../../../config.json";
 import "../../workflow/NotebookWorkflow.css";
+import PermissionGate from "../../../security/PermissionGate";
+import { Permissions } from "../../../../constants/roles";";
 
 /**
  * MNTDReportingREDCapPage - Page 10 of the MNTD workflow.
@@ -1241,7 +1243,11 @@ function MNTDReportingREDCapPage({
           <TabPanel>
             {/* Action Buttons */}
             <div className="page-actions-bar">
-              <Button
+                            <PermissionGate
+                roles={Permissions.GENERATE_REPORTS}
+                disabledTooltip="You need Reports or Lab Manager role"
+              >
+<Button
                 kind="primary"
                 size="sm"
                 renderIcon={Report}
@@ -1252,6 +1258,7 @@ function MNTDReportingREDCapPage({
                   defaultMessage="Generate Report"
                 />
               </Button>
+              </PermissionGate>
 
               <Button
                 kind="secondary"

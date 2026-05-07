@@ -22,7 +22,13 @@ public class Constants {
     public static final String ROLE_PATHOLOGIST = "Pathologist";
     public static final String ROLE_NOTEBOOK_ADMIN = "Notebook Administrator";
 
+    // project-scope roles
+    public static final String ROLE_PROJECT_PI = "Principal Investigator";
+    public static final String ROLE_PROJECT_COORDINATOR = "Project Coordinators";
+    public static final String ROLE_DATA_MANAGER = "Data Managers";
+
     // roles groups
     public static final String GLOBAL_ROLES_GROUP = "Global Roles";
     public static final String LAB_ROLES_GROUP = "Lab Unit Roles";
+    public static final String PROJECT_ROLES_GROUP = "Project Roles";
 }

@@ -39,6 +39,8 @@ import {
 } from "../../../utils/Utils";
 import SampleGrid from "../../workflow/SampleGrid";
 import "../../workflow/NotebookWorkflow.css";
+import PermissionGate from "../../../security/PermissionGate";
+import { Permissions } from "../../../../constants/roles";";
 
 /**
  * ImmunologyAdditionalAssaysPage - Page 3 of the Immunology workflow.
@@ -795,6 +797,10 @@ function ImmunologyAdditionalAssaysPage({
 
       {/* Action Buttons */}
       <div className="page-actions-bar">
+        <PermissionGate
+          roles={Permissions.PROCESS_SAMPLES}
+          disabledTooltip="You need Laboratory Technician or Lab Manager role"
+        >
         <Button
           kind="primary"
           size="sm"
@@ -823,6 +829,7 @@ function ImmunologyAdditionalAssaysPage({
             />
           </Button>
         )}
+        </PermissionGate>
       </div>
 
       {/* Errors / Success */}

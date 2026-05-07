@@ -31,6 +31,8 @@ import {
 } from "../../../utils/Utils";
 import { NotificationContext } from "../../../layout/Layout";
 import {
+import PermissionGate from "../../../security/PermissionGate";
+import { Permissions } from "../../../../constants/roles";
   AlertDialog,
   NotificationKinds,
 } from "../../../common/CustomNotification";
@@ -682,7 +684,11 @@ function SampleTransferTab() {
                               }}
                             />
                           </span>
-                          <Button
+                                                    <PermissionGate
+                            roles={Permissions.MANAGE_QA}
+                            disabledTooltip="You need Lab Manager or EQA Personnel role"
+                          >
+<Button
                             kind="primary"
                             size="sm"
                             onClick={() =>
@@ -697,6 +703,7 @@ function SampleTransferTab() {
                               defaultMessage="Accept Selected"
                             />
                           </Button>
+                          </PermissionGate>
                           <Button
                             kind="danger"
                             size="sm"

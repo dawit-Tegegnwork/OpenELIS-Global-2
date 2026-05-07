@@ -22,6 +22,8 @@ import {
 import SampleGrid from "../../workflow/SampleGrid";
 import ImmunologyManifestImportModal from "../../workflow/ImmunologyManifestImportModal";
 import "../../workflow/NotebookWorkflow.css";
+import PermissionGate from "../../../security/PermissionGate";
+import { Permissions } from "../../../../constants/roles";
 
 /**
  * ImmunologySampleReceptionPage - Page 1 of the Immunology workflow.
@@ -327,6 +329,10 @@ function ImmunologySampleReceptionPage({
 
       {/* Action Buttons */}
       <div className="page-actions-bar">
+        <PermissionGate
+          roles={Permissions.REGISTER_SAMPLES}
+          disabledTooltip="You need Sample Collector or Reception role to register samples"
+        >
         <Button
           kind="primary"
           size="sm"
@@ -353,6 +359,7 @@ function ImmunologySampleReceptionPage({
             />
           </Button>
         )}
+        </PermissionGate>
       </div>
 
       {/* Errors / Success */}

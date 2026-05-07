@@ -51,6 +51,10 @@ public class StorageRoom extends BaseObject<Integer> {
     @Column(name = "SYS_USER_ID", nullable = false, length = 36)
     private String sysUserIdValue;
 
+    /** TR-01/TR-04: Department this storage room belongs to */
+    @Column(name = "department_id", length = 255)
+    private String departmentId;
+
     @Override
     public Integer getId() {
         return id;
@@ -109,6 +113,14 @@ public class StorageRoom extends BaseObject<Integer> {
     @Override
     public void setSysUserId(String sysUserId) {
         this.sysUserIdValue = sysUserId;
+    }
+
+    public String getDepartmentId() {
+        return departmentId;
+    }
+
+    public void setDepartmentId(String departmentId) {
+        this.departmentId = departmentId;
     }
 
     @PrePersist

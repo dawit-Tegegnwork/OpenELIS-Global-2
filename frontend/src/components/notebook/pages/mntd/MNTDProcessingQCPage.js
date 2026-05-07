@@ -32,6 +32,8 @@ import {
 } from "../../../utils/Utils";
 import SampleGrid from "../../workflow/SampleGrid";
 import "../../workflow/NotebookWorkflow.css";
+import PermissionGate from "../../../security/PermissionGate";
+import { Permissions } from "../../../../constants/roles";
 
 /**
  * MNTDProcessingQCPage - Page 6 of the MNTD workflow.
@@ -582,6 +584,10 @@ function MNTDProcessingQCPage({ entryId, pageData, onProgressUpdate }) {
 
       {/* Action Buttons */}
       <div className="page-actions-bar">
+        <PermissionGate
+          roles={Permissions.MANAGE_QA}
+          disabledTooltip="You need QA role to perform quality control"
+        >
         <Button
           kind="primary"
           size="sm"
@@ -595,6 +601,7 @@ function MNTDProcessingQCPage({ entryId, pageData, onProgressUpdate }) {
             values={{ count: selectedIds.length }}
           />
         </Button>
+        </PermissionGate>
 
         {selectedIds.length > 0 && (
           <Button

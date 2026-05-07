@@ -20,6 +20,8 @@ import {
 } from "../../../utils/Utils";
 import SampleGrid from "../../workflow/SampleGrid";
 import "../../workflow/NotebookWorkflow.css";
+import PermissionGate from "../../../security/PermissionGate";
+import { Permissions } from "../../../../constants/roles";
 
 /**
  * MNTDReceptionVerificationPage - Page 2 of the MNTD workflow.
@@ -487,6 +489,10 @@ function MNTDReceptionVerificationPage({
 
       {/* Action Buttons */}
       <div className="page-actions-bar">
+        <PermissionGate
+          roles={Permissions.REGISTER_SAMPLES}
+          disabledTooltip="You need Sample Collector or Reception role to register samples"
+        >
         <Button
           kind="primary"
           size="sm"
@@ -518,6 +524,7 @@ function MNTDReceptionVerificationPage({
             />
           </Button>
         )}
+        </PermissionGate>
       </div>
 
       {/* Messages */}

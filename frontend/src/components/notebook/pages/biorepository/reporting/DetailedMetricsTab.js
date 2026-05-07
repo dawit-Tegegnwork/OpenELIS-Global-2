@@ -22,6 +22,8 @@ import { FormattedMessage, useIntl } from "react-intl";
 import { Search, Reset } from "@carbon/icons-react";
 import PropTypes from "prop-types";
 import config from "../../../../../config.json";
+import PermissionGate from "../../../../security/PermissionGate";
+import { Permissions } from "../../../../../constants/roles";
 
 /**
  * DetailedMetricsTab - Drill-down metrics with advanced filtering
@@ -409,7 +411,11 @@ function DetailedMetricsTab({ entryId, notebookId, pageData }) {
               />
             </DatePicker>
 
-            <Button
+                        <PermissionGate
+              roles={Permissions.GENERATE_REPORTS}
+              disabledTooltip="You need Reports or Lab Manager role"
+            >
+<Button
               kind="primary"
               onClick={handleApplyFilters}
               renderIcon={Search}
@@ -420,6 +426,7 @@ function DetailedMetricsTab({ entryId, notebookId, pageData }) {
                 defaultMessage="Apply Filters"
               />
             </Button>
+            </PermissionGate>
 
             <Button
               kind="secondary"

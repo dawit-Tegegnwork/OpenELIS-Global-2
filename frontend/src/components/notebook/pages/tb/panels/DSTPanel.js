@@ -30,6 +30,8 @@ import {
 import SampleGrid from "../../../workflow/SampleGrid";
 import CustomDatePicker from "../../../../common/CustomDatePicker";
 import { ConfigurationContext } from "../../../../layout/Layout";
+import PermissionGate from "../../../../security/PermissionGate";
+import { Permissions } from "../../../../../constants/roles";
 
 /**
  * DSTPanel - Drug Susceptibility Testing results panel.
@@ -616,7 +618,11 @@ function DSTPanel({ pageData, onProgressUpdate, cultureSamples = [] }) {
 
       {/* Action Buttons */}
       <div className="page-actions-bar">
-        <Button
+                <PermissionGate
+          roles={Permissions.PROCESS_SAMPLES}
+          disabledTooltip="You need Laboratory Technician or Lab Manager role"
+        >
+<Button
           kind="primary"
           size="sm"
           renderIcon={Add}
@@ -629,6 +635,7 @@ function DSTPanel({ pageData, onProgressUpdate, cultureSamples = [] }) {
             values={{ count: selectedSampleIds.length }}
           />
         </Button>
+        </PermissionGate>
 
         <Button
           kind="ghost"
