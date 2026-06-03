@@ -117,22 +117,38 @@ WHERE id IN (SELECT DISTINCT nb.id FROM clinlims.notebook nb
              WHERE ts.name ILIKE '%Biorepository%');
 EOF
 
-# username|id|first_name|test_section_id|dept_role_id|dept_role_name|global_role_name
+# username|id|first_name|department_name|dept_role_name|global_role_name
+# Department and role IDs are resolved at runtime from test_section / system_role.
 PERSONAS=(
-  "mntd_collector|1100|MNTD Collector|177|86|Sample Collector|"
-  "mntd_technician|1101|MNTD Technician|177|87|Laboratory Technician|"
-  "mntd_researcher|1102|MNTD Researcher|177|128|Junior Researcher|"
-  "mntd_manager|1103|MNTD Manager|177|126|Lab Manager|"
-  "mntd_biomedical|1104|MNTD Biomedical|177|121|Biomedical Staff|"
-  "biorepo_collector|1105|Biorepo Collector|182|86|Sample Collector|"
-  "biorepo_technician|1106|Biorepo Technician|182|87|Laboratory Technician|"
-  "biorepo_researcher|1107|Biorepo Researcher|182|128|Junior Researcher|"
-  "biorepo_manager|1108|Biorepo Manager|182|126|Lab Manager|"
-  "global_admin|1109|Global Admin|-|-|-|Global Administrator"
-  "system_admin|1110|System Admin|-|-|-|System Admin"
-  "admin_staff|1111|Admin Staff|-|-|-|Administrative Staff"
-  "eqa_user|1112|EQA User|-|-|-|EQA Personnel"
+  "mntd_collector|1100|MNTD Collector|Malaria and Neglected Tropical Disease (MNTD) Laboratory|Sample Collector|"
+  "mntd_technician|1101|MNTD Technician|Malaria and Neglected Tropical Disease (MNTD) Laboratory|Laboratory Technician|"
+  "mntd_researcher|1102|MNTD Researcher|Malaria and Neglected Tropical Disease (MNTD) Laboratory|Junior Researcher|"
+  "mntd_senior|1113|MNTD Senior|Malaria and Neglected Tropical Disease (MNTD) Laboratory|Senior Researcher|"
+  "mntd_manager|1103|MNTD Manager|Malaria and Neglected Tropical Disease (MNTD) Laboratory|Lab Manager|"
+  "mntd_biomedical|1104|MNTD Biomedical|Malaria and Neglected Tropical Disease (MNTD) Laboratory|Biomedical Staff|"
+  "biorepo_collector|1105|Biorepo Collector|Biorepository Laboratory|Sample Collector|"
+  "biorepo_technician|1106|Biorepo Technician|Biorepository Laboratory|Laboratory Technician|"
+  "biorepo_researcher|1107|Biorepo Researcher|Biorepository Laboratory|Junior Researcher|"
+  "biorepo_manager|1108|Biorepo Manager|Biorepository Laboratory|Lab Manager|"
+  "global_admin|1109|Global Admin|-|-|Global Administrator"
+  "system_admin|1110|System Admin|-|-|System Admin"
+  "admin_staff|1111|Admin Staff|-|-|Administrative Staff"
+  "eqa_user|1112|EQA User|-|-|EQA Personnel"
 )
+
+lookup_test_section_id() {
+    local dept_name="$1"
+    execute_sql -t -A <<EOF | tr -d '[:space:]'
+SELECT id FROM clinlims.test_section WHERE name = '${dept_name}' LIMIT 1;
+EOF
+}
+
+lookup_role_id() {
+    local role_name="$1"
+    execute_sql -t -A <<EOF | tr -d '[:space:]'
+SELECT id FROM clinlims.system_role WHERE name = '${role_name}' LIMIT 1;
+EOF
+}
 
 create_persona() {
     local username="$1"
@@ -195,13 +211,28 @@ EOF
 }
 
 echo ""
-echo -e "${YELLOW}Creating SRS persona users (1100-1112)...${NC}"
+echo -e "${YELLOW}Creating SRS persona users (1100-1113)...${NC}"
 for entry in "${PERSONAS[@]}"; do
-    IFS='|' read -r u i f ts dr drn grn <<< "$entry"
-    [ "$ts" = "-" ] && ts=""
-    [ "$dr" = "-" ] && dr=""
+    IFS='|' read -r u i f dept drn grn <<< "$entry"
+    [ "$dept" = "-" ] && dept=""
     [ "$drn" = "-" ] && drn=""
     [ "$grn" = "-" ] && grn=""
+    ts=""
+    dr=""
+    if [ -n "$dept" ]; then
+        ts="$(lookup_test_section_id "$dept")"
+        if [ -z "$ts" ]; then
+            echo -e "${RED}Department not found: ${dept} (user ${u})${NC}" >&2
+            exit 1
+        fi
+    fi
+    if [ -n "$drn" ]; then
+        dr="$(lookup_role_id "$drn")"
+        if [ -z "$dr" ]; then
+            echo -e "${RED}Role not found: ${drn} (user ${u})${NC}" >&2
+            exit 1
+        fi
+    fi
     create_persona "$u" "$i" "$f" "$ts" "$dr" "$drn" "$grn"
 done
 
@@ -243,8 +274,8 @@ EOF
 fi
 
 execute_sql <<'EOF'
-SELECT setval('clinlims.login_user_seq', GREATEST((SELECT COALESCE(MAX(id), 0) FROM clinlims.login_user)::bigint, 1119::bigint) + 1, false);
-SELECT setval('clinlims.system_user_seq', GREATEST((SELECT COALESCE(MAX(id), 0) FROM clinlims.system_user)::bigint, 1119::bigint) + 1, false);
+SELECT setval('clinlims.login_user_seq', GREATEST((SELECT COALESCE(MAX(id), 0) FROM clinlims.login_user)::bigint, 1120::bigint) + 1, false);
+SELECT setval('clinlims.system_user_seq', GREATEST((SELECT COALESCE(MAX(id), 0) FROM clinlims.system_user)::bigint, 1120::bigint) + 1, false);
 EOF
 
 echo ""
@@ -266,7 +297,7 @@ LEFT JOIN clinlims.test_section ts ON ts.id = CASE
 END
 LEFT JOIN clinlims.system_user_role sur ON sur.system_user_id = su.id
 LEFT JOIN clinlims.system_role sr_glob ON sr_glob.id = sur.role_id
-WHERE su.id BETWEEN 1100 AND 1112
+WHERE su.id BETWEEN 1100 AND 1113
 ORDER BY su.id;
 "
 fi

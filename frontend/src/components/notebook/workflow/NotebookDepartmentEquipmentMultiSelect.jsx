@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { MultiSelect } from "@carbon/react";
+import { FilterableMultiSelect } from "@carbon/react";
 import { FormattedMessage, useIntl } from "react-intl";
 import {
   buildLinkedEquipmentInstrumentsUrl,
@@ -79,7 +79,7 @@ function NotebookDepartmentEquipmentMultiSelect({
   );
 
   return (
-    <MultiSelect
+    <FilterableMultiSelect
       id={id}
       titleText={
         titleText ||
@@ -95,11 +95,19 @@ function NotebookDepartmentEquipmentMultiSelect({
           defaultMessage: "Select equipment...",
         })
       }
+      placeholder={
+        label ||
+        intl.formatMessage({
+          id: "notebook.equipment.picker.searchPlaceholder",
+          defaultMessage: "Search equipment...",
+        })
+      }
       items={items}
       itemToString={(item) => (item ? item.label : "")}
       selectedItems={selectedItems}
       onChange={({ selectedItems: next }) => onSelectionChange?.(next)}
       disabled={disabled || loading}
+      selectionFeedback="top-after-reopen"
       helperText={
         loading ? (
           <FormattedMessage

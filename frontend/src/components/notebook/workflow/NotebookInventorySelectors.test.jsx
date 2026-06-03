@@ -51,6 +51,7 @@ describe("Notebook inventory selectors", () => {
     expect(loadNotebookEquipmentOptions).toHaveBeenCalled();
 
     expect(screen.queryByText("No active equipment found in this notebook's departments.")).toBeNull();
+    expect(screen.getByRole("combobox")).toBeTruthy();
   });
 
   test("reagent selector shows empty helper when scoped department inventory is empty", async () => {
@@ -116,5 +117,6 @@ describe("Notebook inventory selectors", () => {
         "No reagents or consumables were found for this notebook's departments.",
       ),
     ).toBeNull();
+    expect(screen.getByRole("combobox")).toBeTruthy();
   });
 });

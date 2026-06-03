@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { MultiSelect, TextInput } from "@carbon/react";
+import { FilterableMultiSelect, TextInput } from "@carbon/react";
 import { FormattedMessage, useIntl } from "react-intl";
 import { buildLinkedStockInventoryUrl } from "../notebookLinkedEquipment";
 import {
@@ -123,10 +123,11 @@ function ReagentUsageSelector({
 
   return (
     <div>
-      <MultiSelect
+      <FilterableMultiSelect
         id="selectedReagents"
         titleText={titleText}
         label={label}
+        placeholder={label}
         items={reagents}
         itemToString={(item) => (item ? item.label || item.name || "" : "")}
         selectedItems={selectedItems}
@@ -134,6 +135,7 @@ function ReagentUsageSelector({
           onSelectionChange(nextSelectedItems)
         }
         disabled={disabled}
+        selectionFeedback="top-after-reopen"
         helperText={
           scopeStatus === NOTEBOOK_INVENTORY_SCOPE_STATUS.DEPARTMENT_SCOPE_UNAVAILABLE ? (
             <FormattedMessage
