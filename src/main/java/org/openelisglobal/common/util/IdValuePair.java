@@ -18,6 +18,8 @@ public class IdValuePair implements Serializable {
 
     private String id;
     private String value;
+    private String serialNumber;
+    private String modelNumber;
     private static final long serialVersionUID = 1L;
 
     @JsonCreator
@@ -40,6 +42,22 @@ public class IdValuePair implements Serializable {
 
     public String getValue() {
         return value;
+    }
+
+    public String getSerialNumber() {
+        return serialNumber;
+    }
+
+    public void setSerialNumber(String serialNumber) {
+        this.serialNumber = serialNumber;
+    }
+
+    public String getModelNumber() {
+        return modelNumber;
+    }
+
+    public void setModelNumber(String modelNumber) {
+        this.modelNumber = modelNumber;
     }
 
     public static void sortByValue(List<IdValuePair> list) {

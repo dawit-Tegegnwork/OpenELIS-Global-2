@@ -7,6 +7,8 @@ import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 import org.openelisglobal.common.rest.BaseRestController;
+import org.openelisglobal.common.services.IStatusService;
+import org.openelisglobal.common.services.StatusService.SampleStatus;
 import org.openelisglobal.login.valueholder.UserSessionData;
 import org.openelisglobal.notebook.service.NoteBookService;
 import org.openelisglobal.notebook.service.NotebookEntryService;
@@ -51,6 +53,9 @@ public class NotebookEntryRestController extends BaseRestController {
 
     @Autowired
     private TestSectionService testSectionService;
+
+    @Autowired
+    private IStatusService statusService;
 
     @Autowired
     private org.openelisglobal.notebook.service.NotebookStageAccessService notebookStageAccessService;
@@ -334,6 +339,12 @@ public class NotebookEntryRestController extends BaseRestController {
             newSampleItem.setTypeOfSample(typeObj);
             newSampleItem.setSortOrder(String.valueOf(existingSamples.size() + 1));
             newSampleItem.setSysUserId(sysUserId);
+
+            String sampleStatusId = statusService.getStatusID(SampleStatus.Entered);
+            if (sampleStatusId == null || "-1".equals(sampleStatusId)) {
+                sampleStatusId = "20";
+            }
+            newSampleItem.setStatusId(sampleStatusId);
 
             // Save the sample item
             String newSampleItemId = sampleItemService.insert(newSampleItem);

@@ -140,5 +140,7 @@
     <include file="liquibase/3.5.x.x/068-biorepository-qc-inspection-schema-repair.xml"/>
     <include file="liquibase/3.5.x.x/069-backfill-bacteriology-notebook-departments.xml"/>
     <include file="liquibase/3.5.x.x/070-rerun-biorepository-notebook-departments.xml"/>
+    <include file="liquibase/3.5.x.x/071-tb-department-sample-types-backfill.xml"/>
+    <include file="liquibase/3.5.x.x/072-mntd-sample-archiving-page.xml"/>
 
 </databaseChangeLog>

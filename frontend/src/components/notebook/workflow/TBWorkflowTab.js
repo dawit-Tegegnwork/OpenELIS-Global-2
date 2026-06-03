@@ -12,6 +12,7 @@ import { usePageAccessControl } from "../../../hooks/usePageAccessControl";
 import config from "../../../config.json";
 import { NotificationContext } from "../../layout/Layout";
 import PageNavigation from "./PageNavigation";
+import WorkflowErrorBoundary from "./WorkflowErrorBoundary";
 import TBSampleCreationPage from "../pages/tb/TBSampleCreationPage";
 import TBQualityCheckPage from "../pages/tb/TBQualityCheckPage";
 import TBStorageAssignmentPage from "../pages/tb/TBStorageAssignmentPage";
@@ -490,7 +491,13 @@ function TBWorkflowTab({ notebookId, entryId: propEntryId }) {
                     )}
 
                     <div key={`page-content-${effectivePages[activePage].id}`}>
-                      {renderPageContent(effectivePages[activePage])}
+                      <WorkflowErrorBoundary
+                        resetKey={effectivePages[activePage].id}
+                        pageTitle={effectivePages[activePage].title}
+                        onReload={() => handleProgressUpdate()}
+                      >
+                        {renderPageContent(effectivePages[activePage])}
+                      </WorkflowErrorBoundary>
                     </div>
                   </div>
                 </div>

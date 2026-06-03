@@ -34,6 +34,7 @@ import {
 } from "../../../utils/Utils";
 import SampleGrid from "../../workflow/SampleGrid";
 import "../../workflow/NotebookWorkflow.css";
+import { mapNotebookInstrumentsToOptions } from "../../utils/notebookInstruments";
 import {
   ESignatureModal,
   SignatureMeaning,
@@ -100,7 +101,9 @@ function MNTDTestAssignmentPage({
   const [showAssignmentModal, setShowAssignmentModal] = useState(false);
   const [assignmentData, setAssignmentData] = useState({
     experimentCategory: "",
+    experimentCategoryOther: "",
     subcategory: "",
+    subcategoryOther: "",
     specificAssay: "",
     notes: "",
   });
@@ -136,25 +139,29 @@ function MNTDTestAssignmentPage({
     { id: "DIGITAL_PCR", text: "D. Digital PCR" },
     { id: "SEROLOGICAL", text: "E. Serological Assays" },
     { id: "PARASITE_CULTURE", text: "F. Parasite Culture" },
+    { id: "OTHER", text: "Other" },
   ];
 
   // Subcategories based on main category
   const getSubcategoryOptions = (category) => {
+    let options = [];
     switch (category) {
       case "PARASITE_MOLECULAR":
-        return [
+        options = [
           { id: "PARASITE_QPCR", text: "qPCR Assays" },
           { id: "PARASITE_CONVENTIONAL_PCR", text: "Conventional PCR" },
           { id: "PARASITE_ITS1_RFLP", text: "ITS1 PCR-RFLP" },
           { id: "PARASITE_OTHER", text: "Other Parasite Tests" },
         ];
+        break;
       case "VECTOR_MOLECULAR":
-        return [
+        options = [
           { id: "VECTOR_QPCR", text: "qPCR Assays" },
           { id: "VECTOR_CONVENTIONAL_PCR", text: "Conventional PCR" },
         ];
+        break;
       case "GENOMICS":
-        return [
+        options = [
           { id: "GENOMICS_DIAGNOSTIC", text: "Diagnostic Resistance (hrp2/3)" },
           { id: "GENOMICS_DRUG_RESISTANCE", text: "Drug Resistance" },
           { id: "GENOMICS_INSECTICIDE", text: "Insecticide Resistance" },
@@ -168,30 +175,39 @@ function MNTDTestAssignmentPage({
           { id: "GENOMICS_HUMAN_GENO", text: "Human Genotyping" },
           { id: "GENOMICS_TCR", text: "T cell receptor (TCR) clonotypes" },
         ];
+        break;
       case "DIGITAL_PCR":
-        return [
+        options = [
           { id: "DPCR_ABSOLUTE_QUANT", text: "Absolute Quantification" },
           { id: "DPCR_MUTATION", text: "Mutation Detection" },
           { id: "DPCR_GENE_EXPRESSION", text: "Gene Expression" },
           { id: "DPCR_SNP", text: "SNP (Single-nucleotide polymorphism)" },
           { id: "DPCR_CNV", text: "Copy Number Variation (CNV)" },
         ];
+        break;
       case "SEROLOGICAL":
-        return [
+        options = [
           { id: "SERO_ELISA", text: "ELISA" },
           { id: "SERO_BEAD_MULTIPLEX", text: "Bead-Based Multiplex" },
           { id: "SERO_ELISPOT", text: "ELISPOT" },
           { id: "SERO_FLUOROSPOT", text: "FluoroSpot" },
           { id: "SERO_FLOW_CYTOMETRY", text: "Flow Cytometry" },
         ];
+        break;
       case "PARASITE_CULTURE":
-        return [
+        options = [
           { id: "CULTURE_LEISHMANIA", text: "Leishmania Culture" },
           { id: "CULTURE_MALARIA", text: "Malaria Culture" },
         ];
+        break;
       default:
-        return [];
+        options = [];
     }
+
+    if (options.length > 0) {
+      return [...options, { id: "OTHER", text: "Other" }];
+    }
+    return options;
   };
 
   // Specific assays based on subcategory
@@ -367,23 +383,34 @@ function MNTDTestAssignmentPage({
     }
   };
 
-  // Set instruments from notebook when prop changes
+  // Set instruments from notebook when prop changes; fallback fetch if empty
   useEffect(() => {
-    if (notebookInstruments && Array.isArray(notebookInstruments)) {
-      setInstruments(
-        notebookInstruments.map((i) => ({
-          id: String(i.id),
-          text: i.value || i.name,
-          physicalId: i.serialNumber || "N/A",
-          name: i.value || i.name,
-          serialNumber: i.serialNumber,
-          ...i,
-        })),
-      );
-    } else {
-      setInstruments([]);
+    const applyInstruments = (items) => {
+      setInstruments(mapNotebookInstrumentsToOptions(items));
+    };
+
+    if (notebookInstruments && notebookInstruments.length > 0) {
+      applyInstruments(notebookInstruments);
+      return undefined;
     }
-  }, [notebookInstruments]);
+
+    if (!notebookId) {
+      applyInstruments([]);
+      return undefined;
+    }
+
+    let cancelled = false;
+    getFromOpenElisServer(`/rest/notebook/view/${notebookId}`, (response) => {
+      if (cancelled || !componentMounted.current) {
+        return;
+      }
+      applyInstruments(response?.analyzers || []);
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [notebookInstruments, notebookId]);
 
   // Load samples for this page - only QC Passed samples from page 6
   useEffect(() => {
@@ -427,7 +454,9 @@ function MNTDTestAssignmentPage({
               extractionMethod: sample.data?.extractionMethod,
               // Test assignment data
               experimentCategory: sample.data?.experimentCategory,
+              experimentCategoryOther: sample.data?.experimentCategoryOther,
               subcategory: sample.data?.subcategory,
+              subcategoryOther: sample.data?.subcategoryOther,
               specificAssay: sample.data?.specificAssay,
               // Machine scheduling data
               instrument: sample.data?.instrument,
@@ -490,6 +519,32 @@ function MNTDTestAssignmentPage({
       return;
     }
 
+    if (
+      assignmentData.experimentCategory === "OTHER" &&
+      !assignmentData.experimentCategoryOther?.trim()
+    ) {
+      setError(
+        intl.formatMessage({
+          id: "notebook.mntd.testassignment.categoryOtherRequired",
+          defaultMessage: "Please specify the experiment category.",
+        }),
+      );
+      return;
+    }
+
+    if (
+      assignmentData.subcategory === "OTHER" &&
+      !assignmentData.subcategoryOther?.trim()
+    ) {
+      setError(
+        intl.formatMessage({
+          id: "notebook.mntd.testassignment.subcategoryOtherRequired",
+          defaultMessage: "Please specify the test type / subcategory.",
+        }),
+      );
+      return;
+    }
+
     if (!hasRealPageId) {
       setShowAssignmentModal(false);
       return;
@@ -504,6 +559,15 @@ function MNTDTestAssignmentPage({
       assignmentNotes: assignmentData.notes,
       assignmentDate: new Date().toISOString().split("T")[0],
     };
+
+    if (assignmentData.experimentCategory === "OTHER") {
+      dataToSave.experimentCategoryOther =
+        assignmentData.experimentCategoryOther.trim();
+    }
+
+    if (assignmentData.subcategory === "OTHER") {
+      dataToSave.subcategoryOther = assignmentData.subcategoryOther.trim();
+    }
 
     postToOpenElisServer(
       `/rest/notebook/bulk/page/${pageData.id}/samples/apply`,
@@ -537,7 +601,9 @@ function MNTDTestAssignmentPage({
                 // Reset form
                 setAssignmentData({
                   experimentCategory: "",
+                  experimentCategoryOther: "",
                   subcategory: "",
+                  subcategoryOther: "",
                   specificAssay: "",
                   notes: "",
                 });
@@ -901,13 +967,19 @@ function MNTDTestAssignmentPage({
   );
 
   // Get experiment category label
-  const getCategoryLabel = (categoryId) => {
+  const getCategoryLabel = (categoryId, categoryOther) => {
+    if (categoryId === "OTHER" && categoryOther) {
+      return categoryOther;
+    }
     const category = experimentCategoryOptions.find((c) => c.id === categoryId);
     return category ? category.text : categoryId;
   };
 
   // Get subcategory label
-  const getSubcategoryLabel = (categoryId, subcategoryId) => {
+  const getSubcategoryLabel = (categoryId, subcategoryId, subcategoryOther) => {
+    if (subcategoryId === "OTHER" && subcategoryOther) {
+      return subcategoryOther;
+    }
     const subcategories = getSubcategoryOptions(categoryId);
     const subcategory = subcategories.find((s) => s.id === subcategoryId);
     return subcategory ? subcategory.text : subcategoryId;
@@ -932,13 +1004,17 @@ function MNTDTestAssignmentPage({
       return (
         <div style={{ fontSize: "12px" }}>
           <Tag type="blue" size="sm">
-            {getCategoryLabel(sample.experimentCategory)}
+            {getCategoryLabel(
+              sample.experimentCategory,
+              sample.experimentCategoryOther,
+            )}
           </Tag>
           {sample.subcategory && (
             <div style={{ marginTop: "2px", fontWeight: "500" }}>
               {getSubcategoryLabel(
                 sample.experimentCategory,
                 sample.subcategory,
+                sample.subcategoryOther,
               )}
             </div>
           )}
@@ -1253,15 +1329,41 @@ function MNTDTestAssignmentPage({
               setAssignmentData({
                 ...assignmentData,
                 experimentCategory: selectedItem?.id || "",
+                experimentCategoryOther:
+                  selectedItem?.id === "OTHER"
+                    ? assignmentData.experimentCategoryOther
+                    : "",
                 subcategory: "", // Reset subcategory when category changes
+                subcategoryOther: "",
                 specificAssay: "", // Reset assay when category changes
               })
             }
             style={{ marginBottom: "1rem" }}
           />
 
+          {assignmentData.experimentCategory === "OTHER" && (
+            <TextInput
+              id="experiment-category-other"
+              labelText={intl.formatMessage({
+                id: "notebook.mntd.testassignment.experimentCategoryOther",
+                defaultMessage: "Specify Experiment Category *",
+              })}
+              value={assignmentData.experimentCategoryOther}
+              onChange={(e) =>
+                setAssignmentData({
+                  ...assignmentData,
+                  experimentCategoryOther: e.target.value,
+                })
+              }
+              placeholder="Enter experiment category..."
+              required
+              style={{ marginBottom: "1rem" }}
+            />
+          )}
+
           {/* Subcategory Selection - shown when category is selected */}
           {assignmentData.experimentCategory &&
+            assignmentData.experimentCategory !== "OTHER" &&
             getSubcategoryOptions(assignmentData.experimentCategory).length >
               0 && (
               <Dropdown
@@ -1283,6 +1385,10 @@ function MNTDTestAssignmentPage({
                   setAssignmentData({
                     ...assignmentData,
                     subcategory: selectedItem?.id || "",
+                    subcategoryOther:
+                      selectedItem?.id === "OTHER"
+                        ? assignmentData.subcategoryOther
+                        : "",
                     specificAssay: "", // Reset assay when subcategory changes
                   })
                 }
@@ -1290,8 +1396,29 @@ function MNTDTestAssignmentPage({
               />
             )}
 
+          {assignmentData.subcategory === "OTHER" && (
+            <TextInput
+              id="subcategory-other"
+              labelText={intl.formatMessage({
+                id: "notebook.mntd.testassignment.subcategoryOther",
+                defaultMessage: "Specify Test Type / Subcategory *",
+              })}
+              value={assignmentData.subcategoryOther}
+              onChange={(e) =>
+                setAssignmentData({
+                  ...assignmentData,
+                  subcategoryOther: e.target.value,
+                })
+              }
+              placeholder="Enter test type or subcategory..."
+              required
+              style={{ marginBottom: "1rem" }}
+            />
+          )}
+
           {/* Specific Assay Selection - shown when subcategory is selected */}
           {assignmentData.subcategory &&
+            assignmentData.subcategory !== "OTHER" &&
             getSpecificAssayOptions(assignmentData.subcategory).length > 0 && (
               <Dropdown
                 id="specific-assay"

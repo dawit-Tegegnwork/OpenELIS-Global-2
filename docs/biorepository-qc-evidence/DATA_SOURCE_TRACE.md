@@ -71,8 +71,17 @@ Stack: `https://localhost`, admin session, WAR mounted via `docker-compose.qc-de
 
 **Scope fix:** `BiorepositoryQcSamplePoolServiceImpl.resolveQcDepartmentScope()` always unions the Biorepository Laboratory test section (id **196** in dev) with notebook-linked departments so QC pool matches Storage assignments under dept 196.
 
+## Sample retrieval attach (Work Order Details)
+
+| Issue | Fix |
+|-------|-----|
+| `NotebookEntry` proxy / no Session on attach | `@Transactional` on `POST /rest/biorepository/retrieval/items/{itemId}/attach`; safe `notebookId` mapping when `notebook` association is uninitialized |
+| False “pending retrieval” after failed attach | `hasActiveRetrievalForBioSample` joins parent request status; cancel/reject mark `PENDING`/`AWAITING_FULFILLMENT` items `UNAVAILABLE`; Liquibase cleanup for stale rows |
+| Idempotent re-attach | Same `bioSampleId` on same reference line returns existing fulfillment item |
+
 ## Key classes
 
+- `org.openelisglobal.notebook.service.NotebookDepartmentScopeService` (shared notebook department resolution)
 - `org.openelisglobal.biorepository.service.BiorepositoryQcSamplePoolService`
 - `org.openelisglobal.biorepository.service.BiorepositoryQcSamplePoolServiceImpl`
 - `org.openelisglobal.biorepository.controller.rest.BiorepositoryQCInspectionRestController` (delegates sample/overview loading)

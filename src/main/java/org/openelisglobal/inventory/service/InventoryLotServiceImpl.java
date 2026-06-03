@@ -23,6 +23,12 @@ public class InventoryLotServiceImpl extends AuditableBaseObjectServiceImpl<Inve
     public static final String EQUIPMENT_LOT_RECEIVE_MESSAGE =
             "Equipment is managed from the equipment catalog/asset workflow, not inventory lot receiving.";
 
+    public static final String EQUIPMENT_SERIAL_REQUIRED_MESSAGE =
+            "Serial / asset ID is required for equipment registration.";
+
+    public static final String EQUIPMENT_QUANTITY_MESSAGE =
+            "Equipment assets must be registered with quantity 1.";
+
     @Autowired
     private InventoryLotDAO inventoryLotDAO;
 
@@ -45,31 +51,69 @@ public class InventoryLotServiceImpl extends AuditableBaseObjectServiceImpl<Inve
     @Override
     @Transactional
     public Long insert(InventoryLot lot) {
-        rejectEquipmentLotReceiving(lot);
+        validateLotReceiving(lot);
 
         // Ensure UUID is set before insert
         if (lot.getFhirUuid() == null) {
             lot.setFhirUuid(UUID.randomUUID());
         }
 
-        // Audit logging is automatic via auditTrailLog = true in constructor
-        return super.insert(lot);
+        Long lotId = super.insert(lot);
+        syncEquipmentSerialFromLot(lot);
+        return lotId;
     }
 
-    private void rejectEquipmentLotReceiving(InventoryLot lot) {
-        if (lot == null || lot.getInventoryItem() == null) {
-            return;
+    private InventoryItem resolveInventoryItem(InventoryItem item) {
+        if (item == null) {
+            return null;
         }
-        InventoryItem item = lot.getInventoryItem();
         if (item.getItemType() == null && item.getId() != null) {
             InventoryItem loaded = inventoryItemService.get(item.getId());
             if (loaded != null) {
-                item = loaded;
+                return loaded;
             }
+        }
+        return item;
+    }
+
+    private void validateLotReceiving(InventoryLot lot) {
+        if (lot == null || lot.getInventoryItem() == null) {
+            return;
+        }
+        InventoryItem item = resolveInventoryItem(lot.getInventoryItem());
+        if (InventoryBehavior.isEquipmentAssetRegistration(item)) {
+            validateEquipmentAssetLot(lot);
+            return;
         }
         if (!InventoryBehavior.isLotReceivable(item)) {
             throw new IllegalArgumentException(EQUIPMENT_LOT_RECEIVE_MESSAGE);
         }
+    }
+
+    private void validateEquipmentAssetLot(InventoryLot lot) {
+        if (lot.getLotNumber() == null || lot.getLotNumber().trim().isEmpty()) {
+            throw new IllegalArgumentException(EQUIPMENT_SERIAL_REQUIRED_MESSAGE);
+        }
+        Double quantity = lot.getCurrentQuantity();
+        if (quantity == null || Double.compare(quantity, 1.0) != 0) {
+            throw new IllegalArgumentException(EQUIPMENT_QUANTITY_MESSAGE);
+        }
+    }
+
+    private void syncEquipmentSerialFromLot(InventoryLot lot) {
+        if (lot == null || lot.getInventoryItem() == null) {
+            return;
+        }
+        InventoryItem item = resolveInventoryItem(lot.getInventoryItem());
+        if (!InventoryBehavior.isEquipmentAssetRegistration(item)) {
+            return;
+        }
+        if (item.getSerialNumber() != null && !item.getSerialNumber().trim().isEmpty()) {
+            return;
+        }
+        item.setSerialNumber(lot.getLotNumber().trim());
+        item.setSysUserId(lot.getSysUserId());
+        inventoryItemService.update(item);
     }
 
     @Override

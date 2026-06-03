@@ -2,6 +2,9 @@ package org.openelisglobal.inventory.service;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.fail;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import org.junit.Before;
@@ -20,9 +23,6 @@ import org.springframework.test.util.ReflectionTestUtils;
 public class InventoryManagementServiceImplEquipmentLotTest {
 
     @InjectMocks
-    private InventoryManagementServiceImpl inventoryManagementService;
-
-    @InjectMocks
     private InventoryLotServiceImpl inventoryLotService;
 
     @Mock
@@ -39,7 +39,10 @@ public class InventoryManagementServiceImplEquipmentLotTest {
 
     @Before
     public void setUp() {
-        ReflectionTestUtils.setField(inventoryManagementService, "inventoryLotService", inventoryLotService);
+        ReflectionTestUtils.setField(inventoryLotService, "auditTrailLog", false);
+        ReflectionTestUtils.setField(inventoryLotService, "inventoryLotDAO", inventoryLotDAO);
+        ReflectionTestUtils.setField(inventoryLotService, "inventoryItemService", inventoryItemService);
+        ReflectionTestUtils.setField(inventoryLotService, "transactionService", transactionService);
 
         equipmentItem = new InventoryItem();
         equipmentItem.setId(99L);
@@ -48,19 +51,48 @@ public class InventoryManagementServiceImplEquipmentLotTest {
 
         lot = new InventoryLot();
         lot.setInventoryItem(equipmentItem);
-        lot.setLotNumber("LOT-1");
+        lot.setLotNumber("SN-001");
         lot.setCurrentQuantity(1.0);
-
-        when(inventoryItemService.get(99L)).thenReturn(equipmentItem);
+        lot.setSysUserId("1");
     }
 
     @Test
-    public void receiveInventoryRejectsEquipmentCatalogItem() {
+    public void insertAcceptsValidEquipmentAssetRegistration() {
+        when(inventoryLotDAO.insert(any(InventoryLot.class))).thenReturn(100L);
+
+        Long lotId = inventoryLotService.insert(lot);
+
+        assertEquals(Long.valueOf(100L), lotId);
+        verify(inventoryLotDAO).insert(any(InventoryLot.class));
+        verify(inventoryItemService).update(equipmentItem);
+        assertEquals("SN-001", equipmentItem.getSerialNumber());
+    }
+
+    @Test
+    public void insertRejectsEquipmentWithoutSerial() {
+        lot.setLotNumber("  ");
+
         try {
-            inventoryManagementService.receiveInventory(lot, "1");
-            fail("Expected equipment lot receive to be rejected");
+            inventoryLotService.insert(lot);
+            fail("Expected equipment registration without serial to be rejected");
         } catch (IllegalArgumentException e) {
-            assertEquals(InventoryLotServiceImpl.EQUIPMENT_LOT_RECEIVE_MESSAGE, e.getMessage());
+            assertEquals(InventoryLotServiceImpl.EQUIPMENT_SERIAL_REQUIRED_MESSAGE, e.getMessage());
         }
+
+        verify(inventoryLotDAO, never()).insert(any(InventoryLot.class));
+    }
+
+    @Test
+    public void insertRejectsEquipmentWithInvalidQuantity() {
+        lot.setCurrentQuantity(2.0);
+
+        try {
+            inventoryLotService.insert(lot);
+            fail("Expected equipment registration with quantity != 1 to be rejected");
+        } catch (IllegalArgumentException e) {
+            assertEquals(InventoryLotServiceImpl.EQUIPMENT_QUANTITY_MESSAGE, e.getMessage());
+        }
+
+        verify(inventoryLotDAO, never()).insert(any(InventoryLot.class));
     }
 }

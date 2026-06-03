@@ -1,0 +1,177 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+    xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+      http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-3.8.xsd">
+
+    <property name="now" value="now()" dbms="postgresql"/>
+
+    <!-- ======================================================== -->
+    <!-- MNTD: Insert Sample Archiving page and re-order pages 9-11 -->
+    <!-- Frontend mapping: -->
+    <!--   9  = Sample Archiving -->
+    <!--  10  = Data Analysis & Export -->
+    <!--  11  = Reporting & REDCap Integration -->
+    <!-- ======================================================== -->
+
+    <changeSet id="mntd-shift-pages-for-sample-archiving" author="openelis-mntd">
+        <preConditions onFail="MARK_RAN">
+            <sqlCheck expectedResult="1">
+                SELECT COUNT(*) FROM clinlims.notebook
+                WHERE title = 'Malaria and Neglected Tropical Disease (MNTD) Laboratory'
+                AND is_template = true
+            </sqlCheck>
+            <sqlCheck expectedResult="0">
+                SELECT COUNT(*) FROM clinlims.notebook_page np
+                JOIN clinlims.notebook n ON np.notebook_id = n.id
+                WHERE n.title = 'Malaria and Neglected Tropical Disease (MNTD) Laboratory'
+                AND n.is_template = true
+                AND np.title = 'Sample Archiving'
+            </sqlCheck>
+        </preConditions>
+        <comment>Shift Data Analysis and Reporting pages to make room for Sample Archiving at order 9</comment>
+
+        <sql>
+            UPDATE clinlims.notebook_page
+            SET page_order = 11, last_updated = NOW()
+            WHERE notebook_id = (
+                SELECT id FROM clinlims.notebook
+                WHERE title = 'Malaria and Neglected Tropical Disease (MNTD) Laboratory'
+                AND is_template = true
+            )
+            AND title = 'Reporting &amp; REDCap Integration';
+
+            UPDATE clinlims.notebook_page
+            SET page_order = 10, last_updated = NOW()
+            WHERE notebook_id = (
+                SELECT id FROM clinlims.notebook
+                WHERE title = 'Malaria and Neglected Tropical Disease (MNTD) Laboratory'
+                AND is_template = true
+            )
+            AND title = 'Data Analysis &amp; Export';
+        </sql>
+    </changeSet>
+
+    <changeSet id="mntd-create-sample-archiving-page" author="openelis-mntd">
+        <preConditions onFail="MARK_RAN">
+            <sqlCheck expectedResult="1">
+                SELECT COUNT(*) FROM clinlims.notebook
+                WHERE title = 'Malaria and Neglected Tropical Disease (MNTD) Laboratory'
+                AND is_template = true
+            </sqlCheck>
+            <sqlCheck expectedResult="0">
+                SELECT COUNT(*) FROM clinlims.notebook_page np
+                JOIN clinlims.notebook n ON np.notebook_id = n.id
+                WHERE n.title = 'Malaria and Neglected Tropical Disease (MNTD) Laboratory'
+                AND n.is_template = true
+                AND np.title = 'Sample Archiving'
+            </sqlCheck>
+        </preConditions>
+        <comment>Create Sample Archiving page for MNTD Laboratory notebook template</comment>
+
+        <insert tableName="notebook_page" schemaName="clinlims">
+            <column name="id" valueSequenceNext="notebook_page_seq"/>
+            <column name="title" value="Sample Archiving"/>
+            <column name="instructions" value="Archive samples after test execution. Retain in storage with a retention period, dispose of samples, or send to the biorepository. Samples stored on Temporary Storage can be retained in place without re-assigning a location."/>
+            <column name="content" value="{&quot;pageDescription&quot;:&quot;Sample Archiving&quot;,&quot;archiveOutcomes&quot;:[&quot;RETENTION&quot;,&quot;DISPOSAL&quot;,&quot;BIOREPOSITORY&quot;],&quot;nextPage&quot;:&quot;Data Analysis and Export&quot;}"/>
+            <column name="page_order" value="9"/>
+            <column name="completed" valueBoolean="false"/>
+            <column name="page_type" value="BULK_DATA_ENTRY"/>
+            <column name="notebook_id" valueComputed="(SELECT id FROM clinlims.notebook WHERE title = 'Malaria and Neglected Tropical Disease (MNTD) Laboratory' AND is_template = true)"/>
+            <column name="last_updated" valueComputed="${now}"/>
+        </insert>
+    </changeSet>
+
+    <changeSet id="mntd-sync-child-notebook-archiving-pages" author="openelis-mntd">
+        <preConditions onFail="MARK_RAN">
+            <sqlCheck expectedResult="1">
+                SELECT COUNT(*) FROM clinlims.notebook_page np
+                JOIN clinlims.notebook n ON np.notebook_id = n.id
+                WHERE n.title = 'Malaria and Neglected Tropical Disease (MNTD) Laboratory'
+                AND n.is_template = true
+                AND np.title = 'Sample Archiving'
+            </sqlCheck>
+        </preConditions>
+        <comment>Add Sample Archiving page to existing MNTD child notebooks and re-order pages 9-11</comment>
+
+        <sql>
+            UPDATE clinlims.notebook_page np
+            SET page_order = 11, last_updated = ${now}
+            FROM clinlims.notebook n
+            WHERE np.notebook_id = n.id
+            AND n.workflow_type = 'mntd'
+            AND n.is_template = false
+            AND np.title = 'Reporting &amp; REDCap Integration';
+
+            UPDATE clinlims.notebook_page np
+            SET page_order = 10, last_updated = NOW()
+            FROM clinlims.notebook n
+            WHERE np.notebook_id = n.id
+            AND n.workflow_type = 'mntd'
+            AND n.is_template = false
+            AND np.title = 'Data Analysis &amp; Export';
+
+            INSERT INTO clinlims.notebook_page (
+                id, title, instructions, content, page_order, completed, page_type, notebook_id, last_updated
+            )
+            SELECT
+                nextval('notebook_page_seq'),
+                template_page.title,
+                template_page.instructions,
+                template_page.content,
+                template_page.page_order,
+                false,
+                template_page.page_type,
+                child.id,
+                NOW()
+            FROM clinlims.notebook child
+            JOIN clinlims.notebook template ON template.title = 'Malaria and Neglected Tropical Disease (MNTD) Laboratory'
+                AND template.is_template = true
+            JOIN clinlims.notebook_page template_page ON template_page.notebook_id = template.id
+                AND template_page.title = 'Sample Archiving'
+            WHERE child.workflow_type = 'mntd'
+            AND child.is_template = false
+            AND NOT EXISTS (
+                SELECT 1 FROM clinlims.notebook_page existing
+                WHERE existing.notebook_id = child.id
+                AND existing.title = 'Sample Archiving'
+            );
+        </sql>
+    </changeSet>
+
+    <changeSet id="mntd-workflow-template-sample-archiving" author="openelis-mntd">
+        <preConditions onFail="MARK_RAN">
+            <tableExists tableName="workflow_page_template" schemaName="clinlims"/>
+            <sqlCheck expectedResult="0">
+                SELECT COUNT(*) FROM clinlims.workflow_page_template
+                WHERE workflow_category = 'MNTD' AND name = 'Sample Archiving'
+            </sqlCheck>
+        </preConditions>
+        <comment>Insert MNTD Sample Archiving workflow page template and re-order display_order</comment>
+
+        <sql>
+            UPDATE clinlims.workflow_page_template
+            SET display_order = 11
+            WHERE workflow_category = 'MNTD' AND name = 'Reporting &amp; REDCap Integration';
+
+            UPDATE clinlims.workflow_page_template
+            SET display_order = 10
+            WHERE workflow_category = 'MNTD' AND name = 'Data Analysis &amp; Export';
+        </sql>
+
+        <insert tableName="workflow_page_template" schemaName="clinlims">
+            <column name="id" value="108"/>
+            <column name="name" value="Sample Archiving"/>
+            <column name="display_key" value="workflow.page.mntd.sampleArchiving"/>
+            <column name="description" value="Archive samples after test execution via retention, disposal, or biorepository transfer"/>
+            <column name="default_instructions" value="Archive samples after test execution. Retain in storage, dispose, or send to biorepository."/>
+            <column name="default_content" value="Sample Archiving - Retention, disposal, or biorepository"/>
+            <column name="page_type" value="BULK_DATA_ENTRY"/>
+            <column name="display_order" value="9"/>
+            <column name="is_active" valueBoolean="true"/>
+            <column name="workflow_category" value="MNTD"/>
+        </insert>
+    </changeSet>
+
+</databaseChangeLog>

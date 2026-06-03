@@ -1324,6 +1324,7 @@ const NoteBookInstanceEntryForm = () => {
                   <WorkflowTab
                     notebookId={noteBookData.id}
                     draftWorkflowType={noteBookData.workflowType}
+                    linkedInstruments={noteBookData.analyzers}
                   />
                 );
               })()}

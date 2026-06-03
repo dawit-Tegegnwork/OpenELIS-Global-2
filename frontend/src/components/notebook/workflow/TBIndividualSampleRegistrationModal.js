@@ -16,6 +16,7 @@ import {
 } from "@carbon/react";
 import { FormattedMessage, useIntl } from "react-intl";
 import config from "../../../config.json";
+import { getFromOpenElisServer } from "../../utils/Utils";
 import "./NotebookWorkflow.css";
 
 const INITIAL_FORM_STATE = {
@@ -71,22 +72,32 @@ function TBIndividualSampleRegistrationModal({
   const [error, setError] = useState(null);
   const [validationErrors, setValidationErrors] = useState({});
   const [specimenTypes, setSpecimenTypes] = useState([]);
+  const [specimenTypesLoading, setSpecimenTypesLoading] = useState(false);
+  const [specimenTypesError, setSpecimenTypesError] = useState(null);
 
   useEffect(() => {
-    if (open) {
-      fetch(`${config.serverBaseUrl}/rest/notebook/tb/sample-types`, {
-        credentials: "include",
-        headers: { "X-CSRF-Token": localStorage.getItem("CSRF") },
-      })
-        .then((res) => res.json())
-        .then((data) => {
-          if (data.sampleTypes) {
-            setSpecimenTypes(data.sampleTypes);
-          }
-        })
-        .catch(() => {});
+    if (!open) {
+      return;
     }
-  }, [open]);
+
+    setSpecimenTypesLoading(true);
+    setSpecimenTypesError(null);
+    getFromOpenElisServer("/rest/notebook/tb/sample-types", (response) => {
+      setSpecimenTypesLoading(false);
+      if (response?.sampleTypes?.length) {
+        setSpecimenTypes(response.sampleTypes);
+      } else {
+        setSpecimenTypes([]);
+        setSpecimenTypesError(
+          intl.formatMessage({
+            id: "notebook.tb.register.error.noSpecimenTypes",
+            defaultMessage:
+              "No specimen types are configured for the Tuberculosis Laboratory. Contact your administrator.",
+          }),
+        );
+      }
+    });
+  }, [open, intl]);
 
   const handleFieldChange = useCallback((field, value) => {
     setFormData((prev) => ({ ...prev, [field]: value }));
@@ -188,7 +199,7 @@ function TBIndividualSampleRegistrationModal({
       })}
       onRequestSubmit={handleSubmit}
       onSecondarySubmit={handleClose}
-      primaryButtonDisabled={isSubmitting}
+      primaryButtonDisabled={isSubmitting || specimenTypesLoading || specimenTypes.length === 0}
       size="lg"
     >
       <div className="tb-individual-registration-form">
@@ -202,6 +213,20 @@ function TBIndividualSampleRegistrationModal({
             hideCloseButton
             style={{ marginBottom: "1rem" }}
           />
+        )}
+
+        {specimenTypesError && (
+          <InlineNotification
+            kind="warning"
+            title={specimenTypesError}
+            lowContrast
+            hideCloseButton
+            style={{ marginBottom: "1rem" }}
+          />
+        )}
+
+        {specimenTypesLoading && (
+          <Loading withOverlay={false} description="Loading specimen types..." />
         )}
 
         {/* B. Specimen Information (Required) */}

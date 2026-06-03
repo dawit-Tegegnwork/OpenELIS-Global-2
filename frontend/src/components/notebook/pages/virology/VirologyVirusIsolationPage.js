@@ -34,6 +34,7 @@ import {
 } from "../../../esignature";
 import PermissionGate from "../../../security/PermissionGate";
 import { Permissions } from "../../../../constants/roles";
+import { coerceDisplayValue } from "../mntd/mntdStorageHelpers";
 
 /**
  * VirologyVirusIsolationPage - Page for isolating virus from culture batches.
@@ -131,20 +132,31 @@ function VirologyVirusIsolationPage({
             const transformedSamples = response.map((sample) => {
               return {
                 id: String(sample.id || sample.sampleItemId),
-                externalId: sample.externalId,
-                accessionNumber: sample.accessionNumber,
-                sampleType:
+                externalId: coerceDisplayValue(sample.externalId, ""),
+                accessionNumber: coerceDisplayValue(sample.accessionNumber, ""),
+                sampleType: coerceDisplayValue(
                   sample.sampleType || sample.typeOfSample?.description,
+                  "",
+                ),
                 collectionDate: sample.collectionDate,
                 status: sample.pageStatus || sample.status || "PENDING",
                 // Virology-specific metadata
-                sampleId: sample.data?.sampleId,
+                sampleId: coerceDisplayValue(sample.data?.sampleId, ""),
                 source: sample.data?.source,
                 testType: sample.data?.testType,
-                projectStudyAssociation: sample.data?.projectStudyAssociation,
+                projectStudyAssociation: coerceDisplayValue(
+                  sample.data?.projectStudyAssociation,
+                  "",
+                ),
                 // Virus isolation data - simplified
-                cultureBatchId: sample.data?.cultureBatchId,
-                isolationMethod: sample.data?.isolationMethod,
+                cultureBatchId: coerceDisplayValue(
+                  sample.data?.cultureBatchId,
+                  "",
+                ),
+                isolationMethod: coerceDisplayValue(
+                  sample.data?.isolationMethod,
+                  "",
+                ),
                 // Keep full data for column rendering
                 data: sample.data,
               };
@@ -501,9 +513,11 @@ function VirologyVirusIsolationPage({
           defaultMessage: "Culture Batch ID",
         }),
         render: (value, sample) => {
-          const batch =
-            value || sample?.cultureBatchId || sample?.data?.cultureBatchId;
-          return batch ? (
+          const batch = coerceDisplayValue(
+            value || sample?.cultureBatchId || sample?.data?.cultureBatchId,
+            "",
+          );
+          return batch && batch !== "-" ? (
             <Tag type="cyan" size="sm">
               {batch}
             </Tag>
@@ -518,11 +532,10 @@ function VirologyVirusIsolationPage({
           id: "virology.isolation.column.method",
           defaultMessage: "Isolation Method",
         }),
-        render: (value, sample) => {
-          const method =
-            value || sample?.isolationMethod || sample?.data?.isolationMethod;
-          return method || "-";
-        },
+        render: (value, sample) =>
+          coerceDisplayValue(
+            value || sample?.isolationMethod || sample?.data?.isolationMethod,
+          ),
       },
     ],
     [intl],

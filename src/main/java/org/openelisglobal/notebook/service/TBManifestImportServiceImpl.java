@@ -36,6 +36,11 @@ public class TBManifestImportServiceImpl implements TBManifestImportService {
 
     private static final Logger logger = LoggerFactory.getLogger(TBManifestImportServiceImpl.class);
 
+    /** Standard TB specimen types (must match type_of_sample descriptions). */
+    private static final List<String> VALID_TB_SPECIMEN_TYPES = List.of("Sputum", "Bronchoalveolar Lavage",
+            "Pleural Fluid", "Cerebrospinal Fluid", "Tissue", "Body Fluid", "Urine", "Stool", "Lymph Node",
+            "Gastric Aspirate", "Blood");
+
     @Autowired
     private TypeOfSampleService typeOfSampleService;
 
@@ -367,6 +372,29 @@ public class TBManifestImportServiceImpl implements TBManifestImportService {
     @Override
     @Transactional(readOnly = true)
     public List<Map<String, String>> getValidTbSampleTypes() {
+        List<Map<String, String>> result = loadTbSampleTypesFromDepartmentLinks();
+        if (!result.isEmpty()) {
+            return result;
+        }
+
+        logger.warn("No TB department sample types configured; falling back to catalog lookup");
+        for (String description : VALID_TB_SPECIMEN_TYPES) {
+            TypeOfSample searchType = new TypeOfSample();
+            searchType.setDescription(description);
+            TypeOfSample found = typeOfSampleService.getTypeOfSampleByDescriptionAndDomain(searchType, true);
+            if (found != null) {
+                Map<String, String> typeMap = new HashMap<>();
+                typeMap.put("id", found.getId());
+                typeMap.put("description", found.getDescription());
+                result.add(typeMap);
+            }
+        }
+
+        result.sort((a, b) -> a.get("description").compareToIgnoreCase(b.get("description")));
+        return result;
+    }
+
+    private List<Map<String, String>> loadTbSampleTypesFromDepartmentLinks() {
         List<Map<String, String>> result = new ArrayList<>();
 
         TestSection tbSection = testSectionService.getTestSectionByName("Tuberculosis Laboratory");

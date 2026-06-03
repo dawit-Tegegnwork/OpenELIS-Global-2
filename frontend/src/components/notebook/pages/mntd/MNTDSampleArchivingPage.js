@@ -40,6 +40,7 @@ import {
   Calendar,
   Location,
   Automatic,
+  SendAlt,
 } from "@carbon/react/icons";
 import { FormattedMessage, useIntl } from "react-intl";
 import {
@@ -55,6 +56,14 @@ import {
   SignatureMeaning,
   useESign,
 } from "../../../esignature";
+import SendToBiorepositoryModal from "../biorepository/SendToBiorepositoryModal";
+import {
+  allSelectedHaveExistingStorage,
+  coerceDisplayValue,
+  formatCurrentStorage,
+  getExistingStorageLocation,
+  mapMntdSamplesForBiorepositoryTransfer,
+} from "./mntdStorageHelpers";
 
 /**
  * MNTDSampleArchivingPage - Page 9 of the MNTD workflow.
@@ -104,6 +113,8 @@ function MNTDSampleArchivingPage({
   // Archive modal state
   const [archiveModalOpen, setArchiveModalOpen] = useState(false);
   const [archiveType, setArchiveType] = useState("RETENTION");
+  const [retentionLocationMode, setRetentionLocationMode] = useState("NEW");
+  const [bioTransferModalOpen, setBioTransferModalOpen] = useState(false);
   const [isArchiving, setIsArchiving] = useState(false);
 
   // Retention-specific state
@@ -174,7 +185,10 @@ function MNTDSampleArchivingPage({
               id: String(sample.id || sample.sampleItemId),
               externalId: sample.externalId,
               accessionNumber: sample.accessionNumber,
-              sampleType: sample.sampleType || sample.typeOfSample?.description,
+              sampleType: coerceDisplayValue(
+                sample.sampleType || sample.typeOfSample?.description,
+                "",
+              ),
               collectionDate: sample.collectionDate,
               status: sample.pageStatus || "PENDING",
               // Archive data
@@ -184,12 +198,27 @@ function MNTDSampleArchivingPage({
               // Retention data
               retentionPeriodMonths: sample.data?.retentionPeriodMonths,
               retentionEndDate: sample.data?.retentionEndDate,
-              storageLocation: sample.data?.storageLocation,
-              storageWell: sample.data?.archiveStorageWell,
+              storageLocation: coerceDisplayValue(
+                sample.data?.storageLocation,
+                "",
+              ),
+              storagePath: coerceDisplayValue(sample.data?.storagePath, ""),
+              storageWell: coerceDisplayValue(
+                sample.data?.storageWell || sample.data?.archiveStorageWell,
+                "",
+              ),
+              storageBox: coerceDisplayValue(sample.data?.storageBox, ""),
+              biorepositoryTransferId: sample.data?.biorepositoryTransferId,
               // Disposal data
-              disposalMethod: sample.data?.disposalMethod,
-              disposalDate: sample.data?.disposalDate,
-              disposalReason: sample.data?.disposalReason,
+              disposalMethod: coerceDisplayValue(
+                sample.data?.disposalMethod,
+                "",
+              ),
+              disposalDate: coerceDisplayValue(sample.data?.disposalDate, ""),
+              disposalReason: coerceDisplayValue(
+                sample.data?.disposalReason,
+                "",
+              ),
             }));
             setSamples(transformedSamples);
           } else {
@@ -376,7 +405,12 @@ function MNTDSampleArchivingPage({
     }
 
     // Reset modal state
+    const useExistingStorage = allSelectedHaveExistingStorage(
+      samples,
+      selectedSampleIds,
+    );
     setArchiveType("RETENTION");
+    setRetentionLocationMode(useExistingStorage ? "EXISTING" : "NEW");
     setRetentionData({
       retentionPeriodMonths: 12,
       retentionEndDate: calculateRetentionEndDate(12),
@@ -407,9 +441,26 @@ function MNTDSampleArchivingPage({
       return;
     }
 
+    const selectedSamples = samples.filter((s) =>
+      selectedSampleIds.includes(s.id),
+    );
+    const useExistingLocation =
+      archiveType === "RETENTION" && retentionLocationMode === "EXISTING";
+
     // Validate based on archive type
     if (archiveType === "RETENTION") {
-      if (!storageSelection.box?.id) {
+      if (useExistingLocation) {
+        if (!allSelectedHaveExistingStorage(samples, selectedSampleIds)) {
+          setError(
+            intl.formatMessage({
+              id: "notebook.mntd.archiving.missingExistingStorage",
+              defaultMessage:
+                "One or more selected samples do not have a prior storage location. Choose a new archive location instead.",
+            }),
+          );
+          return;
+        }
+      } else if (!storageSelection.box?.id) {
         setError(
           intl.formatMessage({
             id: "notebook.mntd.archiving.selectStorage",
@@ -418,24 +469,23 @@ function MNTDSampleArchivingPage({
           }),
         );
         return;
-      }
-
-      // Check all samples have well assignments
-      const unassignedCount = selectedSampleIds.filter(
-        (id) => !wellAssignments[id],
-      ).length;
-      if (unassignedCount > 0) {
-        setError(
-          intl.formatMessage(
-            {
-              id: "notebook.mntd.archiving.assignAllWells",
-              defaultMessage:
-                "{count} sample(s) do not have well assignments. Click wells to assign.",
-            },
-            { count: unassignedCount },
-          ),
-        );
-        return;
+      } else {
+        const unassignedCount = selectedSampleIds.filter(
+          (id) => !wellAssignments[id],
+        ).length;
+        if (unassignedCount > 0) {
+          setError(
+            intl.formatMessage(
+              {
+                id: "notebook.mntd.archiving.assignAllWells",
+                defaultMessage:
+                  "{count} sample(s) do not have well assignments. Click wells to assign.",
+              },
+              { count: unassignedCount },
+            ),
+          );
+          return;
+        }
       }
     }
 
@@ -446,14 +496,18 @@ function MNTDSampleArchivingPage({
 
     // Build storage path for retention
     let storagePath = "";
-    if (archiveType === "RETENTION" && storageSelection.box) {
-      const parts = [];
-      if (storageSelection.room) parts.push(storageSelection.room.name);
-      if (storageSelection.device) parts.push(storageSelection.device.name);
-      if (storageSelection.shelf) parts.push(storageSelection.shelf.name);
-      if (storageSelection.rack) parts.push(storageSelection.rack.name);
-      if (storageSelection.box) parts.push(storageSelection.box.name);
-      storagePath = parts.join(" > ");
+    if (archiveType === "RETENTION") {
+      if (useExistingLocation && selectedSamples.length > 0) {
+        storagePath = getExistingStorageLocation(selectedSamples[0]).storagePath;
+      } else if (storageSelection.box) {
+        const parts = [];
+        if (storageSelection.room) parts.push(storageSelection.room.name);
+        if (storageSelection.device) parts.push(storageSelection.device.name);
+        if (storageSelection.shelf) parts.push(storageSelection.shelf.name);
+        if (storageSelection.rack) parts.push(storageSelection.rack.name);
+        if (storageSelection.box) parts.push(storageSelection.box.name);
+        storagePath = parts.join(" > ");
+      }
     }
 
     // Build data to save
@@ -467,8 +521,15 @@ function MNTDSampleArchivingPage({
       dataToSave.retentionPeriodMonths = retentionData.retentionPeriodMonths;
       dataToSave.retentionEndDate = retentionData.retentionEndDate;
       dataToSave.storageLocation = storagePath;
-      dataToSave.archiveStorageBoxId = storageSelection.box?.id;
+      dataToSave.retentionLocationMode = retentionLocationMode;
       dataToSave.archiveStorageNotes = retentionData.storageNotes;
+      if (!useExistingLocation) {
+        dataToSave.archiveStorageBoxId = storageSelection.box?.id;
+      } else if (selectedSamples.length > 0) {
+        const existing = getExistingStorageLocation(selectedSamples[0]);
+        dataToSave.storagePath = existing.storagePath;
+        dataToSave.storageWell = existing.storageWell;
+      }
     } else {
       dataToSave.disposalMethod = disposalData.disposalMethod;
       dataToSave.disposalDate = disposalData.disposalDate;
@@ -476,18 +537,29 @@ function MNTDSampleArchivingPage({
       dataToSave.disposalNotes = disposalData.disposalNotes;
     }
 
-    // If retention with well assignments, include them
     if (
       archiveType === "RETENTION" &&
+      !useExistingLocation &&
       Object.keys(wellAssignments).length > 0
     ) {
-      // Convert well assignments to sample-specific data
       const sampleWellData = {};
       Object.entries(wellAssignments).forEach(([sampleId, wellCoord]) => {
         sampleWellData[sampleId] = wellCoord;
       });
       dataToSave.wellAssignments = sampleWellData;
     }
+
+    const assignNewStorage =
+      archiveType === "RETENTION" &&
+      !useExistingLocation &&
+      storageSelection.box?.id &&
+      Object.keys(wellAssignments).length > 0;
+
+    const showStorageAssignmentErrors = (response) => {
+      if (response?.errors?.length > 0) {
+        setError(response.errors.join(" "));
+      }
+    };
 
     // First, apply the archive data
     postToOpenElisServer(
@@ -499,7 +571,6 @@ function MNTDSampleArchivingPage({
       (response) => {
         if (componentMounted.current) {
           if (response && !response.error) {
-            // Now update status to COMPLETED (end of lifecycle)
             postToOpenElisServer(
               `/rest/notebook/bulk/page/${pageData.id}/samples/status`,
               JSON.stringify({
@@ -541,14 +612,8 @@ function MNTDSampleArchivingPage({
               },
             );
 
-            // If retention, also create storage assignments using same endpoint as Temporary Storage
-            if (
-              archiveType === "RETENTION" &&
-              storageSelection.box?.id &&
-              Object.keys(wellAssignments).length > 0
-            ) {
-              // Build storage path
-              const storagePath = [
+            if (assignNewStorage) {
+              const assignStoragePath = [
                 storageSelection.room?.label || storageSelection.room?.name,
                 storageSelection.device?.label || storageSelection.device?.name,
                 storageSelection.shelf?.label || storageSelection.shelf?.name,
@@ -558,43 +623,30 @@ function MNTDSampleArchivingPage({
                 .filter(Boolean)
                 .join(" > ");
 
-              const assignData = {
-                sampleIds: numericIds,
-                boxId: storageSelection.box.id,
-                wellAssignments: wellAssignments,
-                reassign: false,
-                data: {
-                  storageRoom:
-                    storageSelection.room?.label || storageSelection.room?.name,
-                  storageFreezer:
-                    storageSelection.device?.label ||
-                    storageSelection.device?.name,
-                  storageRack:
-                    storageSelection.rack?.label || storageSelection.rack?.name,
-                  storageBox:
-                    storageSelection.box?.label || storageSelection.box?.name,
-                  storagePath: storagePath,
-                  storageType: "ARCHIVE",
-                  retentionEndDate: retentionData.retentionEndDate,
-                  assignedDateTime: new Date().toISOString(),
-                },
-              };
-
               postToOpenElisServerJsonResponse(
                 `/rest/notebook/bulk/page/${pageData.id}/samples/storage`,
-                JSON.stringify(assignData),
-                (response) => {
-                  if (
-                    response &&
-                    response.errors &&
-                    response.errors.length > 0
-                  ) {
-                    console.warn(
-                      "Storage assignment warnings:",
-                      response.errors,
-                    );
-                  }
-                },
+                JSON.stringify({
+                  sampleIds: numericIds,
+                  boxId: storageSelection.box.id,
+                  wellAssignments: wellAssignments,
+                  reassign: true,
+                  data: {
+                    storageRoom:
+                      storageSelection.room?.label || storageSelection.room?.name,
+                    storageFreezer:
+                      storageSelection.device?.label ||
+                      storageSelection.device?.name,
+                    storageRack:
+                      storageSelection.rack?.label || storageSelection.rack?.name,
+                    storageBox:
+                      storageSelection.box?.label || storageSelection.box?.name,
+                    storagePath: assignStoragePath,
+                    storageType: "ARCHIVE",
+                    retentionEndDate: retentionData.retentionEndDate,
+                    assignedDateTime: new Date().toISOString(),
+                  },
+                }),
+                showStorageAssignmentErrors,
               );
             }
           } else {
@@ -607,7 +659,9 @@ function MNTDSampleArchivingPage({
   }, [
     hasRealPageId,
     archiveType,
+    retentionLocationMode,
     selectedSampleIds,
+    samples,
     storageSelection,
     wellAssignments,
     retentionData,
@@ -617,6 +671,85 @@ function MNTDSampleArchivingPage({
     onProgressUpdate,
     intl,
   ]);
+
+  const bioTransferSamples = useMemo(
+    () => mapMntdSamplesForBiorepositoryTransfer(samples, selectedSampleIds),
+    [samples, selectedSampleIds],
+  );
+
+  const handleBiorepositoryTransferSuccess = useCallback(
+    (transferResponse) => {
+      if (!hasRealPageId || !transferResponse?.id) {
+        return;
+      }
+
+      const numericIds = selectedSampleIds.map((id) => parseInt(id, 10));
+
+      postToOpenElisServerJsonResponse(
+        `/rest/notebook/bulk/page/${pageData.id}/samples/apply`,
+        JSON.stringify({
+          sampleIds: numericIds,
+          data: {
+            archiveType: "BIOREPOSITORY",
+            disposalMethod: "BIOREPOSITORY",
+            archiveDate: new Date().toISOString(),
+            archivedBy: localStorage.getItem("userName") || "System",
+            biorepositoryTransferId: transferResponse.id,
+            biorepositoryTransferStatus: transferResponse.status || "PENDING",
+          },
+        }),
+        (applyResponse) => {
+          if (!componentMounted.current) {
+            return;
+          }
+          if (applyResponse && !applyResponse.error) {
+            postToOpenElisServerJsonResponse(
+              `/rest/notebook/bulk/page/${pageData.id}/samples/status`,
+              JSON.stringify({
+                sampleIds: numericIds,
+                status: "COMPLETED",
+              }),
+              () => {
+                if (componentMounted.current) {
+                  setSuccessMessage(
+                    intl.formatMessage(
+                      {
+                        id: "notebook.mntd.archiving.biorepoSuccess",
+                        defaultMessage:
+                          "Transferred {count} sample(s) to biorepository. Transfer request #{transferId}.",
+                      },
+                      {
+                        count: selectedSampleIds.length,
+                        transferId: transferResponse.id,
+                      },
+                    ),
+                  );
+                  setSelectedSampleIds([]);
+                  loadPageSamples();
+                  if (onProgressUpdate) {
+                    onProgressUpdate();
+                  }
+                }
+              },
+            );
+          } else {
+            setError(
+              applyResponse?.error ||
+                "Transfer created but failed to update notebook samples.",
+            );
+          }
+        },
+      );
+    },
+    [
+      hasRealPageId,
+      selectedSampleIds,
+      pageData?.id,
+      loadPageSamples,
+      onProgressUpdate,
+      intl,
+    ],
+  );
 
   // E-Signature: AUTHORED hook for archive submission
   const handleSignAndArchive = useCallback(
@@ -708,6 +841,17 @@ function MNTDSampleArchivingPage({
         </Tag>
       );
     }
+    if (sample.archiveType === "BIOREPOSITORY") {
+      return (
+        <Tag type="purple" size="sm">
+          <SendAlt size={12} style={{ marginRight: "4px" }} />
+          <FormattedMessage
+            id="notebook.mntd.archiving.biorepository"
+            defaultMessage="Biorepository"
+          />
+        </Tag>
+      );
+    }
     return (
       <Tag type="gray" size="sm">
         <FormattedMessage
@@ -720,39 +864,52 @@ function MNTDSampleArchivingPage({
 
   // Render archive details
   const renderArchiveDetails = (sample) => {
+    if (!sample) {
+      return "-";
+    }
+
     if (sample.archiveType === "RETENTION") {
+      const storageLocation = coerceDisplayValue(sample.storageLocation, "");
+      const storageWell = coerceDisplayValue(sample.storageWell, "");
+      const retentionEndDate = coerceDisplayValue(
+        sample.retentionEndDate,
+        "",
+      );
+
       return (
         <div style={{ fontSize: "12px" }}>
-          {sample.storageLocation && (
+          {storageLocation && storageLocation !== "-" && (
             <div style={{ color: "#525252" }}>
               <Location size={12} style={{ marginRight: "4px" }} />
-              {sample.storageLocation}
+              {storageLocation}
             </div>
           )}
-          {sample.storageWell && (
-            <div style={{ color: "#525252" }}>Well: {sample.storageWell}</div>
+          {storageWell && storageWell !== "-" && (
+            <div style={{ color: "#525252" }}>Well: {storageWell}</div>
           )}
-          {sample.retentionEndDate && (
+          {retentionEndDate && retentionEndDate !== "-" && (
             <div style={{ color: "#525252" }}>
               <Calendar size={12} style={{ marginRight: "4px" }} />
-              Until: {sample.retentionEndDate}
+              Until: {retentionEndDate}
             </div>
           )}
         </div>
       );
     }
     if (sample.archiveType === "DISPOSAL") {
+      const disposalMethod = coerceDisplayValue(sample.disposalMethod, "");
+      const disposalDate = coerceDisplayValue(sample.disposalDate, "");
+      const disposalReason = coerceDisplayValue(sample.disposalReason, "");
+
       return (
         <div style={{ fontSize: "12px" }}>
-          {sample.disposalMethod && (
-            <div style={{ color: "#525252" }}>
-              Method: {sample.disposalMethod}
-            </div>
+          {disposalMethod && disposalMethod !== "-" && (
+            <div style={{ color: "#525252" }}>Method: {disposalMethod}</div>
           )}
-          {sample.disposalDate && (
-            <div style={{ color: "#525252" }}>Date: {sample.disposalDate}</div>
+          {disposalDate && disposalDate !== "-" && (
+            <div style={{ color: "#525252" }}>Date: {disposalDate}</div>
           )}
-          {sample.disposalReason && (
+          {disposalReason && disposalReason !== "-" && (
             <div
               style={{
                 color: "#525252",
@@ -760,10 +917,28 @@ function MNTDSampleArchivingPage({
                 maxWidth: "200px",
               }}
             >
-              {sample.disposalReason.substring(0, 50)}
-              {sample.disposalReason.length > 50 ? "..." : ""}
+              {disposalReason.length > 50
+                ? `${disposalReason.substring(0, 50)}...`
+                : disposalReason}
             </div>
           )}
+        </div>
+      );
+    }
+    if (sample.archiveType === "BIOREPOSITORY") {
+      return (
+        <div style={{ fontSize: "12px", color: "#525252" }}>
+          {sample.biorepositoryTransferId
+            ? `Transfer #${coerceDisplayValue(sample.biorepositoryTransferId)}`
+            : "Pending biorepository transfer"}
+        </div>
+      );
+    }
+    if (!sample.archiveType && (sample.storagePath || sample.storageWell)) {
+      return (
+        <div style={{ fontSize: "12px", color: "#525252" }}>
+          <Location size={12} style={{ marginRight: "4px" }} />
+          {formatCurrentStorage(sample)}
         </div>
       );
     }
@@ -799,7 +974,7 @@ function MNTDSampleArchivingPage({
         <p className="page-description">
           <FormattedMessage
             id="notebook.page.mntd.archiving.description"
-            defaultMessage="Archive samples after test execution. Samples can be retained in storage with a retention period or disposed. This is the final step in the sample lifecycle."
+            defaultMessage="Archive samples after test execution. Retain in storage, dispose, or send to the biorepository. Samples stored on Temporary Storage (page 3) can be retained in place without re-assigning a location."
           />
         </p>
       </div>
@@ -889,6 +1064,20 @@ function MNTDSampleArchivingPage({
         />
 
         <Button
+          kind="secondary"
+          size="sm"
+          renderIcon={SendAlt}
+          onClick={() => setBioTransferModalOpen(true)}
+          disabled={selectedSampleIds.length === 0 || !hasRealPageId}
+        >
+          <FormattedMessage
+            id="biorepository.transfer.sendToBiorepository"
+            defaultMessage="Send to Biorepository ({count})"
+            values={{ count: selectedSampleIds.length }}
+          />
+        </Button>
+
+        <Button
           kind="primary"
           size="sm"
           renderIcon={Archive}
@@ -921,11 +1110,12 @@ function MNTDSampleArchivingPage({
           <DataTable
             rows={filteredSamples.map((sample) => ({
               id: sample.id,
-              externalId: sample.externalId || "-",
-              accessionNumber: sample.accessionNumber || "-",
-              sampleType: sample.sampleType || "-",
-              archiveStatus: sample.archiveType,
-              archiveDetails: sample,
+              externalId: coerceDisplayValue(sample.externalId),
+              accessionNumber: coerceDisplayValue(sample.accessionNumber),
+              sampleType: coerceDisplayValue(sample.sampleType),
+              currentStorage: formatCurrentStorage(sample),
+              archiveStatus: coerceDisplayValue(sample.archiveType, ""),
+              archiveDetails: sample.id,
             }))}
             headers={[
               {
@@ -947,6 +1137,13 @@ function MNTDSampleArchivingPage({
                 header: intl.formatMessage({
                   id: "notebook.mntd.archiving.column.sampleType",
                   defaultMessage: "Sample Type",
+                }),
+              },
+              {
+                key: "currentStorage",
+                header: intl.formatMessage({
+                  id: "notebook.mntd.archiving.column.currentStorage",
+                  defaultMessage: "Current Storage",
                 }),
               },
               {
@@ -1197,6 +1394,59 @@ function MNTDSampleArchivingPage({
                 </Column>
               </Grid>
 
+              <RadioButtonGroup
+                legendText={intl.formatMessage({
+                  id: "notebook.mntd.archiving.retentionLocationMode",
+                  defaultMessage: "Retention location",
+                })}
+                name="retention-location-mode"
+                valueSelected={retentionLocationMode}
+                onChange={(value) => setRetentionLocationMode(value)}
+                style={{ marginBottom: "1rem" }}
+              >
+                <RadioButton
+                  id="retention-use-existing"
+                  labelText={intl.formatMessage({
+                    id: "notebook.mntd.archiving.useExistingLocation",
+                    defaultMessage:
+                      "Use existing location (from Temporary Storage)",
+                  })}
+                  value="EXISTING"
+                  disabled={
+                    !allSelectedHaveExistingStorage(
+                      samples,
+                      selectedSampleIds,
+                    )
+                  }
+                />
+                <RadioButton
+                  id="retention-assign-new"
+                  labelText={intl.formatMessage({
+                    id: "notebook.mntd.archiving.assignNewLocation",
+                    defaultMessage: "Assign new archive location",
+                  })}
+                  value="NEW"
+                />
+              </RadioButtonGroup>
+
+              {retentionLocationMode === "EXISTING" && (
+                <InlineNotification
+                  kind="info"
+                  lowContrast
+                  hideCloseButton
+                  title={intl.formatMessage({
+                    id: "notebook.mntd.archiving.existingLocationInfo",
+                    defaultMessage: "Keeping current storage assignment",
+                  })}
+                  subtitle={formatCurrentStorage(
+                    samples.find((s) => selectedSampleIds.includes(s.id)),
+                  )}
+                  style={{ marginBottom: "1rem" }}
+                />
+              )}
+
+              {retentionLocationMode === "NEW" && (
+                <>
               {/* Storage Location Selection */}
               <h6 style={{ marginBottom: "0.5rem", marginTop: "1rem" }}>
                 <FormattedMessage
@@ -1273,6 +1523,8 @@ function MNTDSampleArchivingPage({
                 rows={2}
                 style={{ marginTop: "1rem" }}
               />
+                </>
+              )}
             </div>
           )}
 
@@ -1379,6 +1631,20 @@ function MNTDSampleArchivingPage({
           )}
         </div>
       </Modal>
+
+      <SendToBiorepositoryModal
+        open={bioTransferModalOpen}
+        onClose={() => setBioTransferModalOpen(false)}
+        sourceLab="MNTD"
+        notebookId={notebookId}
+        entryId={entryId}
+        selectedSamples={bioTransferSamples}
+        onSuccess={(response) => {
+          setBioTransferModalOpen(false);
+          handleBiorepositoryTransferSuccess(response);
+        }}
+        onError={(message) => setError(message)}
+      />
 
       {/* E-Signature Modal for Archiving (AUTHORED) */}
       <ESignatureModal {...authoredSignatureModalProps} />
