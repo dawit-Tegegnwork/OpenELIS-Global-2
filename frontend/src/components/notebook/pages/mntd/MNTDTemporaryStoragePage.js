@@ -600,20 +600,6 @@ function MNTDTemporaryStoragePage({
       return;
     }
 
-    // Check if all selected samples have storage assignment
-    const selectedSamples = samples.filter((s) =>
-      selectedSampleIds.includes(s.id),
-    );
-    const missingStorage = selectedSamples.filter(
-      (s) => !s.storageWell && !s.storagePath,
-    );
-    if (missingStorage.length > 0) {
-      setError(
-        `${missingStorage.length} sample(s) are missing storage assignment. Please assign storage first.`,
-      );
-      return;
-    }
-
     postToOpenElisServer(
       `/rest/notebook/bulk/page/${pageData.id}/samples/status`,
       JSON.stringify({
@@ -649,7 +635,6 @@ function MNTDTemporaryStoragePage({
     );
   }, [
     selectedSampleIds,
-    samples,
     pageData?.id,
     loadPageSamples,
     onProgressUpdate,
@@ -790,6 +775,16 @@ function MNTDTemporaryStoragePage({
         </Tag>
       );
     }
+    if (sample.status === "COMPLETED") {
+      return (
+        <Tag type="green" renderIcon={Checkmark}>
+          <FormattedMessage
+            id="notebook.status.skippedStorageSent"
+            defaultMessage="Skipped / Sent"
+          />
+        </Tag>
+      );
+    }
     if (hasStorageAssignment) {
       const displayLocation =
         sample.storageWell || (sample.storagePath ? "Shelf-level" : "Storage");
@@ -856,9 +851,24 @@ function MNTDTemporaryStoragePage({
         <p className="page-description">
           <FormattedMessage
             id="notebook.page.mntd.temporaryStorage.description"
-            defaultMessage="Assign samples to temporary storage locations. Samples remain in progress after storage assignment. Use 'Complete & Send to Next Step' to finalize and advance samples to the next workflow stage."
+            defaultMessage="Optionally assign samples to temporary storage or send to biorepository early. Final biorepository transfer is on page 9 (Sample Archiving). Use 'Complete & Send to Next Step' to advance samples without storage."
           />
         </p>
+        <InlineNotification
+          kind="info"
+          lowContrast
+          hideCloseButton
+          title={intl.formatMessage({
+            id: "notebook.page.mntd.temporaryStorage.biorepoHintTitle",
+            defaultMessage: "Biorepository routing",
+          })}
+          subtitle={intl.formatMessage({
+            id: "notebook.page.mntd.temporaryStorage.biorepoHint",
+            defaultMessage:
+              "Send to Biorepository here only if samples leave the MNTD workflow early. For end-of-study archival, use Send to Biorepository on page 9 (Sample Archiving).",
+          })}
+          style={{ marginTop: "0.75rem" }}
+        />
       </div>
 
       {/* Progress Summary */}

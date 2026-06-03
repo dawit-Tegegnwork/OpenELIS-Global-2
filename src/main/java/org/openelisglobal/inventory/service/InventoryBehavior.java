@@ -27,4 +27,12 @@ public final class InventoryBehavior {
     public static boolean isLotReceivable(InventoryItem item) {
         return isStockManaged(item);
     }
+
+    public static boolean isEquipmentAssetRegistration(InventoryItem item) {
+        return isPermanentEquipment(item);
+    }
+
+    public static boolean isEquipmentAssetRegistration(ItemType itemType) {
+        return isPermanentEquipment(itemType);
+    }
 }

@@ -35,6 +35,7 @@ import { FormattedMessage, useIntl } from "react-intl";
 import {
   getFromOpenElisServer,
   postToOpenElisServer,
+  postToOpenElisServerJsonResponse,
 } from "../../../utils/Utils";
 import SampleGrid from "../../workflow/SampleGrid";
 import ReagentUsageSelector, {
@@ -46,6 +47,7 @@ import NotebookDepartmentEquipmentMultiSelect from "../../workflow/NotebookDepar
 import { NotificationContext } from "../../../layout/Layout";
 import { NotificationKinds } from "../../../common/CustomNotification";
 import "../../workflow/NotebookWorkflow.css";
+import { formatCurrentStorage } from "./mntdStorageHelpers";
 import {
   ESignatureModal,
   SignatureMeaning,
@@ -99,6 +101,7 @@ function MNTDSampleProcessingPage({
   const [bulkApplyModalOpen, setBulkApplyModalOpen] = useState(false);
   const [bulkApplyValues, setBulkApplyValues] = useState({
     processingType: "",
+    processingTypeOther: "",
     technicianName: "",
     processingDate: new Date().toISOString().slice(0, 10),
     selectedReagents: [],
@@ -130,6 +133,7 @@ function MNTDSampleProcessingPage({
     { id: "dbs_punching", label: "DBS Punching" },
     { id: "extraction", label: "Extraction" },
     { id: "culture", label: "Culture" },
+    { id: "other", label: "Other" },
   ];
 
   const notifyError = useCallback(
@@ -186,6 +190,7 @@ function MNTDSampleProcessingPage({
               status: sample.pageStatus || "PENDING",
               // Processing preparation fields from data
               processingType: sample.data?.processingType,
+              processingTypeOther: sample.data?.processingTypeOther,
               technicianName: sample.data?.technicianName,
               processingDate: sample.data?.processingDate,
               selectedReagents: sample.data?.selectedReagents || [],
@@ -193,6 +198,9 @@ function MNTDSampleProcessingPage({
               batchNumber: sample.data?.batchNumber,
               lotNumber: sample.data?.lotNumber,
               isLocked: sample.data?.isLocked || false,
+              storagePath: sample.data?.storagePath,
+              storageWell: sample.data?.storageWell,
+              storageBox: sample.data?.storageBox,
             }));
             setSamples(transformedSamples);
           } else {
@@ -234,41 +242,58 @@ function MNTDSampleProcessingPage({
       return;
     }
 
-    const selectedReagentItems = bulkApplyValues.selectedReagentItems || [];
-    if (selectedReagentItems.length === 0) {
-      notifyError("Select at least one reagent before applying processing.");
+    if (
+      bulkApplyValues.processingType === "other" &&
+      !bulkApplyValues.processingTypeOther?.trim()
+    ) {
+      setError("Please specify the processing type when Other is selected.");
       return;
     }
-    const invalidReagentItems = getInvalidReagentUsageItems(
-      selectedReagentItems,
-      bulkApplyValues.reagentQuantities,
-    );
-    if (invalidReagentItems.length > 0) {
-      notifyError("Enter a quantity greater than 0 for each selected reagent.");
-      return;
+
+    const selectedReagentItems = bulkApplyValues.selectedReagentItems || [];
+    if (selectedReagentItems.length > 0) {
+      const invalidReagentItems = getInvalidReagentUsageItems(
+        selectedReagentItems,
+        bulkApplyValues.reagentQuantities,
+      );
+      if (invalidReagentItems.length > 0) {
+        notifyError(
+          "Enter a quantity greater than 0 for each selected reagent.",
+        );
+        return;
+      }
     }
 
     setIsBulkApplying(true);
     setError(null);
 
-    // Prepare the data to apply
+    const applyPayload = {
+      processingType: bulkApplyValues.processingType,
+      technicianName: bulkApplyValues.technicianName,
+      processingDate: bulkApplyValues.processingDate,
+      selectedReagents: bulkApplyValues.selectedReagents,
+      selectedInstruments: bulkApplyValues.selectedInstruments,
+      batchNumber: bulkApplyValues.batchNumber,
+      lotNumber: bulkApplyValues.lotNumber,
+      notes: bulkApplyValues.notes,
+      isLocked: true,
+    };
+
+    if (bulkApplyValues.processingType === "other") {
+      applyPayload.processingTypeOther =
+        bulkApplyValues.processingTypeOther.trim();
+    }
+
+    if (selectedReagentItems.length > 0) {
+      applyPayload.selectedReagentUsages = buildSelectedReagentUsages(
+        selectedReagentItems,
+        bulkApplyValues.reagentQuantities,
+      );
+    }
+
     const applyData = {
       sampleIds: selectedSampleIds.map((id) => parseInt(id, 10)),
-      data: {
-        processingType: bulkApplyValues.processingType,
-        technicianName: bulkApplyValues.technicianName,
-        processingDate: bulkApplyValues.processingDate,
-        selectedReagents: bulkApplyValues.selectedReagents,
-        selectedReagentUsages: buildSelectedReagentUsages(
-          selectedReagentItems,
-          bulkApplyValues.reagentQuantities,
-        ),
-        selectedInstruments: bulkApplyValues.selectedInstruments,
-        batchNumber: bulkApplyValues.batchNumber,
-        lotNumber: bulkApplyValues.lotNumber,
-        notes: bulkApplyValues.notes,
-        isLocked: true, // Lock parent sample for processing
-      },
+      data: applyPayload,
     };
 
     postToOpenElisServer(
@@ -297,6 +322,7 @@ function MNTDSampleProcessingPage({
     bulkApplyValues,
     loadPageSamples,
     onProgressUpdate,
+    notifyError,
   ]);
 
   // Handle marking samples as ready for processing
@@ -371,12 +397,17 @@ function MNTDSampleProcessingPage({
       source: "MISSED_FROM_FIELD",
     };
 
-    postToOpenElisServer(
+    if (!entryId) {
+      setError("Notebook entry is not loaded. Please refresh the page.");
+      return;
+    }
+
+    postToOpenElisServerJsonResponse(
       `/rest/notebook-entry/${entryId}/samples/add`,
       JSON.stringify(sampleData),
-      (status) => {
+      (response) => {
         setIsAddingSample(false);
-        if (status === 200 || status === 201) {
+        if (response?.success) {
           setSuccessMessage("Missed sample registered successfully.");
           setAddSampleModalOpen(false);
           setNewSampleData({
@@ -390,7 +421,10 @@ function MNTDSampleProcessingPage({
             onProgressUpdate();
           }
         } else {
-          setError("Failed to add sample. Please try again.");
+          setError(
+            response?.error ||
+              "Failed to add sample. Please try again.",
+          );
         }
       },
     );
@@ -473,7 +507,10 @@ function MNTDSampleProcessingPage({
   const lockedCount = samples.filter((s) => s.isLocked).length;
 
   // Get processing type label
-  const getProcessingTypeLabel = (type) => {
+  const getProcessingTypeLabel = (type, otherText) => {
+    if (type === "other" && otherText) {
+      return otherText;
+    }
     const found = processingTypes.find((t) => t.id === type);
     return found ? found.label : type;
   };
@@ -482,7 +519,12 @@ function MNTDSampleProcessingPage({
   const getProcessingTag = (sample) => {
     if (sample.processingType) {
       return (
-        <Tag type="blue">{getProcessingTypeLabel(sample.processingType)}</Tag>
+        <Tag type="blue">
+          {getProcessingTypeLabel(
+            sample.processingType,
+            sample.processingTypeOther,
+          )}
+        </Tag>
       );
     }
     return <Tag type="gray">Not Set</Tag>;
@@ -492,6 +534,7 @@ function MNTDSampleProcessingPage({
   const resetBulkApplyValues = () => {
     setBulkApplyValues({
       processingType: "",
+      processingTypeOther: "",
       technicianName: "",
       processingDate: new Date().toISOString().slice(0, 10),
       selectedReagents: [],
@@ -664,6 +707,11 @@ function MNTDSampleProcessingPage({
               render: (value, row) => getProcessingTag(row),
             },
             { key: "technicianName", header: "Technician" },
+            {
+              key: "currentStorage",
+              header: "Current Storage",
+              render: (_, row) => formatCurrentStorage(row),
+            },
             { key: "processingDate", header: "Processing Date" },
             {
               key: "isLocked",
@@ -682,7 +730,7 @@ function MNTDSampleProcessingPage({
           <p>
             <FormattedMessage
               id="notebook.page.mntd.sampleProcessing.empty"
-              defaultMessage="No samples available for processing preparation. Samples must be assigned to storage in the previous step first."
+              defaultMessage="No samples on this step yet. Complete the previous step (Temporary Storage) to advance samples."
             />
           </p>
         </div>
@@ -744,6 +792,8 @@ function MNTDSampleProcessingPage({
                 setBulkApplyValues((prev) => ({
                   ...prev,
                   processingType: e.target.value,
+                  processingTypeOther:
+                    e.target.value === "other" ? prev.processingTypeOther : "",
                 }))
               }
             >
@@ -753,6 +803,27 @@ function MNTDSampleProcessingPage({
               ))}
             </Select>
           </Column>
+
+          {bulkApplyValues.processingType === "other" && (
+            <Column lg={8} md={4} sm={4}>
+              <TextInput
+                id="processingTypeOther"
+                labelText={intl.formatMessage({
+                  id: "notebook.mntd.processingTypeOther",
+                  defaultMessage: "Specify Processing Type *",
+                })}
+                value={bulkApplyValues.processingTypeOther}
+                onChange={(e) =>
+                  setBulkApplyValues((prev) => ({
+                    ...prev,
+                    processingTypeOther: e.target.value,
+                  }))
+                }
+                placeholder="Enter processing type..."
+                required
+              />
+            </Column>
+          )}
 
           <Column lg={8} md={4} sm={4}>
             <TextInput
@@ -803,6 +874,18 @@ function MNTDSampleProcessingPage({
               />
               Reagent & Instrument Selection
             </h5>
+            <p
+              style={{
+                marginBottom: "0.75rem",
+                fontSize: "0.875rem",
+                color: "#525252",
+              }}
+            >
+              <FormattedMessage
+                id="notebook.mntd.reagentUsage.helper"
+                defaultMessage="Reagents are optional. After selecting reagents from inventory, enter quantity used per sample — total deduction is quantity × selected sample count, deducted from the FEFO lot on Apply."
+              />
+            </p>
           </Column>
 
           <Column lg={8} md={4} sm={4}>
@@ -813,7 +896,7 @@ function MNTDSampleProcessingPage({
               sampleCount={selectedSampleIds.length}
               titleText={intl.formatMessage({
                 id: "notebook.mntd.reagents",
-                defaultMessage: "Reagents",
+                defaultMessage: "Reagents (optional)",
               })}
               label="Select reagents..."
               onSelectionChange={(selectedItems) =>
@@ -881,7 +964,12 @@ function MNTDSampleProcessingPage({
               id="lotNumber"
               labelText={intl.formatMessage({
                 id: "notebook.mntd.lotNumber",
-                defaultMessage: "Lot Number (optional)",
+                defaultMessage: "Sample Batch Lot (optional)",
+              })}
+              helperText={intl.formatMessage({
+                id: "notebook.mntd.lotNumber.helper",
+                defaultMessage:
+                  "Sample batch metadata only. Inventory reagent lots are shown automatically when reagents are selected above.",
               })}
               value={bulkApplyValues.lotNumber}
               onChange={(e) =>
@@ -992,8 +1080,8 @@ function MNTDSampleProcessingPage({
               {sampleTypes.map((type) => (
                 <SelectItem
                   key={type.id || type.value}
-                  value={type.value || type.id}
-                  text={type.label || type.value}
+                  value={type.id || type.value}
+                  text={type.value || type.label}
                 />
               ))}
             </Select>

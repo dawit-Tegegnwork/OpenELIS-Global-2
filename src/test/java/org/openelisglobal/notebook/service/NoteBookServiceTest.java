@@ -379,6 +379,26 @@ public class NoteBookServiceTest extends BaseWebContextSensitiveTest {
     }
 
     @Test
+    public void convertToFullDisplayBean_childInstanceInheritsParentInstrumentsWhenEmpty() throws Exception {
+        executeDataSetWithStateManagement("testdata/inventory-test-data.xml");
+
+        jdbcTemplate.execute("INSERT INTO clinlims.notebook_inventory_instruments "
+                + "(notebook_id, inventory_item_id) VALUES (7, 1000)");
+
+        NoteBook child = noteBookService.createChildInstance(7, "Child Without Own Instruments", "1");
+        assertNotNull(child.getId());
+
+        jdbcTemplate.execute("DELETE FROM clinlims.notebook_inventory_instruments WHERE notebook_id = "
+                + child.getId());
+
+        NoteBookFullDisplayBean fullDisplayBean = noteBookService.convertToFullDisplayBean(child.getId());
+
+        assertNotNull(fullDisplayBean.getAnalyzers());
+        assertEquals(1, fullDisplayBean.getAnalyzers().size());
+        assertEquals("1000", fullDisplayBean.getAnalyzers().get(0).getId());
+    }
+
+    @Test
     public void convertToDisplayBean_includesProjectMetadata() {
         // Use notebook 7 (template without pages) and form-based update
         NoteBookForm form = new NoteBookForm();

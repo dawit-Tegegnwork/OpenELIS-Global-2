@@ -4,6 +4,7 @@ import React, {
   useEffect,
   useRef,
   useCallback,
+  useMemo,
 } from "react";
 import {
   Loading,
@@ -20,6 +21,7 @@ import { usePageAccessControl } from "../../../hooks/usePageAccessControl";
 import config from "../../../config.json";
 import { NotificationContext } from "../../layout/Layout";
 import PageNavigation from "./PageNavigation";
+import WorkflowErrorBoundary from "./WorkflowErrorBoundary";
 import {
   MNTDSampleIntakePage,
   MNTDReceptionVerificationPage,
@@ -31,8 +33,12 @@ import {
   MNTDTestExecutionPage,
   MNTDSampleArchivingPage,
   MNTDDataAnalysisPage,
+  MNTDReportingREDCapPage,
 } from "../pages/mntd";
 import "./NotebookWorkflow.css";
+import {
+  resolveNotebookInstruments,
+} from "../utils/notebookInstruments";
 
 /**
  * Default workflow pages for MNTD workflow.
@@ -46,6 +52,7 @@ import "./NotebookWorkflow.css";
  * Page 8: Test Execution & Raw Data Capture
  * Page 9: Sample Archiving (Retention or Disposal) - End of sample lifecycle
  * Page 10: Data Analysis & Export
+ * Page 11: Reporting & REDCap Integration
  */
 const DEFAULT_MNTD_WORKFLOW_PAGES = [
   { id: "default-1", order: 1, title: "Sample Intake / Sample Creation" },
@@ -58,6 +65,7 @@ const DEFAULT_MNTD_WORKFLOW_PAGES = [
   { id: "default-8", order: 8, title: "Test Execution & Raw Data Capture" },
   { id: "default-9", order: 9, title: "Sample Archiving" },
   { id: "default-10", order: 10, title: "Data Analysis & Export" },
+  { id: "default-11", order: 11, title: "Reporting & REDCap Integration" },
 ];
 
 /**
@@ -67,8 +75,9 @@ const DEFAULT_MNTD_WORKFLOW_PAGES = [
  * @param {Object} props
  * @param {number} props.notebookId - The notebook template ID (will auto-create entry if needed)
  * @param {number} props.entryId - The notebook entry ID (direct entry access)
+ * @param {Array} props.linkedInstruments - Live linked equipment from instance form
  */
-function MNTDWorkflowTab({ notebookId, entryId: propEntryId }) {
+function MNTDWorkflowTab({ notebookId, entryId: propEntryId, linkedInstruments }) {
   const componentMounted = useRef(false);
   const intl = useIntl();
   const { notificationVisible, setNotificationVisible } =
@@ -96,6 +105,11 @@ function MNTDWorkflowTab({ notebookId, entryId: propEntryId }) {
       isCreating: isCreatingEntry,
       workflowType: "mntd",
     });
+
+  const notebookInstruments = useMemo(
+    () => resolveNotebookInstruments(linkedInstruments, notebook?.analyzers),
+    [linkedInstruments, notebook?.analyzers],
+  );
 
   useEffect(() => {
     componentMounted.current = true;
@@ -140,6 +154,7 @@ function MNTDWorkflowTab({ notebookId, entryId: propEntryId }) {
             `/rest/notebook/view/${response.notebook.id}`,
             (nbResponse) => {
               if (componentMounted.current && nbResponse) {
+                setNotebook(nbResponse);
                 setPages(nbResponse.pages || []);
               }
             },
@@ -398,7 +413,7 @@ function MNTDWorkflowTab({ notebookId, entryId: propEntryId }) {
             progress={progress}
             onProgressUpdate={handleProgressUpdate}
             notebookId={notebook?.id}
-            notebookInstruments={notebook?.analyzers}
+            notebookInstruments={notebookInstruments}
           />
         );
       case 5:
@@ -435,7 +450,7 @@ function MNTDWorkflowTab({ notebookId, entryId: propEntryId }) {
             progress={progress}
             onProgressUpdate={handleProgressUpdate}
             notebookId={notebook?.id}
-            notebookInstruments={notebook?.analyzers}
+            notebookInstruments={notebookInstruments}
           />
         );
       case 8:
@@ -467,6 +482,18 @@ function MNTDWorkflowTab({ notebookId, entryId: propEntryId }) {
         return (
           <MNTDDataAnalysisPage
             key={`dataanalysis-${page.id}`}
+            entryId={entryId}
+            pageData={page}
+            progress={progress}
+            onProgressUpdate={handleProgressUpdate}
+            notebookId={notebook?.id}
+          />
+        );
+      case 11:
+        // Page 11: Reporting & REDCap Integration
+        return (
+          <MNTDReportingREDCapPage
+            key={`reporting-${page.id}`}
             entryId={entryId}
             pageData={page}
             progress={progress}
@@ -628,7 +655,13 @@ function MNTDWorkflowTab({ notebookId, entryId: propEntryId }) {
                     )}
 
                     <div key={`page-content-${effectivePages[activePage].id}`}>
-                      {renderPageContent(effectivePages[activePage])}
+                      <WorkflowErrorBoundary
+                        resetKey={effectivePages[activePage].id}
+                        pageTitle={effectivePages[activePage].title}
+                        onReload={() => handleProgressUpdate()}
+                      >
+                        {renderPageContent(effectivePages[activePage])}
+                      </WorkflowErrorBoundary>
                     </div>
                   </div>
                 </div>

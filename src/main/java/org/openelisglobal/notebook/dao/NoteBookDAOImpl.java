@@ -216,7 +216,8 @@ public class NoteBookDAOImpl extends BaseDAOImpl<NoteBook, Integer> implements N
 
     @Override
     public List<NoteBook> findAllParentTemplates() {
-        String hql = "FROM NoteBook nb WHERE nb.isTemplate = true AND nb.parentNotebook IS NULL ORDER BY nb.title ASC";
+        String hql = "FROM NoteBook nb WHERE nb.parentNotebook IS NULL "
+                + "AND (nb.isTemplate = true OR size(nb.entries) > 0) ORDER BY nb.title ASC";
         Query<NoteBook> query = entityManager.unwrap(Session.class).createQuery(hql, NoteBook.class);
         return query.list();
     }

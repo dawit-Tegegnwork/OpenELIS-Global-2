@@ -30,6 +30,7 @@ import BiorepositoryTransferSampleTable, {
   buildDefaultTransferItemMetadata,
   buildTransferSamplesForValidation,
 } from "../biorepository/BiorepositoryTransferSampleTable";
+import { coerceDisplayValue } from "../mntd/mntdStorageHelpers";
 
 /**
  * TBDisposalArchivingPage - Page 8: Disposal & Archiving
@@ -180,11 +181,17 @@ function TBDisposalArchivingPage({
                 sampleItemId: sample.sampleItemId, // For storage API calls
                 externalId: sample.externalId,
                 accessionNumber: sample.accessionNumber,
-                sampleType: sample.sampleType || "-",
+                sampleType: coerceDisplayValue(
+                  sample.sampleType || sample.typeOfSample?.description,
+                ),
                 collectionDate: sample.collectionDate,
                 quantity: sample.quantity ?? sample.data?.volume,
                 status: sample.pageStatus || "PENDING",
-                specimenType: sample.sampleType || "-",
+                specimenType: coerceDisplayValue(
+                  sample.data?.specimenType ||
+                    sample.sampleType ||
+                    sample.typeOfSample?.description,
+                ),
                 // Source tracking
                 sourcePageOrder: sourcePageOrder,
                 sourceSampleStatus: sample.data?.sourceSampleStatus || null,
@@ -789,14 +796,16 @@ function TBDisposalArchivingPage({
                   id: "tb.disposal.storageLocation",
                   defaultMessage: "Storage Location",
                 }),
-                render: (value) =>
-                  value ? (
+                render: (value) => {
+                  const location = coerceDisplayValue(value, "");
+                  return location && location !== "-" ? (
                     <Tag type="blue" size="sm">
-                      {value}
+                      {location}
                     </Tag>
                   ) : (
                     <span style={{ color: "#8d8d8d" }}>-</span>
-                  ),
+                  );
+                },
               },
               {
                 key: "disposalStatus",

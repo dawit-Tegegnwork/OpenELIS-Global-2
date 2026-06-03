@@ -12,6 +12,7 @@ import { usePageAccessControl } from "../../../hooks/usePageAccessControl";
 import config from "../../../config.json";
 import { NotificationContext } from "../../layout/Layout";
 import PageNavigation from "./PageNavigation";
+import WorkflowErrorBoundary from "./WorkflowErrorBoundary";
 import {
   VirologySampleReceptionPage,
   VirologyMediaPreparationPage,
@@ -539,7 +540,13 @@ function ViralVaccineWorkflowTab({ notebookId, entryId: propEntryId }) {
                     {/* Page-specific content rendered based on page order */}
                     {/* Key forces React to unmount/remount when switching pages to reset state */}
                     <div key={`page-content-${effectivePages[activePage].id}`}>
-                      {renderPageContent(effectivePages[activePage])}
+                      <WorkflowErrorBoundary
+                        resetKey={effectivePages[activePage].id}
+                        pageTitle={effectivePages[activePage].title}
+                        onReload={() => handleProgressUpdate()}
+                      >
+                        {renderPageContent(effectivePages[activePage])}
+                      </WorkflowErrorBoundary>
                     </div>
                   </div>
                 </div>

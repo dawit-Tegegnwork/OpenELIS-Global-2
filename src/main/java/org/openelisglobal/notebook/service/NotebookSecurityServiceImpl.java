@@ -87,10 +87,10 @@ public class NotebookSecurityServiceImpl implements NotebookSecurityService {
             return templateOrgs.stream().anyMatch(org -> matchesLoginLabUnit(org, loginLabUnit));
         }
 
-        // If no departments or organizations are assigned, template is NOT visible by
-        // default
-        // Strict access control: only show if explicitly allowed
-        return false;
+        // Legacy/local fallback: if a template has no explicit department or
+        // organization scope yet, keep it visible instead of hiding the tree
+        // entirely.
+        return true;
     }
 
     @Override
@@ -110,6 +110,9 @@ public class NotebookSecurityServiceImpl implements NotebookSecurityService {
 
             Integer effectiveNotebookId = notebookId;
             if (Boolean.FALSE.equals(notebook.getIsTemplate())) {
+                if (notebook.getParentNotebook() == null && notebook.getEntries() != null && !notebook.getEntries().isEmpty()) {
+                    effectiveNotebookId = notebookId;
+                } else {
                 // This is either a child instance or an entry (not a template)
                 // First check if it's a child instance (has parentNotebook)
                 NoteBook parentNotebook = notebook.getParentNotebook();
@@ -140,6 +143,7 @@ public class NotebookSecurityServiceImpl implements NotebookSecurityService {
                                 "NotebookId=" + notebookId + " is an orphaned entry with no parent, access denied");
                         return false;
                     }
+                }
                 }
             }
 
@@ -180,9 +184,10 @@ public class NotebookSecurityServiceImpl implements NotebookSecurityService {
                 return templateOrgs.stream().anyMatch(org -> matchesLoginLabUnit(org, loginLabUnit));
             }
 
-            // If no departments or organizations are assigned, template is NOT visible by
-            // default
-            return false;
+            // Legacy/local fallback: if a template has no explicit department or
+            // organization scope yet, keep it visible instead of hiding the tree
+            // entirely.
+            return true;
         } catch (Exception e) {
             // Log error or handle gracefully if notebook doesn't exist
             return false;

@@ -116,11 +116,6 @@ function TBStorageAssignmentPage({
   const hasRealPageId =
     pageData?.id && !String(pageData.id).startsWith("default-");
 
-  const bioTransferSamples = useMemo(
-    () => mapPageSamplesForBiorepositoryTransfer(samples, selectedSampleIds),
-    [samples, selectedSampleIds],
-  );
-
   // Load samples from this storage page (page 6)
   const loadPageSamples = useCallback(() => {
     if (!pageData?.id || String(pageData.id).startsWith("default-")) {
@@ -327,6 +322,11 @@ function TBStorageAssignmentPage({
 
     return [...enrichedPageSamples, ...additionalCultureSamples];
   }, [pageSamples, cultureSamples, completedSampleIds]);
+
+  const bioTransferSamples = useMemo(
+    () => mapPageSamplesForBiorepositoryTransfer(samples, selectedSampleIds),
+    [samples, selectedSampleIds],
+  );
 
   // Update storage summary when samples change
   useEffect(() => {

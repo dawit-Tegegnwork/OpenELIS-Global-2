@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+    xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+      http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-3.8.xsd">
+
+    <!-- Backfill TB department sample types when 064 changesets were MARK_RAN
+         before Tuberculosis Laboratory or type_of_sample rows existed. -->
+
+    <changeSet id="backfill-tb-dept-sample-types" author="openelis-tb">
+        <preConditions onFail="MARK_RAN">
+            <tableExists tableName="department_sample_type" schemaName="clinlims"/>
+            <sqlCheck expectedResult="1">
+                SELECT COUNT(*) FROM clinlims.test_section WHERE name = 'Tuberculosis Laboratory'
+            </sqlCheck>
+        </preConditions>
+        <comment>Link standard TB specimen types to Tuberculosis Laboratory (idempotent)</comment>
+        <sql>
+            INSERT INTO clinlims.department_sample_type (id, test_section_id, sample_type_id, is_active, sort_order, lastupdated)
+            SELECT nextval('clinlims.department_sample_type_seq'), ts.id, tos.id, 'Y', v.sort_order, now()
+            FROM clinlims.test_section ts
+            JOIN (VALUES
+                ('sputum', 1),
+                ('bronchoalveolar lavage', 2),
+                ('pleural fluid', 3),
+                ('cerebrospinal fluid', 4),
+                ('tissue', 5),
+                ('body fluid', 6),
+                ('urine', 7),
+                ('stool', 8),
+                ('lymph node', 9)
+            ) AS v(description, sort_order) ON true
+            JOIN clinlims.type_of_sample tos ON LOWER(tos.description) = v.description
+            WHERE ts.name = 'Tuberculosis Laboratory'
+              AND NOT EXISTS (
+                  SELECT 1 FROM clinlims.department_sample_type dst
+                  WHERE dst.test_section_id = ts.id AND dst.sample_type_id = tos.id
+              );
+        </sql>
+    </changeSet>
+
+</databaseChangeLog>

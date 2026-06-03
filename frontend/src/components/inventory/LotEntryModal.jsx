@@ -348,7 +348,7 @@ const LotEntryModal = ({ open, onClose, onSave, lot = null }) => {
           kind="info"
           lowContrast
           hideCloseButton
-          subtitle="Permanent equipment assets are created in Catalog. This form receives stock lots for reagents, consumables, cartridges, kits, and other stock categories only."
+          subtitle="Permanent equipment assets are registered from the Inventory Dashboard using Register Equipment. This form receives stock lots for reagents, consumables, cartridges, kits, and other stock categories only."
           title="Stock lot receiving"
         />
 
