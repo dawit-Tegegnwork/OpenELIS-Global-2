@@ -26,7 +26,7 @@ import {
   useESign,
 } from "../../../esignature";
 import PermissionGate from "../../../security/PermissionGate";
-import { Permissions } from "../../../../constants/roles";
+import useStagePersonas from "../../../../hooks/useStagePersonas";
 
 /**
  * MNTDReceptionVerificationPage - Page 2 of the MNTD workflow.
@@ -53,6 +53,7 @@ function MNTDReceptionVerificationPage({
   notebookId: _notebookId,
 }) {
   const intl = useIntl();
+  const stageEditRoles = useStagePersonas("mntd", pageData);
   const componentMounted = useRef(false);
 
   // State for samples
@@ -569,8 +570,10 @@ function MNTDReceptionVerificationPage({
 
         {selectedSampleIds.length > 0 && (
           <PermissionGate
-            roles={Permissions.VALIDATE_RESULTS}
-            disabledTooltip="You need validation permission to mark samples as verified"
+            roles={stageEditRoles}
+            requireActiveDepartment
+            departmentDeniedTooltip="Select your active MNTD department in the header first"
+            disabledTooltip="You do not have permission for this workflow stage"
           >
             <Button
               kind="secondary"

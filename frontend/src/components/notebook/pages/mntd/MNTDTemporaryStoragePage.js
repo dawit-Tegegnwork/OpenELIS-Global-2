@@ -45,12 +45,16 @@ import SendToBiorepositoryModal, {
   mapPageSamplesForBiorepositoryTransfer,
 } from "../biorepository/SendToBiorepositoryModal";
 import {
+  applyMntdBiorepositoryTransferSuccess,
+  computeInStorageCount,
+} from "./mntdStorageHelpers";
+import {
   ESignatureModal,
   SignatureMeaning,
   useESign,
 } from "../../../esignature";
 import PermissionGate from "../../../security/PermissionGate";
-import { Permissions } from "../../../../constants/roles";
+import useStagePersonas from "../../../../hooks/useStagePersonas";
 
 /**
  * MNTDTemporaryStoragePage - Page 3 of the MNTD workflow.
@@ -77,6 +81,7 @@ function MNTDTemporaryStoragePage({
   notebookId,
 }) {
   const intl = useIntl();
+  const stageEditRoles = useStagePersonas("mntd", pageData);
   const componentMounted = useRef(false);
 
   // E-signature: pending action ref for shared AUTHORED hook
@@ -838,6 +843,45 @@ function MNTDTemporaryStoragePage({
     [samples, selectedSampleIds],
   );
 
+  const handleBiorepositoryTransferSuccess = useCallback(
+    (transferResponse) => {
+      if (!hasRealPageId) {
+        setError("Cannot update samples: Page not properly initialized.");
+        return;
+      }
+      const idsForTransfer = [...selectedSampleIds];
+      applyMntdBiorepositoryTransferSuccess({
+        pageId: pageData.id,
+        selectedSampleIds: idsForTransfer,
+        transferResponse,
+        userName: localStorage.getItem("userName") || "System",
+        postToOpenElisServerJsonResponse,
+        onComplete: ({ transferResponse: response, count }) => {
+          if (!componentMounted.current) {
+            return;
+          }
+          setSuccessMessage(
+            intl.formatMessage(
+              {
+                id: "notebook.mntd.tempStorage.biorepoSuccess",
+                defaultMessage:
+                  "Transferred {count} sample(s) to biorepository. Transfer request #{transferId}. Samples removed from this step.",
+              },
+              {
+                count,
+                transferId: response.id,
+              },
+            ),
+          );
+          setSelectedSampleIds([]);
+          loadPageSamples();
+        },
+        onError: (message) => setError(message),
+      });
+    },
+    [hasRealPageId, pageData?.id, selectedSampleIds, intl, loadPageSamples],
+  );
+
   return (
     <div className="mntd-temporary-storage-page">
       {/* Page Header */}
@@ -901,7 +945,7 @@ function MNTDTemporaryStoragePage({
                 />
               </span>
               <span className="progress-value">
-                {storedCount - completedCount}
+                {computeInStorageCount(storedCount, completedCount)}
               </span>
             </Tile>
             <Tile className="progress-tile">
@@ -948,8 +992,10 @@ function MNTDTemporaryStoragePage({
         </Button>
 
         <PermissionGate
-          roles={Permissions.VALIDATE_RESULTS}
-          disabledTooltip="You need validation permission to complete samples"
+          roles={stageEditRoles}
+          requireActiveDepartment
+          departmentDeniedTooltip="Select your active MNTD department in the header first"
+          disabledTooltip="You do not have permission for this workflow stage"
         >
           <Button
             kind="tertiary"
@@ -1310,12 +1356,8 @@ function MNTDTemporaryStoragePage({
         entryId={entryId}
         selectedSamples={bioTransferSamples}
         onSuccess={(response) => {
-          setSuccessMessage(
-            `Created biorepository transfer request #${response.id} for ${response.itemCount || bioTransferSamples.length} sample(s).`,
-          );
-          setSelectedSampleIds([]);
-          loadPageSamples();
-          if (onProgressUpdate) onProgressUpdate();
+          setBioTransferModalOpen(false);
+          handleBiorepositoryTransferSuccess(response);
         }}
         onError={(message) => setError(message)}
       />

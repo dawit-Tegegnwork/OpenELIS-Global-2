@@ -32,6 +32,9 @@ import {
 import SampleGrid from "../../workflow/SampleGrid";
 import MNTDManifestImportModal from "../../workflow/MNTDManifestImportModal";
 import BiorepoSampleImportPage from "../common/BiorepoSampleImportPage";
+import PermissionGate from "../../../security/PermissionGate";
+import { Permissions } from "../../../../constants/roles";
+import useStagePersonas from "../../../../hooks/useStagePersonas";
 import config from "../../../../config.json";
 import "../../workflow/NotebookWorkflow.css";
 
@@ -61,6 +64,7 @@ function MNTDSampleIntakePage({
   notebookId,
 }) {
   const intl = useIntl();
+  const stageEditRoles = useStagePersonas("mntd", pageData);
   const componentMounted = useRef(false);
 
   // State for samples
@@ -277,43 +281,64 @@ function MNTDSampleIntakePage({
 
       {/* Action Buttons */}
       <div className="page-actions-bar">
-        <Button
-          kind="secondary"
-          size="sm"
-          renderIcon={DataShare}
-          onClick={() => setBiorepoImportOpen(true)}
+        <PermissionGate
+          roles={Permissions.REGISTER_SAMPLES}
+          requireActiveDepartment
+          departmentDeniedTooltip="Select your active MNTD department in the header first"
+          disabledTooltip="You need Sample Collector, Laboratory Technician, or Lab Manager permission to register samples"
         >
-          <FormattedMessage
-            id="notebook.page.mntd.importFromBiorepo"
-            defaultMessage="Import from Biorepository"
-          />
-        </Button>
-
-        <Button
-          kind="primary"
-          size="sm"
-          renderIcon={Upload}
-          onClick={() => setImportModalOpen(true)}
-        >
-          <FormattedMessage
-            id="notebook.page.mntd.importManifest"
-            defaultMessage="Import from Manifest"
-          />
-        </Button>
-
-        {selectedSampleIds.length > 0 && (
           <Button
             kind="secondary"
             size="sm"
-            renderIcon={Checkmark}
-            onClick={handleBulkMarkRegistered}
+            renderIcon={DataShare}
+            onClick={() => setBiorepoImportOpen(true)}
           >
             <FormattedMessage
-              id="notebook.page.mntd.markRegistered"
-              defaultMessage="Mark as Registered ({count})"
-              values={{ count: selectedSampleIds.length }}
+              id="notebook.page.mntd.importFromBiorepo"
+              defaultMessage="Import from Biorepository"
             />
           </Button>
+        </PermissionGate>
+
+        <PermissionGate
+          roles={Permissions.REGISTER_SAMPLES}
+          requireActiveDepartment
+          departmentDeniedTooltip="Select your active MNTD department in the header first"
+          disabledTooltip="You need Sample Collector, Laboratory Technician, or Lab Manager permission to register samples"
+        >
+          <Button
+            kind="primary"
+            size="sm"
+            renderIcon={Upload}
+            onClick={() => setImportModalOpen(true)}
+          >
+            <FormattedMessage
+              id="notebook.page.mntd.importManifest"
+              defaultMessage="Import from Manifest"
+            />
+          </Button>
+        </PermissionGate>
+
+        {selectedSampleIds.length > 0 && (
+          <PermissionGate
+            roles={stageEditRoles.length > 0 ? stageEditRoles : Permissions.REGISTER_SAMPLES}
+            requireActiveDepartment
+            departmentDeniedTooltip="Select your active MNTD department in the header first"
+            disabledTooltip="You do not have permission to mark samples as registered"
+          >
+            <Button
+              kind="secondary"
+              size="sm"
+              renderIcon={Checkmark}
+              onClick={handleBulkMarkRegistered}
+            >
+              <FormattedMessage
+                id="notebook.page.mntd.markRegistered"
+                defaultMessage="Mark as Registered ({count})"
+                values={{ count: selectedSampleIds.length }}
+              />
+            </Button>
+          </PermissionGate>
         )}
       </div>
 

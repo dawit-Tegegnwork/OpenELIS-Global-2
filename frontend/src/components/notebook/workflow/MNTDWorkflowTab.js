@@ -18,6 +18,8 @@ import { Renew } from "@carbon/react/icons";
 import { FormattedMessage, useIntl } from "react-intl";
 import { getFromOpenElisServer } from "../../utils/Utils";
 import { usePageAccessControl } from "../../../hooks/usePageAccessControl";
+import { usePermissions } from "../../../hooks/usePermissions";
+import { hasActiveDepartmentScope } from "../../../security/departmentAccess";
 import config from "../../../config.json";
 import { NotificationContext } from "../../layout/Layout";
 import PageNavigation from "./PageNavigation";
@@ -80,6 +82,9 @@ const DEFAULT_MNTD_WORKFLOW_PAGES = [
 function MNTDWorkflowTab({ notebookId, entryId: propEntryId, linkedInstruments }) {
   const componentMounted = useRef(false);
   const intl = useIntl();
+  const { userSessionDetails, isGlobalAdmin } = usePermissions();
+  const requiresDepartmentSelection =
+    !isGlobalAdmin && !hasActiveDepartmentScope(userSessionDetails);
   const { notificationVisible, setNotificationVisible } =
     useContext(NotificationContext);
 
@@ -608,6 +613,23 @@ function MNTDWorkflowTab({ notebookId, entryId: propEntryId, linkedInstruments }
               subtitle={syncMessage.text}
               lowContrast
               onCloseButtonClick={() => setSyncMessage(null)}
+              style={{ marginTop: "0.5rem" }}
+            />
+          )}
+          {requiresDepartmentSelection && (
+            <InlineNotification
+              kind="warning"
+              title={intl.formatMessage({
+                id: "notebook.mntd.departmentRequired.title",
+                defaultMessage: "Active department required",
+              })}
+              subtitle={intl.formatMessage({
+                id: "notebook.mntd.departmentRequired.subtitle",
+                defaultMessage:
+                  "Select Malaria and Neglected Tropical Disease (MNTD) Laboratory in the header before registering or processing samples.",
+              })}
+              lowContrast
+              hideCloseButton
               style={{ marginTop: "0.5rem" }}
             />
           )}

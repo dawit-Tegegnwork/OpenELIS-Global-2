@@ -6,6 +6,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 import java.util.stream.Collectors;
+import org.openelisglobal.common.constants.Constants;
 import org.openelisglobal.common.constants.rbac.AHRIRoleCatalog;
 import org.openelisglobal.department.service.DepartmentIsolationService;
 import org.openelisglobal.notebook.valueholder.NoteBook;
@@ -101,6 +102,9 @@ public class NotebookStageAccessService {
 
         Set<String> userPersonas = getUserDepartmentPersonaNames(request,
                 departmentIsolationService.getSysUserId(request));
+        if (userPersonas.contains(AHRIRoleCatalog.normalizeRoleName(Constants.ROLE_LAB_MANAGER))) {
+            return;
+        }
         boolean allowed = allowedPersonas.stream().anyMatch(
                 persona -> userPersonas.contains(AHRIRoleCatalog.normalizeRoleName(persona)));
         if (!allowed) {

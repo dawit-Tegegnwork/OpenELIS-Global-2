@@ -67,13 +67,15 @@ export function sessionHasAnyRole(userSessionDetails, allowedRoleNames) {
     }
   }
   const activeLabUnit = getEffectiveLabUnitNameForRoleCheck(userSessionDetails);
-  if (!activeLabUnit) {
-    return false;
-  }
-  const labRoles = map[activeLabUnit] || [];
-  for (const name of allowedRoleNames) {
-    if (labRoles.includes(name)) {
+  if (activeLabUnit) {
+    const labRoles = map[activeLabUnit] || [];
+    if (labRoles.includes(ExtRoles.LAB_MANAGER)) {
       return true;
+    }
+    for (const name of allowedRoleNames) {
+      if (labRoles.includes(name)) {
+        return true;
+      }
     }
   }
   return false;

@@ -62,7 +62,7 @@ import {
   useESign,
 } from "../../../esignature";
 import PermissionGate from "../../../security/PermissionGate";
-import { Permissions } from "../../../../constants/roles";
+import useStagePersonas from "../../../../hooks/useStagePersonas";
 
 /**
  * MNTDAliquotingPage - Page 5 of the MNTD workflow.
@@ -97,6 +97,7 @@ function MNTDAliquotingPage({
   notebookId,
 }) {
   const intl = useIntl();
+  const stageEditRoles = useStagePersonas("mntd", pageData);
   const componentMounted = useRef(false);
 
   // E-signature: pending action ref for shared AUTHORED hook
@@ -1043,8 +1044,10 @@ function MNTDAliquotingPage({
 
               {selectedParentIds.length > 0 && (
                 <PermissionGate
-                  roles={Permissions.VALIDATE_RESULTS}
-                  disabledTooltip="You need validation permission to mark samples as completed"
+                  roles={stageEditRoles}
+                  requireActiveDepartment
+                  departmentDeniedTooltip="Select your active MNTD department in the header first"
+                  disabledTooltip="You do not have permission for this workflow stage"
                 >
                   <Button
                     kind="tertiary"

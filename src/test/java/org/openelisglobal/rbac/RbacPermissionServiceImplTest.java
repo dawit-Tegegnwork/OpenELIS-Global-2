@@ -78,6 +78,14 @@ public class RbacPermissionServiceImplTest {
     }
 
     @Test
+    public void labManagerCanRegisterSamples() {
+        when(userRoleService.getUserLabUnitRoles("42")).thenReturn(labUnitRoles("178", "role-lm"));
+        when(roleService.getRoleById("role-lm")).thenReturn(role(Constants.ROLE_LAB_MANAGER));
+
+        assertTrue(service.hasPermission(request, RbacAction.REGISTER_SAMPLES));
+    }
+
+    @Test
     public void foreignDepartmentRoleDoesNotApplyToActiveDepartment() {
         when(userRoleService.getUserLabUnitRoles("42")).thenReturn(labUnitRoles("177", "role-lab-manager"));
 

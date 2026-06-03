@@ -367,6 +367,8 @@ function UserAddModify() {
         }),
         message: intl.formatMessage({
           id: "notification.user.post.save.success",
+          defaultMessage:
+            "User saved successfully. Lab unit role changes take effect after the user logs out and back in.",
         }),
         kind: NotificationKinds.success,
       });

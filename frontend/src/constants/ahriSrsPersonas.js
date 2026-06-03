@@ -14,6 +14,7 @@ export const AHRI_SRS_LAB_PERSONAS = [
 export const sampleRegistrationPersonas = [
   "Sample Collector",
   "Laboratory Technician",
+  "Lab Manager",
 ];
 
 export const sampleProcessingPersonas = [

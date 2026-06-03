@@ -25,16 +25,17 @@ Bacteriology,bacteriology,6,test_execution,test_execution,Assay/Test Execution,V
 Bacteriology,bacteriology,7,post_storage,post_storage,Post-Analysis Storage,VIEW|EDIT|COMPLETE,Laboratory Technician|Lab Manager
 Bacteriology,bacteriology,8,disposal,disposal,"Sample Retrieval, Archival & Disposal",VIEW|EDIT|COMPLETE,Lab Manager
 Bacteriology,bacteriology,9,reporting,reporting,Reporting & Data Export,VIEW|EDIT|COMPLETE,Lab Manager|Senior Researcher
-Malaria and Neglected Tropical Disease (MNTD) Laboratory,mntd,1,intake,intake,Sample Intake / Sample Creation,VIEW|EDIT|COMPLETE,Sample Collector|Laboratory Technician
-Malaria and Neglected Tropical Disease (MNTD) Laboratory,mntd,2,lab_reception,lab_reception,Laboratory Reception & Verification,VIEW|EDIT|COMPLETE,Sample Collector|Laboratory Technician
+Malaria and Neglected Tropical Disease (MNTD) Laboratory,mntd,1,intake,intake,Sample Intake / Sample Creation,VIEW|EDIT|COMPLETE,Sample Collector|Laboratory Technician|Lab Manager
+Malaria and Neglected Tropical Disease (MNTD) Laboratory,mntd,2,lab_reception,lab_reception,Laboratory Reception & Verification,VIEW|EDIT|COMPLETE,Sample Collector|Laboratory Technician|Lab Manager
 Malaria and Neglected Tropical Disease (MNTD) Laboratory,mntd,3,temp_storage,temp_storage,Temporary Storage Assignment,VIEW|EDIT|COMPLETE,Laboratory Technician|Lab Manager
-Malaria and Neglected Tropical Disease (MNTD) Laboratory,mntd,4,prep,prep,Sample Processing Preparation,VIEW|EDIT|COMPLETE,Laboratory Technician|Junior Researcher|Senior Researcher
-Malaria and Neglected Tropical Disease (MNTD) Laboratory,mntd,5,aliquot,aliquot,Aliquoting / Bulk Sample Import,VIEW|EDIT|COMPLETE,Laboratory Technician|Junior Researcher|Senior Researcher
+Malaria and Neglected Tropical Disease (MNTD) Laboratory,mntd,4,prep,prep,Sample Processing Preparation,VIEW|EDIT|COMPLETE,Laboratory Technician|Junior Researcher|Senior Researcher|Lab Manager
+Malaria and Neglected Tropical Disease (MNTD) Laboratory,mntd,5,aliquot,aliquot,Aliquoting / Bulk Sample Import,VIEW|EDIT|COMPLETE,Laboratory Technician|Junior Researcher|Senior Researcher|Lab Manager
 Malaria and Neglected Tropical Disease (MNTD) Laboratory,mntd,6,processing_qc,processing_qc,Processing & Quality Control,VIEW|EDIT|COMPLETE,Laboratory Technician|Lab Manager
-Malaria and Neglected Tropical Disease (MNTD) Laboratory,mntd,7,scheduling,scheduling,Test Assignment & Machine Scheduling,VIEW|EDIT|COMPLETE,Laboratory Technician|Junior Researcher|Senior Researcher
-Malaria and Neglected Tropical Disease (MNTD) Laboratory,mntd,8,execution,execution,Test Execution & Raw Data Capture,VIEW|EDIT|COMPLETE,Laboratory Technician|Junior Researcher|Senior Researcher
+Malaria and Neglected Tropical Disease (MNTD) Laboratory,mntd,7,scheduling,scheduling,Test Assignment & Machine Scheduling,VIEW|EDIT|COMPLETE,Laboratory Technician|Junior Researcher|Senior Researcher|Lab Manager
+Malaria and Neglected Tropical Disease (MNTD) Laboratory,mntd,8,execution,execution,Test Execution & Raw Data Capture,VIEW|EDIT|COMPLETE,Laboratory Technician|Junior Researcher|Senior Researcher|Lab Manager
 Malaria and Neglected Tropical Disease (MNTD) Laboratory,mntd,9,archiving,archiving,Sample Archiving,VIEW|EDIT|COMPLETE,Lab Manager
 Malaria and Neglected Tropical Disease (MNTD) Laboratory,mntd,10,analysis,analysis,Data Analysis & Export,VIEW|EDIT|COMPLETE,Lab Manager|Senior Researcher
+Malaria and Neglected Tropical Disease (MNTD) Laboratory,mntd,11,reporting,reporting,Reporting & REDCap Integration,VIEW|EDIT|COMPLETE,Lab Manager|Senior Researcher
 Tuberculosis Laboratory,tuberculosis,1,accession,accession,Sample Accession & Registration,VIEW|EDIT|COMPLETE,Sample Collector|Laboratory Technician
 Tuberculosis Laboratory,tuberculosis,2,qc,qc,Raw Sample Quality Check (QC),VIEW|EDIT|COMPLETE,Laboratory Technician|Lab Manager
 Tuberculosis Laboratory,tuberculosis,3,processing,processing,Initial Sample Processing,VIEW|EDIT|COMPLETE,Laboratory Technician|Junior Researcher|Senior Researcher

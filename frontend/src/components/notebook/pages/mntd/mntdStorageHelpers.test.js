@@ -1,6 +1,8 @@
 import {
   allSelectedHaveExistingStorage,
+  applyMntdBiorepositoryTransferSuccess,
   coerceDisplayValue,
+  computeInStorageCount,
   enrichSampleForBiorepositoryTransfer,
   formatCurrentStorage,
   hasExistingStorage,
@@ -56,5 +58,34 @@ describe("mntdStorageHelpers", () => {
     expect(enriched.preservationMedium).toBe("None");
     expect(enriched.quantity).toBe(1);
     expect(enriched.collectionDate).toBeTruthy();
+  });
+
+  it("clamps in-storage count at zero", () => {
+    expect(computeInStorageCount(2, 5)).toBe(0);
+    expect(computeInStorageCount(5, 2)).toBe(3);
+  });
+
+  it("marks samples completed after biorepository transfer", () => {
+    const calls = [];
+    const post = jest.fn((url, body, cb) => {
+      calls.push(url);
+      cb({ success: true });
+    });
+
+    applyMntdBiorepositoryTransferSuccess({
+      pageId: 99,
+      selectedSampleIds: ["1", "2"],
+      transferResponse: { id: 42, status: "PENDING" },
+      userName: "tester",
+      postToOpenElisServerJsonResponse: post,
+      onComplete: jest.fn(),
+      onError: jest.fn(),
+    });
+
+    expect(calls).toEqual([
+      "/rest/notebook/bulk/page/99/samples/apply",
+      "/rest/notebook/bulk/page/99/samples/status",
+    ]);
+    expect(post).toHaveBeenCalledTimes(2);
   });
 });

@@ -200,10 +200,27 @@ export const usePermissions = () => {
     [userSessionDetails, isGlobalAdminUser],
   );
 
+  const hasLabManagerForActiveDepartment = useCallback(() => {
+    if (!userSessionDetails?.authenticated) {
+      return false;
+    }
+    const map = userSessionDetails.userLabRolesMap || {};
+    const allLabRoles = map["AllLabUnits"] || [];
+    if (allLabRoles.includes(Roles.LAB_MANAGER)) {
+      return true;
+    }
+    const activeLabUnit = userSessionDetails.loginLabUnit;
+    if (!activeLabUnit) {
+      return false;
+    }
+    const activeRoles = map[activeLabUnit] || [];
+    return activeRoles.includes(Roles.LAB_MANAGER);
+  }, [userSessionDetails]);
+
   /**
    * SRS workflow stage personas for the active department only.
-   * Global admins bypass. Users with AllLabUnits keep cross-lab persona access
-   * for notebook stage UX, matching the broader permission model used elsewhere.
+   * Global admins bypass. Lab Manager on active department has supervisor
+   * override per SRS access matrix (full lab process access).
    */
   const hasPersonaForActiveDepartment = useCallback(
     (roleList) => {
@@ -214,6 +231,9 @@ export const usePermissions = () => {
         return false;
       }
       if (isGlobalAdminUser()) {
+        return true;
+      }
+      if (hasLabManagerForActiveDepartment()) {
         return true;
       }
       const map = userSessionDetails.userLabRolesMap || {};
@@ -228,7 +248,7 @@ export const usePermissions = () => {
       const activeRoles = map[activeLabUnit] || [];
       return roleList.some((r) => activeRoles.includes(r));
     },
-    [userSessionDetails, isGlobalAdminUser],
+    [userSessionDetails, isGlobalAdminUser, hasLabManagerForActiveDepartment],
   );
 
   /**

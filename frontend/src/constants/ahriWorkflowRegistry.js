@@ -419,7 +419,8 @@ const REGISTRY_BY_WORKFLOW_TYPE = {
       ],
       "allowedPersonas": [
         "Sample Collector",
-        "Laboratory Technician"
+        "Laboratory Technician",
+        "Lab Manager"
       ]
     },
     {
@@ -434,7 +435,8 @@ const REGISTRY_BY_WORKFLOW_TYPE = {
       ],
       "allowedPersonas": [
         "Sample Collector",
-        "Laboratory Technician"
+        "Laboratory Technician",
+        "Lab Manager"
       ]
     },
     {
@@ -465,7 +467,8 @@ const REGISTRY_BY_WORKFLOW_TYPE = {
       "allowedPersonas": [
         "Laboratory Technician",
         "Junior Researcher",
-        "Senior Researcher"
+        "Senior Researcher",
+        "Lab Manager"
       ]
     },
     {
@@ -481,7 +484,8 @@ const REGISTRY_BY_WORKFLOW_TYPE = {
       "allowedPersonas": [
         "Laboratory Technician",
         "Junior Researcher",
-        "Senior Researcher"
+        "Senior Researcher",
+        "Lab Manager"
       ]
     },
     {
@@ -512,7 +516,8 @@ const REGISTRY_BY_WORKFLOW_TYPE = {
       "allowedPersonas": [
         "Laboratory Technician",
         "Junior Researcher",
-        "Senior Researcher"
+        "Senior Researcher",
+        "Lab Manager"
       ]
     },
     {
@@ -528,7 +533,8 @@ const REGISTRY_BY_WORKFLOW_TYPE = {
       "allowedPersonas": [
         "Laboratory Technician",
         "Junior Researcher",
-        "Senior Researcher"
+        "Senior Researcher",
+        "Lab Manager"
       ]
     },
     {
@@ -550,6 +556,21 @@ const REGISTRY_BY_WORKFLOW_TYPE = {
       "stageId": "analysis",
       "pageKey": "analysis",
       "stageTitle": "Data Analysis & Export",
+      "requiredActions": [
+        "VIEW",
+        "EDIT",
+        "COMPLETE"
+      ],
+      "allowedPersonas": [
+        "Lab Manager",
+        "Senior Researcher"
+      ]
+    },
+    {
+      "stageOrder": 11,
+      "stageId": "reporting",
+      "pageKey": "reporting",
+      "stageTitle": "Reporting & REDCap Integration",
       "requiredActions": [
         "VIEW",
         "EDIT",

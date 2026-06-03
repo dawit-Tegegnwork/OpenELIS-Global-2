@@ -26,7 +26,8 @@ public class RbacPermissionServiceImpl implements RbacPermissionService {
 
     static {
         put(RbacAction.REGISTER_SAMPLES,
-                Constants.ROLE_SAMPLE_COLLECTOR, Constants.ROLE_LABORATORY_TECHNICIAN);
+                Constants.ROLE_SAMPLE_COLLECTOR, Constants.ROLE_LABORATORY_TECHNICIAN,
+                Constants.ROLE_LAB_MANAGER);
         put(RbacAction.PROCESS_SAMPLES,
                 Constants.ROLE_LABORATORY_TECHNICIAN, Constants.ROLE_JUNIOR_RESEARCHER,
                 Constants.ROLE_SENIOR_RESEARCHER);

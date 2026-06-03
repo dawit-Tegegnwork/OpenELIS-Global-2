@@ -102,6 +102,25 @@ public class NotebookStageAccessRbacMatrixTest {
     }
 
     @Test
+    public void labManagerOnly_allowedOnIntakeViaSupervisorOverride() {
+        when(departmentIsolationService.hasUnrestrictedDepartmentAccess(request)).thenReturn(false);
+        when(departmentIsolationService.getRestrictedUserTestSectionIds(request)).thenReturn(Set.of(5));
+        doNothing().when(departmentIsolationService).assertNotebookDepartmentAccess(any(), any());
+        when(departmentIsolationService.getSysUserId(request)).thenReturn("42");
+        when(workflowRegistryService.isActionPermitted("biorepository", "intake", 1, NotebookStageAction.EDIT))
+                .thenReturn(true);
+        when(workflowRegistryService.resolveAllowedPersonasForAction(any(), any(), any(), any(), any(), any()))
+                .thenReturn(List.of("Sample Collector", "Laboratory Technician"));
+        when(userRoleService.getRoleIdsForUser("42")).thenReturn(List.of("r1"));
+        Role manager = new Role();
+        manager.setName("Lab Manager");
+        when(roleService.getRoleById("r1")).thenReturn(manager);
+        when(userRoleService.getUserLabUnitRoles("42")).thenReturn(null);
+
+        service.assertStageAccess(request, notebook, page, NotebookStageAction.EDIT);
+    }
+
+    @Test
     public void sampleCollector_allowedOnIntake() {
         when(departmentIsolationService.hasUnrestrictedDepartmentAccess(request)).thenReturn(false);
         when(departmentIsolationService.getRestrictedUserTestSectionIds(request)).thenReturn(Set.of(5));

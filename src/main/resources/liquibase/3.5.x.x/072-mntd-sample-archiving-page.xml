@@ -153,6 +153,8 @@
     </changeSet>
 
     <changeSet id="mntd-workflow-template-sample-archiving" author="openelis-mntd">
+        <validCheckSum>8:1e81be2af1bcc999cd4a14cc755b55dc</validCheckSum>
+        <validCheckSum>8:418ef49d8ce9a2857431cf140c736ce4</validCheckSum>
         <preConditions onFail="MARK_RAN">
             <tableExists tableName="workflow_page_template" schemaName="clinlims"/>
             <sqlCheck expectedResult="0">
