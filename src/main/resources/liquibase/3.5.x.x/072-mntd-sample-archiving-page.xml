@@ -140,6 +140,18 @@
         </sql>
     </changeSet>
 
+    <changeSet id="mntd-sync-workflow-page-template-seq" author="openelis-mntd">
+        <preConditions onFail="MARK_RAN">
+            <tableExists tableName="workflow_page_template" schemaName="clinlims"/>
+        </preConditions>
+        <comment>Sync workflow_page_template_seq past any explicit IDs before insert</comment>
+        <sql>
+            SELECT setval('clinlims.workflow_page_template_seq',
+                COALESCE((SELECT MAX(id) FROM clinlims.workflow_page_template), 0) + 1,
+                false);
+        </sql>
+    </changeSet>
+
     <changeSet id="mntd-workflow-template-sample-archiving" author="openelis-mntd">
         <preConditions onFail="MARK_RAN">
             <tableExists tableName="workflow_page_template" schemaName="clinlims"/>
@@ -161,7 +173,7 @@
         </sql>
 
         <insert tableName="workflow_page_template" schemaName="clinlims">
-            <column name="id" value="108"/>
+            <column name="id" valueSequenceNext="workflow_page_template_seq"/>
             <column name="name" value="Sample Archiving"/>
             <column name="display_key" value="workflow.page.mntd.sampleArchiving"/>
             <column name="description" value="Archive samples after test execution via retention, disposal, or biorepository transfer"/>
