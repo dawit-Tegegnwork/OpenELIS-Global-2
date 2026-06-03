@@ -17,6 +17,7 @@ import {
   getFromOpenElisServer,
   postToOpenElisServerFullResponse,
 } from "../utils/Utils";
+import { buildLinkedEquipmentInstrumentsUrl } from "../notebook/notebookLinkedEquipment";
 
 /**
  * CartridgeUsageAPI - Simplified interface for equipment usage tracking
@@ -30,6 +31,27 @@ export const CartridgeUsageAPI = {
   getCartridges: (callback, signal = null) => {
     getFromOpenElisServer(
       "/rest/inventory/items/type/EQUIPMENT",
+      (data, error) => {
+        if (error) {
+          callback(undefined, error);
+        } else {
+          callback(data);
+        }
+      },
+      signal,
+    );
+  },
+
+  /**
+   * Permanent (EQUIPMENT) catalog items for the active department.
+   * Includes items without registered asset lots (requireLots=false).
+   */
+  getDepartmentPermanentEquipment: (departmentId, callback, signal = null) => {
+    const url = buildLinkedEquipmentInstrumentsUrl(
+      departmentId ? [departmentId] : [],
+    );
+    getFromOpenElisServer(
+      url,
       (data, error) => {
         if (error) {
           callback(undefined, error);

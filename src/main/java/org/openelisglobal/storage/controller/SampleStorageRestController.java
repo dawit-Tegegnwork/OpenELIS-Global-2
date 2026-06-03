@@ -618,6 +618,20 @@ public class SampleStorageRestController extends BaseRestController {
         if (row == null) {
             return false;
         }
+        if (departmentIsolationService.hasUnrestrictedDepartmentAccess(request)) {
+            return true;
+        }
+
+        Object storageDepartmentId = row.get("departmentTestSectionId");
+        if (storageDepartmentId != null) {
+            try {
+                Integer departmentId = Integer.valueOf(String.valueOf(storageDepartmentId));
+                return departmentIsolationService.canAccessDepartmentScopedLocation(departmentId, request);
+            } catch (NumberFormatException ignored) {
+                // fall through to notebook-based access for malformed department ids
+            }
+        }
+
         Object sampleItemId = row.get("sampleItemId");
         if (sampleItemId == null) {
             sampleItemId = row.get("id");

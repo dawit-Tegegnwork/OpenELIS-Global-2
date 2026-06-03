@@ -62,7 +62,7 @@ public class NotebookEntryDAOImpl extends BaseDAOImpl<NotebookEntry, Integer> im
         Query<NotebookEntry> query = session.createQuery(
                 "SELECT DISTINCT e FROM NotebookEntry e JOIN e.samples s WHERE s.id = :sampleItemId ORDER BY e.dateCreated DESC",
                 NotebookEntry.class);
-        query.setParameter("sampleItemId", String.valueOf(sampleItemId));
+        query.setParameter("sampleItemId", sampleItemId);
         return query.list();
     }
 

@@ -47,6 +47,7 @@ import {
   postToOpenElisServerForPDF,
 } from "../utils/Utils";
 import config from "../../config.json";
+import { usePermissions } from "../../hooks/usePermissions";
 import {
   getStorageCoordinateLabel,
   resolveOccupancyAtCell,
@@ -88,6 +89,7 @@ const StorageDashboard = () => {
     updateSampleItemMetadata,
     isSubmitting: isMovingSample,
   } = useSampleStorage();
+  const { userSessionDetails, isGlobalAdmin } = usePermissions();
 
   // Metric cards state
   const [metrics, setMetrics] = useState({
@@ -245,6 +247,33 @@ const StorageDashboard = () => {
   const [filterRoom, setFilterRoom] = useState(""); // Sample Items + other tabs
   const [filterDevice, setFilterDevice] = useState(""); // Sample Items + other tabs
   const [filterStatus, setFilterStatus] = useState("");
+
+  // Department-scoped users: default Sample Items filter to the active header department.
+  useEffect(() => {
+    if (isGlobalAdmin || selectedTab !== 0) {
+      return;
+    }
+    const loginDeptId = userSessionDetails?.loginLabUnitId;
+    if (!loginDeptId) {
+      return;
+    }
+    setFilterDepartment((current) => (current ? current : String(loginDeptId)));
+  }, [isGlobalAdmin, selectedTab, userSessionDetails?.loginLabUnitId]);
+
+  // Avoid showing stale rows while a new department/location filter is loading.
+  useEffect(() => {
+    if (selectedTab === 0) {
+      setSamples([]);
+      setTotalItems(0);
+    }
+  }, [
+    filterDepartment,
+    filterRoom,
+    filterDevice,
+    filterStatus,
+    searchTerm,
+    selectedTab,
+  ]);
 
   const [loading, setLoading] = useState(true);
 

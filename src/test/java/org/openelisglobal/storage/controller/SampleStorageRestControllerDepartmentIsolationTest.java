@@ -78,23 +78,34 @@ public class SampleStorageRestControllerDepartmentIsolationTest {
     }
 
     @Test
+    public void getSampleItemsIncludesRowsWhenStorageDepartmentMatches() throws Exception {
+        Map<String, Object> row = Map.of(
+                "sampleItemId", "42",
+                "departmentTestSectionId", 177,
+                "location", "ZN2 > FZ6");
+        when(storageDashboardService.filterSamples(null, null)).thenReturn(new ArrayList<>(List.of(row)));
+        when(departmentIsolationService.hasUnrestrictedDepartmentAccess(org.mockito.ArgumentMatchers.any()))
+                .thenReturn(false);
+        when(departmentIsolationService.canAccessDepartmentScopedLocation(eq(177), org.mockito.ArgumentMatchers.any()))
+                .thenReturn(true);
+
+        mockMvc.perform(get("/rest/storage/sample-items").param("size", "25"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.totalItems").value(1))
+                .andExpect(jsonPath("$.items[0].sampleItemId").value("42"));
+    }
+
+    @Test
     public void getSampleItemsExcludesRowsInForeignDepartmentLocations() throws Exception {
         Map<String, Object> row = Map.of(
                 "sampleItemId", "42",
+                "departmentTestSectionId", 182,
                 "location", "Foreign Room > Foreign Device");
-        SampleStorageAssignment assignment = new SampleStorageAssignment();
-        assignment.setSampleItemId(42);
-        assignment.setLocationType("room");
-        assignment.setLocationId(200);
-        StorageRoom room = new StorageRoom();
-        room.setId(200);
 
         when(storageDashboardService.filterSamples(null, null)).thenReturn(new ArrayList<>(List.of(row)));
-        when(departmentIsolationService.canAccessSampleItemIdentifier(eq("42"), org.mockito.ArgumentMatchers.any()))
-                .thenReturn(true);
-        when(sampleStorageAssignmentDAO.findBySampleItemId("42")).thenReturn(assignment);
-        when(storageLocationService.get(eq(200), eq(StorageRoom.class))).thenReturn(room);
-        when(departmentIsolationService.canAccessStorageRoom(eq(room), org.mockito.ArgumentMatchers.any()))
+        when(departmentIsolationService.hasUnrestrictedDepartmentAccess(org.mockito.ArgumentMatchers.any()))
+                .thenReturn(false);
+        when(departmentIsolationService.canAccessDepartmentScopedLocation(eq(182), org.mockito.ArgumentMatchers.any()))
                 .thenReturn(false);
 
         mockMvc.perform(get("/rest/storage/sample-items").param("size", "25"))

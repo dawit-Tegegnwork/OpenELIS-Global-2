@@ -37,12 +37,22 @@ const ChooseEquipmentModal = ({
     return equipment.filter(
       (item) =>
         (item.name && item.name.toLowerCase().includes(lowerSearchTerm)) ||
+        (item.serialNumber &&
+          item.serialNumber.toLowerCase().includes(lowerSearchTerm)) ||
         (item.catalogNumber &&
           item.catalogNumber.toLowerCase().includes(lowerSearchTerm)) ||
         (item.manufacturer &&
           item.manufacturer.toLowerCase().includes(lowerSearchTerm)),
     );
   }, [equipment, searchTerm]);
+
+  const equipmentListKey = (item) => {
+    if (item?.lotId) {
+      return `lot-${item.lotId}`;
+    }
+    const itemId = item?.itemId ?? item?.id;
+    return itemId != null ? `item-${itemId}` : `row-${item?.name || "unknown"}`;
+  };
 
   const handleSelectEquipment = (selectedItem) => {
     onSelectEquipment(selectedItem);
@@ -107,12 +117,16 @@ const ChooseEquipmentModal = ({
           {filteredEquipment && filteredEquipment.length > 0 ? (
             <ul className="equipmentList">
               {filteredEquipment.map((item) => (
-                <li key={item.id} className="equipmentListItem">
+                <li key={equipmentListKey(item)} className="equipmentListItem">
                   <div className="equipmentInfo">
                     <div className="equipmentName">{item.name}</div>
                     <div className="equipmentDetails">
                       <span className="equipmentSerial">
-                        {item.catalogNumber || "No serial"}
+                        {item.serialNumber ||
+                          intl.formatMessage({
+                            id: "equipment.usage.noSerial",
+                            defaultMessage: "No serial",
+                          })}
                       </span>
                       {item.manufacturer && (
                         <span className="equipmentManufacturer">

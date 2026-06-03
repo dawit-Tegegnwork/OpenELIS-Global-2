@@ -1,5 +1,5 @@
 import { useState, useEffect, useContext, useCallback } from "react";
-import { Button, Grid, Column, Loading } from "@carbon/react";
+import { Button, Grid, Column, Loading, InlineNotification } from "@carbon/react";
 import { FormattedMessage, useIntl } from "react-intl";
 import { NotificationContext } from "../layout/Layout";
 import { AlertDialog, NotificationKinds } from "../common/CustomNotification";
@@ -10,6 +10,24 @@ import ChooseEquipmentModal from "./modals/ChooseEquipment";
 import "./EquipmentUsage.css";
 import PermissionGate from "../security/PermissionGate";
 import { equipmentMutationRoles } from "../../security/rbacActions";
+import { usePermissions } from "../../hooks/usePermissions";
+import { hasActiveDepartmentScope } from "../../security/departmentAccess";
+
+const normalizePermanentEquipment = (items) =>
+  (items || []).map((item) => {
+    const itemId = item?.itemId ?? item?.id;
+    return {
+      ...item,
+      id: itemId,
+      itemId,
+      serialNumber: item?.serialNumber || item?.catalogNumber || "",
+    };
+  });
+
+const getEquipmentSerialLabel = (item) =>
+  item?.serialNumber ||
+  item?.catalogNumber ||
+  "No serial";
 
 /**
  * EquipmentUsageLog Component
@@ -32,8 +50,13 @@ import { equipmentMutationRoles } from "../../security/rbacActions";
 const EquipmentUsageLog = ({ onSubmitSuccess }) => {
   const intl = useIntl();
   const { userSessionDetails } = useContext(UserSessionDetailsContext);
+  const { isGlobalAdmin } = usePermissions();
   const { setNotificationVisible, addNotification } =
     useContext(NotificationContext);
+
+  const loginLabUnitId = userSessionDetails?.loginLabUnitId;
+  const needsActiveDepartment =
+    !isGlobalAdmin && !hasActiveDepartmentScope(userSessionDetails);
 
   const notify = useCallback(
     ({ kind = NotificationKinds.info, title, subtitle, message }) => {
@@ -74,54 +97,60 @@ const EquipmentUsageLog = ({ onSubmitSuccess }) => {
   // Form State
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // Load Equipment (Cartridges) on Mount
+  // Load department-scoped permanent equipment when session department changes
   useEffect(() => {
-    const fetchEquipment = async () => {
-      setLoadingEquipment(true);
+    if (needsActiveDepartment) {
+      setEquipment([]);
+      setSelectedEquipment(null);
+      setLoadingEquipment(false);
       setEquipmentError(null);
-      try {
-        // Fetch cartridges from inventory
-        CartridgeUsageAPI.getCartridges((data, error) => {
-          if (error) {
-            notify({
-              kind: NotificationKinds.error,
-              title: intl.formatMessage({ id: "notification.error" }),
-              message: intl.formatMessage({
-                id: "equipment.error.loadFailed",
-                defaultMessage: "Failed to load equipment",
-              }),
-            });
-            setLoadingEquipment(false);
-          } else if (data && Array.isArray(data)) {
-            setEquipment(data);
-            setLoadingEquipment(false);
-          } else {
-            notify({
-              kind: NotificationKinds.error,
-              title: intl.formatMessage({ id: "notification.error" }),
-              message: intl.formatMessage({
-                id: "equipment.error.loadFailed",
-                defaultMessage: "Failed to load equipment",
-              }),
-            });
-            setLoadingEquipment(false);
-          }
-        });
-      } catch (error) {
-        notify({
-          kind: NotificationKinds.error,
-          title: intl.formatMessage({ id: "notification.error" }),
-          message: intl.formatMessage({
-            id: "equipment.error.loadFailed",
-            defaultMessage: "Failed to load equipment",
-          }),
-        });
-        setLoadingEquipment(false);
-      }
-    };
+      return undefined;
+    }
 
-    fetchEquipment();
-  }, [intl, notify]);
+    const controller = new AbortController();
+    setLoadingEquipment(true);
+    setEquipmentError(null);
+
+    CartridgeUsageAPI.getDepartmentPermanentEquipment(
+      loginLabUnitId || null,
+      (data, error) => {
+        if (controller.signal.aborted) {
+          return;
+        }
+        if (error) {
+          setEquipmentError(
+            intl.formatMessage({
+              id: "equipment.error.loadFailed",
+              defaultMessage: "Failed to load equipment",
+            }),
+          );
+          notify({
+            kind: NotificationKinds.error,
+            title: intl.formatMessage({ id: "notification.error" }),
+            message: intl.formatMessage({
+              id: "equipment.error.loadFailed",
+              defaultMessage: "Failed to load equipment",
+            }),
+          });
+          setLoadingEquipment(false);
+        } else if (data && Array.isArray(data)) {
+          setEquipment(normalizePermanentEquipment(data));
+          setLoadingEquipment(false);
+        } else {
+          setEquipmentError(
+            intl.formatMessage({
+              id: "equipment.error.loadFailed",
+              defaultMessage: "Failed to load equipment",
+            }),
+          );
+          setLoadingEquipment(false);
+        }
+      },
+      controller.signal,
+    );
+
+    return () => controller.abort();
+  }, [intl, loginLabUnitId, needsActiveDepartment, notify]);
 
   useEffect(() => {
     CartridgeUsageAPI.getAssignableDepartments((data) => {
@@ -217,110 +246,75 @@ const EquipmentUsageLog = ({ onSubmitSuccess }) => {
 
     setIsSubmitting(true);
     try {
-      // Get the first available lot for this equipment
-      CartridgeUsageAPI.getAvailableLots(
-        selectedEquipment.id,
-        (lots) => {
-          if (!lots || lots.length === 0) {
+      const catalogItemId = selectedEquipment.itemId ?? selectedEquipment.id;
+
+      const submitWithLot = (lot) => {
+        if (!lot?.id) {
+          notify({
+            kind: NotificationKinds.error,
+            title: intl.formatMessage({ id: "notification.error" }),
+            message: intl.formatMessage({
+              id: "equipment.usage.error.noLotsAvailable",
+            }),
+          });
+          setIsSubmitting(false);
+          return;
+        }
+
+        let lastResponse = null;
+
+        const submitNextRow = (rowIndex) => {
+          if (rowIndex >= usageRows.length) {
             notify({
-              kind: NotificationKinds.error,
-              title: intl.formatMessage({ id: "notification.error" }),
+              kind: NotificationKinds.success,
+              title: intl.formatMessage({ id: "notification.success" }),
               message: intl.formatMessage({
-                id: "equipment.usage.error.noLotsAvailable",
+                id: "equipment.usage.message.recordedSuccess",
               }),
             });
+
+            setSelectedEquipment(null);
+            setUsageRows([]);
+
+            if (onSubmitSuccess && lastResponse) {
+              onSubmitSuccess(lastResponse);
+            }
+
             setIsSubmitting(false);
             return;
           }
 
-          // Use the first available lot
-          const lot = lots[0];
+          const row = usageRows[rowIndex];
 
-          // Submit each row with all form data to the new /submit endpoint
-          let lastResponse = null;
-          let submitCount = 0;
+          const entryRequest = {
+            itemId: catalogItemId,
+            lotId: lot.id,
+            quantity: 1,
+            labUnitId: userSessionDetails?.labUnit || "",
+            operatorName: row.operatorName,
+            date: row.date,
+            loginTime: row.loginTime,
+            activities: row.activities,
+            equipmentStatus: row.equipmentStatus,
+            logoutTime: row.logoutTime,
+            approvedBy: row.approvedBy,
+            approvalDate: row.approvalDate,
+          };
 
-          const submitNextRow = (rowIndex) => {
-            if (rowIndex >= usageRows.length) {
-              // All rows submitted successfully
-              notify({
-                kind: NotificationKinds.success,
-                title: intl.formatMessage({ id: "notification.success" }),
-                message: intl.formatMessage({
-                  id: "equipment.usage.message.recordedSuccess",
-                }),
-              });
-
-              // Reset form
-              setSelectedEquipment(null);
-              setUsageRows([]);
-
-              // Call parent callback with last response to display in dashboard
-              if (onSubmitSuccess && lastResponse) {
-                onSubmitSuccess(lastResponse);
-              }
-
-              setIsSubmitting(false);
-              return;
-            }
-
-            const row = usageRows[rowIndex];
-
-            // Build the complete equipment usage entry request with all form fields
-            const entryRequest = {
-              itemId: selectedEquipment.id,
-              lotId: lot.id,
-              quantity: 1, // Equipment usage counts as 1 unit per submission
-              labUnitId: userSessionDetails?.labUnit || "",
-              operatorName: row.operatorName,
-              date: row.date,
-              loginTime: row.loginTime,
-              activities: row.activities,
-              equipmentStatus: row.equipmentStatus,
-              logoutTime: row.logoutTime,
-              approvedBy: row.approvedBy,
-              approvalDate: row.approvalDate,
-            };
-
-            // Submit to new endpoint that accepts all form data
-            CartridgeUsageAPI.submitEquipmentUsageEntry(
-              entryRequest,
-              (response) => {
-                console.log("=== ENTRY SUBMITTED CALLBACK ===", response);
-                if (response.ok) {
-                  response
-                    .json()
-                    .then((data) => {
-                      console.log("Equipment usage entry submitted:", data);
-                      lastResponse = data;
-                      submitCount++;
-
-                      // Submit next row
-                      submitNextRow(rowIndex + 1);
-                    })
-                    .catch((error) => {
-                      console.error("Error parsing response:", error);
-                      notify({
-                        kind: NotificationKinds.error,
-                        title: intl.formatMessage({ id: "notification.error" }),
-                        message: "Failed to process response",
-                      });
-                      setIsSubmitting(false);
-                    });
-                } else {
-                  console.error("Response not OK:", response.status);
-                  notify({
-                    kind: NotificationKinds.error,
-                    title: intl.formatMessage({ id: "notification.error" }),
-                    message: intl.formatMessage({
-                      id: "equipment.usage.error.submitFailed",
-                    }),
+          CartridgeUsageAPI.submitEquipmentUsageEntry(
+            entryRequest,
+            (response) => {
+              if (response.ok) {
+                response
+                  .json()
+                  .then((data) => {
+                    lastResponse = data;
+                    submitNextRow(rowIndex + 1);
+                  })
+                  .catch(() => {
+                    submitNextRow(rowIndex + 1);
                   });
-                  setIsSubmitting(false);
-                }
-              },
-              (error) => {
-                console.error("Error submitting entry:", error);
+              } else {
                 notify({
                   kind: NotificationKinds.error,
                   title: intl.formatMessage({ id: "notification.error" }),
@@ -329,23 +323,43 @@ const EquipmentUsageLog = ({ onSubmitSuccess }) => {
                   }),
                 });
                 setIsSubmitting(false);
-              },
-            );
-          };
+              }
+            },
+            () => {
+              notify({
+                kind: NotificationKinds.error,
+                title: intl.formatMessage({ id: "notification.error" }),
+                message: intl.formatMessage({
+                  id: "equipment.usage.error.submitFailed",
+                }),
+              });
+              setIsSubmitting(false);
+            },
+          );
+        };
 
-          // Start submitting from first row
-          submitNextRow(0);
-        },
-        (error) => {
-          console.error("Error loading lots:", error);
+        submitNextRow(0);
+      };
+
+      if (selectedEquipment.lotId) {
+        submitWithLot({ id: selectedEquipment.lotId });
+        return;
+      }
+
+      CartridgeUsageAPI.getAvailableLots(catalogItemId, (lots) => {
+        if (!lots || lots.length === 0) {
           notify({
             kind: NotificationKinds.error,
             title: intl.formatMessage({ id: "notification.error" }),
-            message: "Failed to load available lots",
+            message: intl.formatMessage({
+              id: "equipment.usage.error.noLotsAvailable",
+            }),
           });
           setIsSubmitting(false);
-        },
-      );
+          return;
+        }
+        submitWithLot(lots[0]);
+      });
     } catch (error) {
       console.error("Error submitting usage:", error);
       notify({
@@ -365,6 +379,22 @@ const EquipmentUsageLog = ({ onSubmitSuccess }) => {
       <Grid fullWidth={true}>
         <Column lg={16} md={8} sm={4}>
           <div className="equipmentUsageContainer">
+            {needsActiveDepartment && (
+              <InlineNotification
+                kind="warning"
+                lowContrast
+                hideCloseButton
+                title={intl.formatMessage({
+                  id: "equipment.usage.departmentRequired.title",
+                  defaultMessage: "Department required",
+                })}
+                subtitle={intl.formatMessage({
+                  id: "equipment.usage.departmentRequired.subtitle",
+                  defaultMessage:
+                    "Select your laboratory department in the header before choosing equipment.",
+                })}
+              />
+            )}
             {/* Equipment Selection Section */}
             {loadingEquipment ? (
               <Loading description="Loading equipment..." />
@@ -384,7 +414,7 @@ const EquipmentUsageLog = ({ onSubmitSuccess }) => {
                           {selectedEquipment.name}
                         </span>
                         <span className="equipmentSerial">
-                          {selectedEquipment.catalogNumber || "No serial"}
+                          {getEquipmentSerialLabel(selectedEquipment)}
                         </span>
                         <Button
                           kind="ghost"
@@ -405,6 +435,7 @@ const EquipmentUsageLog = ({ onSubmitSuccess }) => {
                     kind="primary"
                     size="sm"
                     onClick={() => setShowChooseEquipmentModal(true)}
+                    disabled={needsActiveDepartment}
                   >
                     <FormattedMessage
                       id="equipment.usage.chooseEquipment"
@@ -442,7 +473,7 @@ const EquipmentUsageLog = ({ onSubmitSuccess }) => {
                     </label>
                     <input
                       type="text"
-                      value={selectedEquipment.catalogNumber || ""}
+                      value={getEquipmentSerialLabel(selectedEquipment)}
                       readOnly
                       className="detailsInput"
                     />
