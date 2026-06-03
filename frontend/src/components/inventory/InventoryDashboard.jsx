@@ -39,8 +39,6 @@ import { InventoryItemAPI, InventoryLotAPI } from "./InventoryService";
 import UserSessionDetailsContext from "../../UserSessionDetailsContext";
 import { hasUnrestrictedDepartmentAccess } from "../../security/departmentAccess";
 import LotEntryModal from "./LotEntryModal";
-import EquipmentRegistrationModal from "./EquipmentRegistrationModal";
-import InventoryItemForm from "./InventoryItemForm";
 import RecordUsageModal from "./RecordUsageModal";
 import LotAdjustmentModal from "./LotAdjustmentModal";
 import DisposeLotModal from "./DisposeLotModal";
@@ -74,8 +72,6 @@ const InventoryDashboard = () => {
   );
 
   const [lots, setLots] = useState([]);
-  const [equipmentItems, setEquipmentItems] = useState([]);
-  const [equipmentAssetLots, setEquipmentAssetLots] = useState({});
   const [items, setItems] = useState({});
   const [loading, setLoading] = useState(true);
   const [unitMap, setUnitMap] = useState({});
@@ -99,10 +95,6 @@ const InventoryDashboard = () => {
   const [totalRecords, setTotalRecords] = useState(0);
 
   const [lotModalOpen, setLotModalOpen] = useState(false);
-  const [equipmentRegisterModalOpen, setEquipmentRegisterModalOpen] =
-    useState(false);
-  const [catalogFormOpen, setCatalogFormOpen] = useState(false);
-  const [preselectedEquipmentItem, setPreselectedEquipmentItem] = useState(null);
   const [usageModalOpen, setUsageModalOpen] = useState(false);
   const [adjustmentModalOpen, setAdjustmentModalOpen] = useState(false);
   const [disposalModalOpen, setDisposalModalOpen] = useState(false);
@@ -148,8 +140,6 @@ const InventoryDashboard = () => {
     [userSessionDetails],
   );
 
-  const isEquipmentView = typeFilter === "EQUIPMENT";
-
   const resolveDepartmentDisplay = useCallback(
     (item) => {
       if (!item?.departmentTestSectionId) {
@@ -162,37 +152,6 @@ const InventoryDashboard = () => {
       return match?.text || String(item.departmentTestSectionId);
     },
     [assignableDepartments],
-  );
-
-  const formatEquipmentCondition = (condition) => {
-    if (condition === "functional") return "Functional";
-    if (condition === "non-functional") return "Non-functional";
-    if (condition === "under-repair") return "Under Repair";
-    if (condition === "decommissioned") return "Decommissioned";
-    return condition ? String(condition) : "Unknown";
-  };
-
-  const mapEquipmentCatalogRow = useCallback(
-    (item) => {
-      const assetLot = equipmentAssetLots[item.id];
-      return {
-        id: String(item.id),
-        name: item.name || "Unknown",
-        department: resolveDepartmentDisplay(item),
-        manufacturer: item.manufacturer || "N/A",
-        modelNumber: item.modelNumber || "N/A",
-        serialNumber: item.serialNumber || assetLot?.lotNumber || "N/A",
-        compatibleAnalyzers: item.compatibleAnalyzers || "N/A",
-        ahriTag: item.ahriTag || "N/A",
-        installationDate: formatDate(item.installationDate),
-        currentLocation: assetLot?.storagePath || "Not registered",
-        equipmentCondition: formatEquipmentCondition(item.equipmentCondition),
-        lastServiceDate: formatDate(item.lastServiceDate),
-        lastMaintenanceDate: formatDate(item.lastMaintenanceDate),
-        nextMaintenanceDate: formatDate(item.nextMaintenanceDate),
-      };
-    },
-    [equipmentAssetLots, resolveDepartmentDisplay],
   );
 
   // Equipment-specific headers (for EQUIPMENT type)
@@ -504,7 +463,7 @@ const InventoryDashboard = () => {
       if (page !== 1) {
         setPage(1);
       } else {
-        refreshInventory();
+        fetchLots();
       }
     }, 500);
 
@@ -512,7 +471,7 @@ const InventoryDashboard = () => {
   }, [searchTerm]);
 
   useEffect(() => {
-    refreshInventory();
+    fetchLots();
   }, [typeFilter, statusFilter, departmentFilter, page, pageSize]);
 
   useEffect(() => {
@@ -549,78 +508,7 @@ const InventoryDashboard = () => {
     }
   };
 
-  const fetchEquipmentCatalog = async () => {
-    setLoading(true);
-    try {
-      const offset = (page - 1) * pageSize;
-      const departmentId =
-        unrestrictedDepartmentAccess() && departmentFilter !== "ALL"
-          ? departmentFilter
-          : undefined;
-
-      const [catalogResponse, lotsResponse] = await Promise.all([
-        InventoryItemAPI.getPaged({
-          limit: pageSize,
-          offset,
-          sortBy: "name",
-          sortOrder: "asc",
-          itemType: "EQUIPMENT",
-          isActive: true,
-          search: searchTerm || undefined,
-          departmentId,
-        }),
-        InventoryLotAPI.getPaged({
-          limit: 1000,
-          offset: 0,
-          sortBy: "receiptDate",
-          sortOrder: "desc",
-          itemType: "EQUIPMENT",
-          departmentId,
-        }),
-      ]);
-
-      const catalogItems = catalogResponse.items || [];
-      setEquipmentItems(catalogItems);
-      setTotalRecords(catalogResponse.totalRecords || 0);
-
-      const assetLotMap = {};
-      (lotsResponse.lots || []).forEach((lot) => {
-        const itemId = lot.inventoryItem?.id;
-        if (itemId && !assetLotMap[itemId]) {
-          assetLotMap[itemId] = lot;
-        }
-      });
-      setEquipmentAssetLots(assetLotMap);
-      setLots([]);
-      setItems({});
-
-      setMetrics({
-        totalLots: catalogResponse.totalRecords || catalogItems.length,
-        lowStock: 0,
-        expiringSoon: 0,
-        expired: 0,
-      });
-    } catch (error) {
-      console.error("Error fetching equipment catalog:", error);
-      setEquipmentItems([]);
-      setEquipmentAssetLots({});
-      setTotalRecords(0);
-      addNotification({
-        kind: "error",
-        title: intl.formatMessage({ id: "notification.error" }),
-        message: "Error loading equipment data",
-      });
-    } finally {
-      setLoading(false);
-    }
-  };
-
   const fetchLots = async () => {
-    if (isEquipmentView) {
-      await fetchEquipmentCatalog();
-      return;
-    }
-
     setLoading(true);
     try {
       const offset = (page - 1) * pageSize;
@@ -750,7 +638,7 @@ const InventoryDashboard = () => {
     return { type: "inStock", label: "In Stock", kind: "green" };
   };
 
-  const lotRows = lots.map((lot) => {
+  const rows = lots.map((lot) => {
     const item = items[lot.inventoryItem?.id];
     const stockStatus = getStockStatus(lot);
 
@@ -856,21 +744,10 @@ const InventoryDashboard = () => {
     }
   });
 
-  const equipmentRows = equipmentItems.map(mapEquipmentCatalogRow);
-  const rows = isEquipmentView ? equipmentRows : lotRows;
-
-  const refreshInventory = () => {
-    if (isEquipmentView) {
-      fetchEquipmentCatalog();
-      return;
-    }
-    refreshInventory();
-  };
-
   const handleLotSaved = () => {
     setLotModalOpen(false);
     setSelectedLot(null);
-    refreshInventory();
+    fetchLots();
     notify({
       kind: NotificationKinds.success,
       title: intl.formatMessage({ id: "notification.success" }),
@@ -878,42 +755,10 @@ const InventoryDashboard = () => {
     });
   };
 
-  const handleEquipmentRegistered = () => {
-    setEquipmentRegisterModalOpen(false);
-    setPreselectedEquipmentItem(null);
-    refreshInventory();
-    notify({
-      kind: NotificationKinds.success,
-      title: intl.formatMessage({ id: "notification.success" }),
-      message: "Equipment registered successfully",
-    });
-  };
-
-  const handleCatalogItemSaved = () => {
-    setCatalogFormOpen(false);
-    setSelectedItem(null);
-    refreshInventory();
-    notify({
-      kind: NotificationKinds.success,
-      title: intl.formatMessage({ id: "notification.success" }),
-      message: "Catalog item saved successfully",
-    });
-  };
-
-  const handleOpenEquipmentRegister = (item = null) => {
-    setPreselectedEquipmentItem(item);
-    setEquipmentRegisterModalOpen(true);
-  };
-
-  const handleEditEquipmentCatalog = (item) => {
-    setSelectedItem(item);
-    setCatalogFormOpen(true);
-  };
-
   const handleUsageSaved = () => {
     setUsageModalOpen(false);
     setSelectedLot(null);
-    refreshInventory();
+    fetchLots();
     notify({
       kind: NotificationKinds.success,
       title: intl.formatMessage({ id: "notification.success" }),
@@ -924,7 +769,7 @@ const InventoryDashboard = () => {
   const handleAdjustmentSaved = () => {
     setAdjustmentModalOpen(false);
     setSelectedLot(null);
-    refreshInventory();
+    fetchLots();
     notify({
       kind: NotificationKinds.success,
       title: intl.formatMessage({ id: "notification.success" }),
@@ -935,7 +780,7 @@ const InventoryDashboard = () => {
   const handleDisposalSaved = () => {
     setDisposalModalOpen(false);
     setSelectedLot(null);
-    refreshInventory();
+    fetchLots();
     notify({
       kind: NotificationKinds.success,
       title: intl.formatMessage({ id: "notification.success" }),
@@ -946,7 +791,7 @@ const InventoryDashboard = () => {
   const handleQCStatusSaved = () => {
     setQcStatusModalOpen(false);
     setSelectedLot(null);
-    refreshInventory();
+    fetchLots();
     notify({
       kind: NotificationKinds.success,
       title: intl.formatMessage({ id: "notification.success" }),
@@ -1098,19 +943,11 @@ const InventoryDashboard = () => {
                     <Button
                       renderIcon={Add}
                       onClick={() => {
-                        if (isEquipmentView) {
-                          handleOpenEquipmentRegister();
-                          return;
-                        }
                         setSelectedLot(null);
                         setLotModalOpen(true);
                       }}
                     >
-                      {isEquipmentView ? (
-                        "Register Equipment"
-                      ) : (
-                        <FormattedMessage id="inventory.add.button" />
-                      )}
+                      <FormattedMessage id="inventory.add.button" />
                     </Button>
                   </div>
                 </div>
@@ -1182,12 +1019,7 @@ const InventoryDashboard = () => {
                       </TableRow>
                     ) : (
                       rows.map((row, rowIndex) => {
-                        const equipmentItem = isEquipmentView
-                          ? equipmentItems[rowIndex]
-                          : null;
-                        const lot = isEquipmentView
-                          ? equipmentAssetLots[equipmentItem?.id]
-                          : lots[rowIndex];
+                        const lot = lots[rowIndex];
                         return (
                           <TableRow key={row.id} {...getRowProps({ row })}>
                             <TableSelectRow {...getSelectionProps({ row })} />
@@ -1232,41 +1064,6 @@ const InventoryDashboard = () => {
                               }
 
                               if (cell.info.header === "actions") {
-                                if (isEquipmentView) {
-                                  return (
-                                    <TableCell key={cell.id}>
-                                      <OverflowMenu
-                                        size="sm"
-                                        flipped
-                                        aria-label={
-                                          intl?.formatMessage({
-                                            id: "label.button.action",
-                                          }) || "Actions"
-                                        }
-                                      >
-                                        <OverflowMenuItem
-                                          itemText={intl.formatMessage({
-                                            id: "button.edit",
-                                          })}
-                                          onClick={() =>
-                                            handleEditEquipmentCatalog(
-                                              equipmentItem,
-                                            )
-                                          }
-                                        />
-                                        <OverflowMenuItem
-                                          itemText="Register Equipment"
-                                          onClick={() =>
-                                            handleOpenEquipmentRegister(
-                                              equipmentItem,
-                                            )
-                                          }
-                                        />
-                                      </OverflowMenu>
-                                    </TableCell>
-                                  );
-                                }
-
                                 return (
                                   <TableCell key={cell.id}>
                                     <OverflowMenu
@@ -1396,30 +1193,6 @@ const InventoryDashboard = () => {
           }}
           onSave={handleLotSaved}
           lot={selectedLot}
-        />
-      )}
-
-      {equipmentRegisterModalOpen && (
-        <EquipmentRegistrationModal
-          open={equipmentRegisterModalOpen}
-          onClose={() => {
-            setEquipmentRegisterModalOpen(false);
-            setPreselectedEquipmentItem(null);
-          }}
-          onSave={handleEquipmentRegistered}
-          preselectedItem={preselectedEquipmentItem}
-        />
-      )}
-
-      {catalogFormOpen && (
-        <InventoryItemForm
-          open={catalogFormOpen}
-          onClose={() => {
-            setCatalogFormOpen(false);
-            setSelectedItem(null);
-          }}
-          onSave={handleCatalogItemSaved}
-          item={selectedItem}
         />
       )}
 

@@ -18,7 +18,10 @@ import {
   InventoryManagementAPI,
 } from "./InventoryService";
 import StorageHierarchySelector from "../notebook/workflow/StorageHierarchySelector";
-import { isExpiryTrackedType, isLotReceivableType } from "./catalog/inventoryItemTypeLabels";
+import {
+  isExpiryTrackedType,
+  isEquipmentType,
+} from "./catalog/inventoryItemTypeLabels";
 import { buildLotCatalogOptions } from "./catalog/lotCatalogPicker";
 
 const LotEntryModal = ({ open, onClose, onSave, lot = null }) => {
@@ -199,6 +202,21 @@ const LotEntryModal = ({ open, onClose, onSave, lot = null }) => {
     return { locationId: null, locationType: null };
   };
 
+  const isEquipmentItem = isEquipmentType(formData.inventoryItem?.itemType);
+
+  const applyEquipmentDefaults = (catalogItem) => {
+    if (!isEquipmentType(catalogItem?.itemType)) {
+      return;
+    }
+    setFormData((prev) => ({
+      ...prev,
+      inventoryItem: catalogItem,
+      currentQuantity: 1,
+      unitSize: "1 each",
+      expirationDate: null,
+    }));
+  };
+
   const handleChange = (field, value) => {
     setFormData((prev) => {
       if (prev[field] === value) {
@@ -215,21 +233,24 @@ const LotEntryModal = ({ open, onClose, onSave, lot = null }) => {
       return false;
     }
 
-    if (!formData.lotNumber?.trim()) {
-      setError("Lot number is required");
-      return false;
-    }
-
     const itemType = formData.inventoryItem?.itemType;
+    const equipmentItem = isEquipmentType(itemType);
 
-    if (!isLotReceivableType(itemType)) {
+    if (!formData.lotNumber?.trim()) {
       setError(
-        "Equipment is managed from the equipment catalog. Add or update the asset in Catalog, not Receive Lot.",
+        equipmentItem
+          ? "Serial / asset ID is required"
+          : "Lot number is required",
       );
       return false;
     }
 
-    if (!formData.currentQuantity || formData.currentQuantity <= 0) {
+    if (equipmentItem) {
+      if (formData.currentQuantity !== 1) {
+        setError("Equipment assets must be registered with quantity 1");
+        return false;
+      }
+    } else if (!formData.currentQuantity || formData.currentQuantity <= 0) {
       setError("Quantity must be greater than 0");
       return false;
     }
@@ -239,7 +260,7 @@ const LotEntryModal = ({ open, onClose, onSave, lot = null }) => {
       return false;
     }
 
-    if (!formData.unitSize?.trim()) {
+    if (!equipmentItem && !formData.unitSize?.trim()) {
       setError(
         "Unit size is required (e.g., 50 mL, 100 tests, 1 test per strip)",
       );
@@ -286,13 +307,15 @@ const LotEntryModal = ({ open, onClose, onSave, lot = null }) => {
           storageBoxNumber: formData.storageBoxNumber || null,
         });
       } else {
+        const equipmentItem = isEquipmentType(formData.inventoryItem?.itemType);
+        const quantity = equipmentItem ? 1 : formData.currentQuantity;
         // Create new lot with unified storage location
         await InventoryManagementAPI.receive({
           inventoryItem: { id: formData.inventoryItem.id },
-          lotNumber: formData.lotNumber,
-          currentQuantity: formData.currentQuantity,
-          initialQuantity: formData.currentQuantity,
-          unitSize: formData.unitSize,
+          lotNumber: formData.lotNumber.trim(),
+          currentQuantity: quantity,
+          initialQuantity: quantity,
+          unitSize: equipmentItem ? "1 each" : formData.unitSize,
           expirationDate: formData.expirationDate
             ? formData.expirationDate.toISOString()
             : null,
@@ -344,21 +367,13 @@ const LotEntryModal = ({ open, onClose, onSave, lot = null }) => {
           <div style={{ color: "red", marginBottom: "1rem" }}>{error}</div>
         )}
 
-        <InlineNotification
-          kind="info"
-          lowContrast
-          hideCloseButton
-          subtitle="Permanent equipment assets are registered from the Inventory Dashboard using Register Equipment. This form receives stock lots for reagents, consumables, cartridges, kits, and other stock categories only."
-          title="Stock lot receiving"
-        />
-
         {itemsLoaded && items.length === 0 && !isEdit && (
           <InlineNotification
             kind="warning"
             lowContrast
             hideCloseButton
-            title="No lot-receivable catalog items"
-            subtitle="Add a stock catalog item first, then return here to receive stock."
+            title="No catalog items"
+            subtitle="Add a catalog item first, then return here to receive a lot."
           />
         )}
 
@@ -390,7 +405,23 @@ const LotEntryModal = ({ open, onClose, onSave, lot = null }) => {
               : null
           }
           onChange={({ selectedItem }) => {
-            handleChange("inventoryItem", selectedItem?.item || null);
+            const catalogItem = selectedItem?.item || null;
+            if (isEquipmentType(catalogItem?.itemType)) {
+              applyEquipmentDefaults(catalogItem);
+              setError(null);
+            } else {
+              setFormData((prev) => ({
+                ...prev,
+                inventoryItem: catalogItem,
+                currentQuantity:
+                  prev.currentQuantity === 1 && prev.unitSize === "1 each"
+                    ? 0
+                    : prev.currentQuantity,
+                unitSize:
+                  prev.unitSize === "1 each" ? "" : prev.unitSize,
+              }));
+              setError(null);
+            }
           }}
           disabled={isEdit || (itemsLoaded && items.length === 0)}
         />
@@ -398,7 +429,14 @@ const LotEntryModal = ({ open, onClose, onSave, lot = null }) => {
         <TextInput
           id="lotNumber"
           labelText={
-            <FormattedMessage id="lot.number" defaultMessage="Lot Number" />
+            isEquipmentItem ? (
+              <FormattedMessage
+                id="equipment.register.serial"
+                defaultMessage="Serial / Asset ID *"
+              />
+            ) : (
+              <FormattedMessage id="lot.number" defaultMessage="Lot Number" />
+            )
           }
           value={formData.lotNumber}
           onChange={(e) => handleChange("lotNumber", e.target.value)}
@@ -415,20 +453,24 @@ const LotEntryModal = ({ open, onClose, onSave, lot = null }) => {
           }
           value={formData.currentQuantity}
           onChange={(e, { value }) => handleChange("currentQuantity", value)}
-          min={0}
+          min={isEquipmentItem ? 1 : 0}
+          max={isEquipmentItem ? 1 : undefined}
           step={1}
+          disabled={isEquipmentItem}
           required
         />
 
-        <TextInput
-          id="unitSize"
-          labelText="Unit Size *"
-          helperText="Size/volume of each individual unit (e.g., 50 mL per bottle, 100 tests, 1 test per strip)"
-          value={formData.unitSize}
-          onChange={(e) => handleChange("unitSize", e.target.value)}
-          placeholder="e.g., 50 mL, 100 tests, 250 μL, 1 test"
-          required
-        />
+        {!isEquipmentItem && (
+          <TextInput
+            id="unitSize"
+            labelText="Unit Size *"
+            helperText="Size/volume of each individual unit (e.g., 50 mL per bottle, 100 tests, 1 test per strip)"
+            value={formData.unitSize}
+            onChange={(e) => handleChange("unitSize", e.target.value)}
+            placeholder="e.g., 50 mL, 100 tests, 250 μL, 1 test"
+            required
+          />
+        )}
 
         {isExpiryTrackedType(formData.inventoryItem?.itemType) && (
           <DatePicker

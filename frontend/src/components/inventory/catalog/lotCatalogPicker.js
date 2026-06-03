@@ -1,4 +1,4 @@
-import { getItemTypeLabel, isLotReceivableType, isEquipmentType } from "./inventoryItemTypeLabels";
+import { getItemTypeLabel } from "./inventoryItemTypeLabels";
 
 const mapCatalogOption = (catalogItem) => {
   const typeLabel = getItemTypeLabel(catalogItem.itemType);
@@ -13,18 +13,9 @@ const mapCatalogOption = (catalogItem) => {
   };
 };
 
-/** Build searchable ComboBox options for Receive Lot (excludes EQUIPMENT). */
+/** Build searchable ComboBox options for Receive Lot (reagents, equipment, and other catalog types). */
 export function buildLotCatalogOptions(catalogItems) {
   return (catalogItems || [])
-    .filter((item) => isLotReceivableType(item.itemType))
-    .sort((a, b) => a.name.localeCompare(b.name))
-    .map(mapCatalogOption);
-}
-
-/** Build searchable ComboBox options for Register Equipment (EQUIPMENT only). */
-export function buildEquipmentCatalogOptions(catalogItems) {
-  return (catalogItems || [])
-    .filter((item) => isEquipmentType(item.itemType))
     .sort((a, b) => a.name.localeCompare(b.name))
     .map(mapCatalogOption);
 }

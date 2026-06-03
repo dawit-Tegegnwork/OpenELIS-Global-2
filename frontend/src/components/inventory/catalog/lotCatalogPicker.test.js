@@ -1,6 +1,5 @@
 import {
   buildLotCatalogOptions,
-  buildEquipmentCatalogOptions,
   filterCatalogOptions,
 } from "./lotCatalogPicker";
 
@@ -18,10 +17,10 @@ describe("lot catalog picker", () => {
     { id: 4, name: "Gamma Tips", itemType: "CONSUMABLE", category: "Supplies" },
   ];
 
-  it("excludes equipment from receive-lot catalog options", () => {
+  it("includes all catalog types in receive-lot options", () => {
     const options = buildLotCatalogOptions(catalog);
-    expect(options.map((o) => o.id)).toEqual([3, 4, 1]);
-    expect(options.some((o) => o.item.itemType === "EQUIPMENT")).toBe(false);
+    expect(options.map((o) => o.id)).toEqual([2, 3, 4, 1]);
+    expect(options.some((o) => o.item.itemType === "EQUIPMENT")).toBe(true);
   });
 
   it("filters options by name, type label, and category", () => {
@@ -30,23 +29,14 @@ describe("lot catalog picker", () => {
     expect(filterCatalogOptions(options, "cepheid").map((o) => o.id)).toEqual([3]);
     expect(filterCatalogOptions(options, "reagent").map((o) => o.id)).toEqual([1]);
     expect(filterCatalogOptions(options, "supplies").map((o) => o.id)).toEqual([4]);
+    expect(filterCatalogOptions(options, "centrifuge").map((o) => o.id)).toEqual([2]);
   });
 
-  it("returns empty options when only equipment exists", () => {
+  it("includes equipment when only equipment exists", () => {
     const options = buildLotCatalogOptions([
       { id: 2, name: "Alpha Centrifuge", itemType: "EQUIPMENT", category: "Lab" },
     ]);
-    expect(options).toEqual([]);
-  });
-
-  it("includes only equipment in equipment catalog options", () => {
-    const options = buildEquipmentCatalogOptions(catalog);
-    expect(options.map((o) => o.id)).toEqual([2]);
-    expect(options.every((o) => o.item.itemType === "EQUIPMENT")).toBe(true);
-  });
-
-  it("filters equipment options by search text", () => {
-    const options = buildEquipmentCatalogOptions(catalog);
-    expect(filterCatalogOptions(options, "centrifuge").map((o) => o.id)).toEqual([2]);
+    expect(options).toHaveLength(1);
+    expect(options[0].item.itemType).toBe("EQUIPMENT");
   });
 });
