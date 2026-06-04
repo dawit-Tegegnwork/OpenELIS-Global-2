@@ -31,6 +31,8 @@ public final class AHRITestSectionCatalog {
         names.add("Genomics & Bioinformatics Laboratory");
         names.add("Tuberculosis Laboratory");
         names.add("CTD");
+        names.add("CTD Department");
+        names.add("Medical Laboratory");
         names.add("Biorepository Laboratory");
         TEST_SECTION_NAMES = Collections.unmodifiableSet(normalizeAll(names));
     }

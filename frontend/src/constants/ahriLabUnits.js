@@ -14,8 +14,12 @@ const AHRI_LAB_UNIT_NAMES = [
   "Malaria and Neglected Tropical Disease (MNTD) Laboratory",
   "Pharmaceuticals Laboratory",
   "Viral Vaccine",
+  "Virology Laboratory",
+  "Genomics & Bioinformatics Laboratory",
   "Tuberculosis Laboratory",
   "CTD",
+  "CTD Department",
+  "Medical Laboratory",
   "Biorepository Laboratory",
 ];
 
