@@ -25,6 +25,7 @@ import org.openelisglobal.medlab.valueholder.MedLabTestRequirements;
 import org.openelisglobal.notebook.service.NoteBookPageService;
 import org.openelisglobal.notebook.service.NotebookEntryService;
 import org.openelisglobal.notebook.service.NotebookPageSampleService;
+import org.openelisglobal.notebook.service.SampleRoutingService;
 import org.openelisglobal.notebook.valueholder.NoteBook;
 import org.openelisglobal.notebook.valueholder.NoteBookPage;
 import org.openelisglobal.notebook.valueholder.NotebookEntry;
@@ -56,6 +57,8 @@ import org.springframework.transaction.annotation.Transactional;
 public class MedLabPatientOrderServiceImpl implements MedLabPatientOrderService {
 
     private static final int MAX_LAB_NUMBER_RESERVATION_ATTEMPTS = 1000;
+
+    private static final String REGISTERED_PATIENTS_KEY = "registeredPatients";
 
     @Autowired
     private PatientService patientService;
@@ -110,6 +113,9 @@ public class MedLabPatientOrderServiceImpl implements MedLabPatientOrderService 
 
     @Autowired
     private MedLabTestRequirementsService medLabTestRequirementsService;
+
+    @Autowired
+    private SampleRoutingService sampleRoutingService;
 
     private final ObjectMapper objectMapper = new ObjectMapper();
 
@@ -266,6 +272,10 @@ public class MedLabPatientOrderServiceImpl implements MedLabPatientOrderService 
             result.put("patientId", patientId);
             result.put("testCount", validTestCount);
             result.put("status", "PENDING_COLLECTION");
+
+            if (notebookPageId != null && StringUtils.isNotBlank(patientId)) {
+                removeRegisteredPatientForPage(notebookPageId, patientId, sysUserId);
+            }
 
         } catch (Exception e) {
             LogEvent.logError(this.getClass().getSimpleName(), "createPatientOrder",
@@ -461,6 +471,15 @@ public class MedLabPatientOrderServiceImpl implements MedLabPatientOrderService 
             result.put("createdCount", createdOrders.size());
             result.put("failedCount", 0);
             result.put("orders", createdOrders);
+
+            if (notebookPageId != null) {
+                for (Map<String, Object> patientData : patients) {
+                    Object patientIdObj = patientData.get("patientId");
+                    if (patientIdObj != null) {
+                        removeRegisteredPatientForPage(notebookPageId, patientIdObj.toString(), sysUserId);
+                    }
+                }
+            }
 
             LogEvent.logInfo(this.getClass().getSimpleName(), "createBulkPatientOrders",
                     "Atomic bulk order creation completed successfully: created=" + createdOrders.size());
@@ -887,6 +906,149 @@ public class MedLabPatientOrderServiceImpl implements MedLabPatientOrderService 
         }
 
         return orders;
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<Map<String, Object>> getRegisteredPatientsForPage(Integer pageId) {
+        List<Map<String, Object>> registered = readRegisteredPatientsFromPage(pageId);
+        if (registered.isEmpty()) {
+            return registered;
+        }
+
+        java.util.Set<String> patientsWithOrders = new java.util.HashSet<>();
+        for (Map<String, Object> order : getOrdersForPage(pageId)) {
+            Object patientId = order.get("patientId");
+            if (patientId != null) {
+                patientsWithOrders.add(patientId.toString());
+            }
+        }
+
+        List<Map<String, Object>> filtered = new ArrayList<>();
+        for (Map<String, Object> patient : registered) {
+            Object id = patient.get("id");
+            if (id == null || !patientsWithOrders.contains(id.toString())) {
+                filtered.add(patient);
+            }
+        }
+        return filtered;
+    }
+
+    @Override
+    @Transactional
+    public Map<String, Object> addRegisteredPatientForPage(Integer pageId, Map<String, Object> patientData,
+            String sysUserId) {
+        Map<String, Object> result = new HashMap<>();
+        if (pageId == null) {
+            result.put("success", false);
+            result.put("error", "Page ID is required");
+            return result;
+        }
+        if (patientData == null || patientData.get("id") == null) {
+            result.put("success", false);
+            result.put("error", "Patient ID is required");
+            return result;
+        }
+
+        NoteBookPage page = noteBookPageService.get(pageId);
+        if (page == null) {
+            result.put("success", false);
+            result.put("error", "Notebook page not found");
+            return result;
+        }
+
+        List<Map<String, Object>> registered = readRegisteredPatientsFromPage(page);
+        String patientId = patientData.get("id").toString();
+        boolean exists = registered.stream().anyMatch(p -> patientId.equals(String.valueOf(p.get("id"))));
+        if (!exists) {
+            Map<String, Object> entry = new LinkedHashMap<>(patientData);
+            entry.putIfAbsent("registeredAt", java.time.LocalDateTime.now().toString());
+            registered.add(entry);
+            saveRegisteredPatientsOnPage(page, registered, sysUserId);
+        }
+
+        result.put("success", true);
+        result.put("patientId", patientId);
+        return result;
+    }
+
+    @Override
+    @Transactional
+    public Map<String, Object> removeRegisteredPatientForPage(Integer pageId, String patientId, String sysUserId) {
+        Map<String, Object> result = new HashMap<>();
+        if (pageId == null || StringUtils.isBlank(patientId)) {
+            result.put("success", false);
+            result.put("error", "Page ID and patient ID are required");
+            return result;
+        }
+
+        NoteBookPage page = noteBookPageService.get(pageId);
+        if (page == null) {
+            result.put("success", false);
+            result.put("error", "Notebook page not found");
+            return result;
+        }
+
+        List<Map<String, Object>> registered = readRegisteredPatientsFromPage(page);
+        registered.removeIf(p -> patientId.equals(String.valueOf(p.get("id"))));
+        saveRegisteredPatientsOnPage(page, registered, sysUserId);
+
+        result.put("success", true);
+        return result;
+    }
+
+    @Override
+    @Transactional
+    public Map<String, Object> clearRegisteredPatientsForPage(Integer pageId, String sysUserId) {
+        Map<String, Object> result = new HashMap<>();
+        if (pageId == null) {
+            result.put("success", false);
+            result.put("error", "Page ID is required");
+            return result;
+        }
+
+        NoteBookPage page = noteBookPageService.get(pageId);
+        if (page == null) {
+            result.put("success", false);
+            result.put("error", "Notebook page not found");
+            return result;
+        }
+
+        saveRegisteredPatientsOnPage(page, new ArrayList<>(), sysUserId);
+        result.put("success", true);
+        return result;
+    }
+
+    private List<Map<String, Object>> readRegisteredPatientsFromPage(Integer pageId) {
+        NoteBookPage page = noteBookPageService.get(pageId);
+        if (page == null) {
+            return new ArrayList<>();
+        }
+        return readRegisteredPatientsFromPage(page);
+    }
+
+    @SuppressWarnings("unchecked")
+    private List<Map<String, Object>> readRegisteredPatientsFromPage(NoteBookPage page) {
+        Map<String, Object> data = page.getData();
+        if (data == null || !data.containsKey(REGISTERED_PATIENTS_KEY)) {
+            return new ArrayList<>();
+        }
+        Object raw = data.get(REGISTERED_PATIENTS_KEY);
+        if (raw instanceof List) {
+            return new ArrayList<>((List<Map<String, Object>>) raw);
+        }
+        return new ArrayList<>();
+    }
+
+    private void saveRegisteredPatientsOnPage(NoteBookPage page, List<Map<String, Object>> registered,
+            String sysUserId) {
+        Map<String, Object> data = page.getData() != null ? new HashMap<>(page.getData()) : new HashMap<>();
+        data.put(REGISTERED_PATIENTS_KEY, registered);
+        page.setData(data);
+        if (sysUserId != null) {
+            page.setSysUserId(sysUserId);
+        }
+        noteBookPageService.update(page);
     }
 
     @Override
@@ -2005,6 +2167,12 @@ public class MedLabPatientOrderServiceImpl implements MedLabPatientOrderService 
                                 Map<String, Object> routingData = rps.getData();
                                 if (routingData != null) {
                                     destinationType = (String) routingData.get("destinationType");
+                                    if (routingData.get("wellCoordinate") != null) {
+                                        sampleData.put("wellCoordinate", routingData.get("wellCoordinate"));
+                                    }
+                                    if (routingData.get("assayPlateName") != null) {
+                                        sampleData.put("assayPlateName", routingData.get("assayPlateName"));
+                                    }
                                 }
                                 break;
                             }
@@ -2101,6 +2269,17 @@ public class MedLabPatientOrderServiceImpl implements MedLabPatientOrderService 
 
             int routedCount = 0;
 
+            Map<Integer, String> internalWellAssignments = null;
+            String assayPlateName = null;
+            Integer notebookIdForRouting = null;
+            if ("INTERNAL_ANALYSIS".equals(destinationType) && metadata != null) {
+                internalWellAssignments = resolveInternalAnalysisWellAssignments(sampleIds, metadata);
+                assayPlateName = extractAssayPlateName(metadata);
+                if (notebookPageId != null) {
+                    notebookIdForRouting = resolveNotebookIdFromPage(notebookPageId);
+                }
+            }
+
             for (Integer sampleId : sampleIds) {
                 try {
                     SampleItem sampleItem = sampleItemService.get(String.valueOf(sampleId));
@@ -2117,6 +2296,17 @@ public class MedLabPatientOrderServiceImpl implements MedLabPatientOrderService 
                     // Add metadata if provided
                     if (metadata != null) {
                         routingData.putAll(metadata);
+                    }
+
+                    if (internalWellAssignments != null) {
+                        routingData.remove("wellAssignments");
+                        String wellCoordinate = internalWellAssignments.get(sampleId);
+                        if (wellCoordinate != null) {
+                            routingData.put("wellCoordinate", wellCoordinate);
+                        }
+                        if (assayPlateName != null) {
+                            routingData.put("assayPlateName", assayPlateName);
+                        }
                     }
 
                     // Find or create routing page sample record
@@ -2220,8 +2410,22 @@ public class MedLabPatientOrderServiceImpl implements MedLabPatientOrderService 
                 }
             }
 
+            if (routedCount > 0 && "INTERNAL_ANALYSIS".equals(destinationType) && notebookIdForRouting != null
+                    && internalWellAssignments != null && StringUtils.isNotBlank(assayPlateName)) {
+                try {
+                    sampleRoutingService.bulkRouteToAssayPlate(notebookIdForRouting, sampleIds, assayPlateName,
+                            internalWellAssignments, sysUserId);
+                } catch (Exception routingEx) {
+                    LogEvent.logWarn(this.getClass().getSimpleName(), "routeSamples",
+                            "SampleRouting assay plate sync failed: " + routingEx.getMessage());
+                }
+            }
+
             result.put("success", routedCount > 0);
             result.put("routedCount", routedCount);
+            if (internalWellAssignments != null) {
+                result.put("wellAssignments", internalWellAssignments);
+            }
 
         } catch (Exception e) {
             LogEvent.logError(e);
@@ -2230,6 +2434,66 @@ public class MedLabPatientOrderServiceImpl implements MedLabPatientOrderService 
         }
 
         return result;
+    }
+
+    private Integer resolveNotebookIdFromPage(Integer notebookPageId) {
+        if (notebookPageId == null) {
+            return null;
+        }
+        NoteBookPage page = noteBookPageService.get(notebookPageId);
+        if (page == null || page.getNotebook() == null) {
+            return null;
+        }
+        return page.getNotebook().getId();
+    }
+
+    @SuppressWarnings("unchecked")
+    private String extractAssayPlateName(Map<String, Object> metadata) {
+        Object assayPlateObj = metadata.get("assayPlate");
+        if (assayPlateObj instanceof Map) {
+            Object name = ((Map<String, Object>) assayPlateObj).get("name");
+            if (name != null && StringUtils.isNotBlank(name.toString())) {
+                return name.toString().trim();
+            }
+        }
+        return null;
+    }
+
+    @SuppressWarnings("unchecked")
+    private Map<Integer, String> resolveInternalAnalysisWellAssignments(List<Integer> sampleIds,
+            Map<String, Object> metadata) {
+        Map<Integer, String> assignments = new LinkedHashMap<>();
+        Object raw = metadata.get("wellAssignments");
+        if (raw instanceof Map) {
+            Map<?, ?> rawMap = (Map<?, ?>) raw;
+            for (Integer sampleId : sampleIds) {
+                Object well = rawMap.get(String.valueOf(sampleId));
+                if (well == null) {
+                    well = rawMap.get(sampleId);
+                }
+                if (well != null && StringUtils.isNotBlank(well.toString())) {
+                    assignments.put(sampleId, well.toString().trim().toUpperCase());
+                }
+            }
+        }
+
+        int columns = 12;
+        Object assayPlateObj = metadata.get("assayPlate");
+        if (assayPlateObj instanceof Map) {
+            Object columnsObj = ((Map<String, Object>) assayPlateObj).get("columns");
+            if (columnsObj instanceof Number) {
+                columns = ((Number) columnsObj).intValue();
+            }
+        }
+
+        int index = 0;
+        for (Integer sampleId : sampleIds) {
+            if (!assignments.containsKey(sampleId)) {
+                assignments.put(sampleId, sampleRoutingService.generateWellCoordinate(index, columns));
+                index++;
+            }
+        }
+        return assignments;
     }
 
     /**

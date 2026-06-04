@@ -22,6 +22,9 @@ import "./AssayPlateCreator.css";
  * @param {number|null} props.selectedPlateId - Currently selected plate ID
  * @param {Function} props.onPlateSelect - Callback when a plate is selected
  * @param {number} props.sampleCount - Number of samples to be assigned
+ * @param {string[]} props.selectedSampleIds - Sample IDs selected for routing
+ * @param {Object} props.wellAssignments - Map of sampleId -> well coordinate (e.g. A1)
+ * @param {Function} props.onWellAssignmentsChange - Callback when well assignments change
  */
 function AssayPlateCreator({
   plates = [],
@@ -29,6 +32,9 @@ function AssayPlateCreator({
   selectedPlateId,
   onPlateSelect,
   sampleCount = 0,
+  selectedSampleIds = [],
+  wellAssignments = {},
+  onWellAssignmentsChange,
 }) {
   const intl = useIntl();
 
@@ -160,6 +166,110 @@ function AssayPlateCreator({
     return `${rowLetter}${col}`;
   };
 
+  const interactiveMode = typeof onWellAssignmentsChange === "function";
+
+  const syncPlatesFromAssignments = useCallback(
+    (assignments, plateId = selectedPlateId) => {
+      if (!onPlatesChange) {
+        return;
+      }
+      const updatedPlates = plates.map((plate) => {
+        if (plateId && plate.id !== plateId) {
+          return plate;
+        }
+        const inverse = {};
+        Object.entries(assignments || {}).forEach(([sampleId, coord]) => {
+          if (coord) {
+            inverse[coord] = sampleId;
+          }
+        });
+        return {
+          ...plate,
+          assignments: inverse,
+          assignedCount: Object.keys(inverse).length,
+        };
+      });
+      onPlatesChange(updatedPlates);
+    },
+    [plates, onPlatesChange, selectedPlateId],
+  );
+
+  const handleAutoAssign = useCallback(() => {
+    if (!interactiveMode || !selectedPlateId || selectedSampleIds.length === 0) {
+      return;
+    }
+    const plate = plates.find((p) => p.id === selectedPlateId);
+    if (!plate) {
+      return;
+    }
+
+    const assignments = { ...wellAssignments };
+    const occupied = new Set(Object.values(assignments));
+    let index = 0;
+    const capacity = plate.rows * plate.columns;
+
+    for (const sampleId of selectedSampleIds) {
+      if (assignments[sampleId]) {
+        continue;
+      }
+      while (index < capacity) {
+        const coord = getWellCoordinate(index, plate.columns);
+        index += 1;
+        if (!occupied.has(coord)) {
+          assignments[sampleId] = coord;
+          occupied.add(coord);
+          break;
+        }
+      }
+    }
+
+    onWellAssignmentsChange(assignments);
+    syncPlatesFromAssignments(assignments, selectedPlateId);
+  }, [
+    interactiveMode,
+    selectedPlateId,
+    selectedSampleIds,
+    plates,
+    wellAssignments,
+    onWellAssignmentsChange,
+    syncPlatesFromAssignments,
+  ]);
+
+  const handleWellClick = useCallback(
+    (coord, plate) => {
+      if (!interactiveMode || plate.id !== selectedPlateId) {
+        return;
+      }
+
+      const assignments = { ...wellAssignments };
+      const occupiedSampleId = Object.keys(assignments).find(
+        (sampleId) => assignments[sampleId] === coord,
+      );
+
+      if (occupiedSampleId) {
+        delete assignments[occupiedSampleId];
+      } else {
+        const nextSampleId = selectedSampleIds.find(
+          (sampleId) => !assignments[sampleId],
+        );
+        if (nextSampleId) {
+          assignments[nextSampleId] = coord;
+        }
+      }
+
+      onWellAssignmentsChange(assignments);
+      syncPlatesFromAssignments(assignments, plate.id);
+    },
+    [
+      interactiveMode,
+      selectedPlateId,
+      wellAssignments,
+      selectedSampleIds,
+      onWellAssignmentsChange,
+      syncPlatesFromAssignments,
+    ],
+  );
+
   // Render plate grid preview
   const renderPlatePreview = (plate) => {
     const wells = [];
@@ -172,8 +282,22 @@ function AssayPlateCreator({
       wells.push(
         <div
           key={coord}
-          className={`preview-well ${isAssigned ? "assigned" : "empty"}`}
-          title={isAssigned ? `${coord}: ${plate.assignments[coord]}` : coord}
+          role={interactiveMode && plate.id === selectedPlateId ? "button" : undefined}
+          tabIndex={interactiveMode && plate.id === selectedPlateId ? 0 : undefined}
+          className={`preview-well ${isAssigned ? "assigned" : "empty"} ${
+            interactiveMode && plate.id === selectedPlateId ? "clickable" : ""
+          }`}
+          title={
+            isAssigned
+              ? `${coord}: sample ${plate.assignments[coord]}`
+              : coord
+          }
+          onClick={(e) => {
+            if (interactiveMode) {
+              e.stopPropagation();
+              handleWellClick(coord, plate);
+            }
+          }}
         />,
       );
     }
@@ -293,6 +417,14 @@ function AssayPlateCreator({
             defaultMessage="Custom..."
           />
         </Button>
+        {interactiveMode && selectedSampleIds.length > 0 && (
+          <Button kind="secondary" size="sm" onClick={handleAutoAssign}>
+            <FormattedMessage
+              id="notebook.routing.autoAssignWells"
+              defaultMessage="Auto-Assign"
+            />
+          </Button>
+        )}
       </div>
 
       {/* Custom plate creation form */}

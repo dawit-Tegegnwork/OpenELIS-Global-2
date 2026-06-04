@@ -43,6 +43,7 @@ import { FormattedMessage, useIntl } from "react-intl";
 import {
   postToOpenElisServerJsonResponse,
   getFromOpenElisServer,
+  deleteFromOpenElisServer,
 } from "../../utils/Utils";
 import { NotificationContext } from "../../layout/Layout";
 import { NotificationKinds } from "../../common/CustomNotification";
@@ -152,16 +153,29 @@ function PatientOrderEntryPage({
     );
   }, [pageData?.id]);
 
+  const loadRegisteredPatientsForPage = useCallback(() => {
+    if (!pageData?.id) return;
+    getFromOpenElisServer(
+      `/rest/medlab/page/${pageData.id}/registered-patients`,
+      (response) => {
+        if (componentMounted.current && response) {
+          setRegisteredPatients(Array.isArray(response) ? response : []);
+        }
+      },
+    );
+  }, [pageData?.id]);
+
   // Load available tests and existing orders on mount
   useEffect(() => {
     if (componentMounted.current) {
       loadAvailableTests();
       loadOrdersForPage();
+      loadRegisteredPatientsForPage();
     }
     return () => {
       componentMounted.current = false;
     };
-  }, [loadOrdersForPage]);
+  }, [loadOrdersForPage, loadRegisteredPatientsForPage]);
 
   // Load test requirements when tests are selected
   useEffect(() => {
@@ -373,6 +387,9 @@ function PatientOrderEntryPage({
           });
           setNotificationVisible(true);
 
+          loadOrdersForPage();
+          loadRegisteredPatientsForPage();
+
           if (onProgressUpdate) {
             onProgressUpdate();
           }
@@ -406,6 +423,8 @@ function PatientOrderEntryPage({
     onProgressUpdate,
     onNavigateToPage,
     sampleCollectionPageData,
+    loadOrdersForPage,
+    loadRegisteredPatientsForPage,
   ]);
 
   // Form validation - nationalId is required by default system configuration
@@ -431,9 +450,21 @@ function PatientOrderEntryPage({
 
   // Clear registered patients list
   const handleClearList = useCallback(() => {
-    setRegisteredPatients([]);
-    setSelectedPatientsForBulk([]);
-  }, []);
+    if (!pageData?.id) {
+      setRegisteredPatients([]);
+      setSelectedPatientsForBulk([]);
+      return;
+    }
+    deleteFromOpenElisServer(
+      `/rest/medlab/page/${pageData.id}/registered-patients`,
+      () => {
+        if (componentMounted.current) {
+          setRegisteredPatients([]);
+          setSelectedPatientsForBulk([]);
+        }
+      },
+    );
+  }, [pageData?.id]);
 
   // ========== Bulk Order Selection Handlers ==========
   const handleTogglePatientSelection = useCallback((patient) => {
@@ -481,11 +512,12 @@ function PatientOrderEntryPage({
       setSelectedPatientsForBulk([]);
       // Reload orders from server to ensure consistency
       loadOrdersForPage();
+      loadRegisteredPatientsForPage();
       if (onProgressUpdate) {
         onProgressUpdate();
       }
     },
-    [loadOrdersForPage, onProgressUpdate],
+    [loadOrdersForPage, loadRegisteredPatientsForPage, onProgressUpdate],
   );
 
   // Register patient handler
@@ -523,7 +555,6 @@ function PatientOrderEntryPage({
         setSubmitting(false);
 
         if (response?.success && response?.patientPK) {
-          // Add to session list with the real patient ID from the backend
           const newPatient = {
             id: response.patientPK,
             firstName: patientForm.firstName,
@@ -533,7 +564,19 @@ function PatientOrderEntryPage({
             nationalId: patientForm.nationalId,
           };
 
-          setRegisteredPatients((prev) => [...prev, newPatient]);
+          if (pageData?.id) {
+            postToOpenElisServerJsonResponse(
+              `/rest/medlab/page/${pageData.id}/registered-patients`,
+              JSON.stringify(newPatient),
+              () => {
+                if (componentMounted.current) {
+                  loadRegisteredPatientsForPage();
+                }
+              },
+            );
+          } else {
+            setRegisteredPatients((prev) => [...prev, newPatient]);
+          }
 
           // Clear form for next entry
           handleClearForm();
@@ -578,6 +621,8 @@ function PatientOrderEntryPage({
     addNotification,
     setNotificationVisible,
     onProgressUpdate,
+    pageData?.id,
+    loadRegisteredPatientsForPage,
   ]);
 
   // Helper to get order count for a patient (matches by patient ID)

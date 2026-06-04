@@ -173,6 +173,15 @@
   border: 1px solid var(--cds-support-success, #24a148);
 }
 
+.preview-well.clickable {
+  cursor: pointer;
+}
+
+.preview-well.clickable:hover {
+  outline: 2px solid var(--cds-focus, #0f62fe);
+  outline-offset: 1px;
+}
+
 /* Responsive adjustments */
 @media (max-width: 672px) {
   .form-row.dimensions {

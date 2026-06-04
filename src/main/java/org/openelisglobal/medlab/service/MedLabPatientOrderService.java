@@ -108,6 +108,44 @@ public interface MedLabPatientOrderService {
     List<Map<String, Object>> getOrdersForPage(Integer pageId);
 
     /**
+     * Gets patients registered on a notebook page (session list) who do not yet have
+     * a pending order on that page.
+     *
+     * @param pageId the notebook page ID (Patient &amp; Lab Order page)
+     * @return list of registered patient snapshots
+     */
+    List<Map<String, Object>> getRegisteredPatientsForPage(Integer pageId);
+
+    /**
+     * Adds a patient to the page session list after global registration.
+     *
+     * @param pageId      the notebook page ID
+     * @param patientData patient snapshot (id, names, etc.)
+     * @param sysUserId   the system user ID
+     * @return operation result
+     */
+    Map<String, Object> addRegisteredPatientForPage(Integer pageId, Map<String, Object> patientData, String sysUserId);
+
+    /**
+     * Removes one patient from the page session list.
+     *
+     * @param pageId    the notebook page ID
+     * @param patientId the patient ID
+     * @param sysUserId the system user ID
+     * @return operation result
+     */
+    Map<String, Object> removeRegisteredPatientForPage(Integer pageId, String patientId, String sysUserId);
+
+    /**
+     * Clears all patients from the page session list.
+     *
+     * @param pageId    the notebook page ID
+     * @param sysUserId the system user ID
+     * @return operation result
+     */
+    Map<String, Object> clearRegisteredPatientsForPage(Integer pageId, String sysUserId);
+
+    /**
      * Gets order details by accession number.
      *
      * @param labNo the lab accession number

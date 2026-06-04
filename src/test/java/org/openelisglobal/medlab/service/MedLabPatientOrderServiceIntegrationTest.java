@@ -1038,4 +1038,72 @@ public class MedLabPatientOrderServiceIntegrationTest extends BaseWebContextSens
         // This is the key fix: each sample_item only shows its OWN analyses
         assertNull("Aliquot should NOT appear in Result Entry (no analyses on this sample_item)", aliquotEntry);
     }
+
+    @Test
+    public void registeredPatientsPersistOnNotebookPage() {
+        medLabPatientOrderService.clearRegisteredPatientsForPage(8001, TEST_USER_ID);
+
+        Map<String, Object> patient = new HashMap<>();
+        patient.put("id", TEST_PATIENT_ID);
+        patient.put("firstName", "Patient1");
+        patient.put("lastName", "OrderTest");
+
+        Map<String, Object> addResult = medLabPatientOrderService.addRegisteredPatientForPage(8001, patient,
+                TEST_USER_ID);
+        assertTrue(Boolean.TRUE.equals(addResult.get("success")));
+
+        List<Map<String, Object>> list = medLabPatientOrderService.getRegisteredPatientsForPage(8001);
+        assertEquals(1, list.size());
+        assertEquals(TEST_PATIENT_ID, list.get(0).get("id").toString());
+
+        Map<String, Object> removeResult = medLabPatientOrderService.removeRegisteredPatientForPage(8001,
+                TEST_PATIENT_ID, TEST_USER_ID);
+        assertTrue(Boolean.TRUE.equals(removeResult.get("success")));
+        assertTrue(medLabPatientOrderService.getRegisteredPatientsForPage(8001).isEmpty());
+    }
+
+    @Test
+    public void routeSamplesInternalAnalysisStoresWellCoordinates() {
+        String labNo = "TEST-ROUTE-WELLS-001";
+        List<String> testIds = List.of(TEST_TEST_ID_1);
+
+        medLabPatientOrderService.createPatientOrder(TEST_PATIENT_ID, labNo, "2026-01-09", "2026-01-09", "ROUTINE",
+                testIds, TEST_NOTEBOOK_ENTRY_ID, 8002, TEST_USER_ID);
+
+        Map<String, Object> collectResult = medLabPatientOrderService.recordSampleCollection(labNo, "8001", "tube",
+                "10:30", "2026-01-09", "2", "5.0", null, 8002, TEST_USER_ID);
+
+        Sample createdSample = sampleService.get(collectResult.get("sampleId").toString());
+        List<SampleItem> sampleItems = sampleItemService.getSampleItemsBySampleId(createdSample.getId());
+        Integer sampleItemId = Integer.parseInt(sampleItems.get(0).getId());
+
+        Map<String, Object> qcResult = medLabPatientOrderService.recordQCDecision(labNo, true, null, TEST_QC_PAGE_ID,
+                TEST_USER_ID);
+        assertTrue(Boolean.TRUE.equals(qcResult.get("success")));
+
+        Map<String, Object> assayPlate = new HashMap<>();
+        assayPlate.put("name", "96-Well Plate #1");
+        assayPlate.put("rows", 8);
+        assayPlate.put("columns", 12);
+
+        Map<String, Object> metadata = new HashMap<>();
+        metadata.put("assayPlate", assayPlate);
+
+        Map<String, Object> routeResult = medLabPatientOrderService.routeSamples(List.of(sampleItemId),
+                "INTERNAL_ANALYSIS", TEST_ROUTING_PAGE_ID, metadata, TEST_USER_ID);
+        assertTrue(Boolean.TRUE.equals(routeResult.get("success")));
+
+        @SuppressWarnings("unchecked")
+        Map<Integer, String> wellAssignments = (Map<Integer, String>) routeResult.get("wellAssignments");
+        assertNotNull(wellAssignments);
+        assertEquals("A1", wellAssignments.get(sampleItemId));
+
+        List<Map<String, Object>> routingSamples = medLabPatientOrderService
+                .getSamplesForRouting(TEST_NOTEBOOK_ENTRY_ID);
+        Map<String, Object> routedSample = routingSamples.stream()
+                .filter(s -> sampleItemId.toString().equals(String.valueOf(s.get("id")))).findFirst().orElse(null);
+        assertNotNull(routedSample);
+        assertEquals("A1", routedSample.get("wellCoordinate"));
+        assertEquals("96-Well Plate #1", routedSample.get("assayPlateName"));
+    }
 }

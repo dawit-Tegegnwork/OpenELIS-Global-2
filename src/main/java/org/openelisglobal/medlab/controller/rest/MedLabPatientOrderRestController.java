@@ -16,6 +16,7 @@ import org.openelisglobal.notebook.valueholder.NotebookPageSample;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -388,6 +389,77 @@ public class MedLabPatientOrderRestController extends BaseRestController {
 
         List<Map<String, Object>> orders = medLabPatientOrderService.getOrdersForPage(pageId);
         return ResponseEntity.ok(orders);
+    }
+
+    /**
+     * Gets patients registered on this page who do not yet have a pending order.
+     */
+    @GetMapping(value = "/page/{pageId}/registered-patients", produces = MediaType.APPLICATION_JSON_VALUE)
+    @ResponseBody
+    public ResponseEntity<List<Map<String, Object>>> getRegisteredPatientsForPage(
+            @PathVariable("pageId") Integer pageId) {
+        return ResponseEntity.ok(medLabPatientOrderService.getRegisteredPatientsForPage(pageId));
+    }
+
+    /**
+     * Adds a patient to the page session list after global registration.
+     */
+    @PostMapping(value = "/page/{pageId}/registered-patients", produces = MediaType.APPLICATION_JSON_VALUE)
+    @ResponseBody
+    public ResponseEntity<Map<String, Object>> addRegisteredPatientForPage(@PathVariable("pageId") Integer pageId,
+            @RequestBody Map<String, Object> body, HttpServletRequest request) {
+
+        String sysUserId = getSysUserId(request);
+        if (sysUserId == null) {
+            return ResponseEntity.status(401).body(Map.of("error", "User session not found"));
+        }
+
+        Map<String, Object> result = medLabPatientOrderService.addRegisteredPatientForPage(pageId, body, sysUserId);
+        if (Boolean.TRUE.equals(result.get("success"))) {
+            return ResponseEntity.ok(result);
+        }
+        return ResponseEntity.badRequest().body(result);
+    }
+
+    /**
+     * Removes one patient from the page session list.
+     */
+    @DeleteMapping(value = "/page/{pageId}/registered-patients/{patientId}", produces = MediaType.APPLICATION_JSON_VALUE)
+    @ResponseBody
+    public ResponseEntity<Map<String, Object>> removeRegisteredPatientForPage(@PathVariable("pageId") Integer pageId,
+            @PathVariable("patientId") String patientId, HttpServletRequest request) {
+
+        String sysUserId = getSysUserId(request);
+        if (sysUserId == null) {
+            return ResponseEntity.status(401).body(Map.of("error", "User session not found"));
+        }
+
+        Map<String, Object> result = medLabPatientOrderService.removeRegisteredPatientForPage(pageId, patientId,
+                sysUserId);
+        if (Boolean.TRUE.equals(result.get("success"))) {
+            return ResponseEntity.ok(result);
+        }
+        return ResponseEntity.badRequest().body(result);
+    }
+
+    /**
+     * Clears all patients from the page session list.
+     */
+    @DeleteMapping(value = "/page/{pageId}/registered-patients", produces = MediaType.APPLICATION_JSON_VALUE)
+    @ResponseBody
+    public ResponseEntity<Map<String, Object>> clearRegisteredPatientsForPage(@PathVariable("pageId") Integer pageId,
+            HttpServletRequest request) {
+
+        String sysUserId = getSysUserId(request);
+        if (sysUserId == null) {
+            return ResponseEntity.status(401).body(Map.of("error", "User session not found"));
+        }
+
+        Map<String, Object> result = medLabPatientOrderService.clearRegisteredPatientsForPage(pageId, sysUserId);
+        if (Boolean.TRUE.equals(result.get("success"))) {
+            return ResponseEntity.ok(result);
+        }
+        return ResponseEntity.badRequest().body(result);
     }
 
     /**
@@ -1043,6 +1115,9 @@ public class MedLabPatientOrderRestController extends BaseRestController {
             // Well assignments map (sampleId -> wellPosition)
             if (body.get("storageWellAssignments") != null) {
                 metadata.put("storageWellAssignments", body.get("storageWellAssignments"));
+            }
+            if (body.get("wellAssignments") != null) {
+                metadata.put("wellAssignments", body.get("wellAssignments"));
             }
 
             if (sampleIds == null || sampleIds.isEmpty()) {

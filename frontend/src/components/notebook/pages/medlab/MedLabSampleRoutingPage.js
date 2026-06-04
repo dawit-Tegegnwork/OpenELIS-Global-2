@@ -152,6 +152,7 @@ function MedLabSampleRoutingPage({
   // Assay plate state (for Internal Analysis - NOT connected to storage hierarchy)
   const [assayPlates, setAssayPlates] = useState([]);
   const [selectedAssayPlateId, setSelectedAssayPlateId] = useState(null);
+  const [assayWellAssignments, setAssayWellAssignments] = useState({});
 
   // Destination options
   const destinationOptions = [
@@ -360,10 +361,101 @@ function MedLabSampleRoutingPage({
   const handleCloseRouteModal = useCallback(() => {
     setRouteModalOpen(false);
     setBiorepositoryModalError(null);
+    setAssayWellAssignments({});
     if (routeDestination?.id === "EXTERNAL_LAB") {
       resetBiorepositoryModalState();
     }
   }, [routeDestination, resetBiorepositoryModalState]);
+
+  const syncAssayPlatesFromWellAssignments = useCallback(
+    (assignments, plateId = selectedAssayPlateId) => {
+      if (!plateId) {
+        return;
+      }
+      setAssayPlates((prev) =>
+        prev.map((plate) => {
+          if (plate.id !== plateId) {
+            return plate;
+          }
+          const inverse = {};
+          Object.entries(assignments || {}).forEach(([sampleId, coord]) => {
+            if (coord) {
+              inverse[coord] = sampleId;
+            }
+          });
+          return {
+            ...plate,
+            assignments: inverse,
+            assignedCount: Object.keys(inverse).length,
+          };
+        }),
+      );
+    },
+    [selectedAssayPlateId],
+  );
+
+  const autoAssignAssayWells = useCallback(() => {
+    const plate = assayPlates.find((p) => p.id === selectedAssayPlateId);
+    if (!plate || selectedSampleIds.length === 0) {
+      return;
+    }
+
+    const assignments = { ...assayWellAssignments };
+    const occupied = new Set(Object.values(assignments));
+    let index = 0;
+    const capacity = plate.rows * plate.columns;
+    const rowLetters = (row) => String.fromCharCode(65 + row);
+
+    for (const sampleId of selectedSampleIds) {
+      if (assignments[sampleId]) {
+        continue;
+      }
+      while (index < capacity) {
+        const row = Math.floor(index / plate.columns);
+        const col = (index % plate.columns) + 1;
+        const coord = `${rowLetters(row)}${col}`;
+        index += 1;
+        if (!occupied.has(coord)) {
+          assignments[sampleId] = coord;
+          occupied.add(coord);
+          break;
+        }
+      }
+    }
+
+    setAssayWellAssignments(assignments);
+    syncAssayPlatesFromWellAssignments(assignments, plate.id);
+  }, [
+    assayPlates,
+    selectedAssayPlateId,
+    selectedSampleIds,
+    assayWellAssignments,
+    syncAssayPlatesFromWellAssignments,
+  ]);
+
+  useEffect(() => {
+    if (
+      !routeModalOpen ||
+      routeDestination?.id !== "INTERNAL_ANALYSIS" ||
+      !selectedAssayPlateId ||
+      selectedSampleIds.length === 0
+    ) {
+      return;
+    }
+    const needsAssignment = selectedSampleIds.some(
+      (id) => !assayWellAssignments[id],
+    );
+    if (needsAssignment) {
+      autoAssignAssayWells();
+    }
+  }, [
+    routeModalOpen,
+    routeDestination,
+    selectedAssayPlateId,
+    selectedSampleIds,
+    assayWellAssignments,
+    autoAssignAssayWells,
+  ]);
 
   // Handle route modal open
   const handleOpenRouteModal = useCallback(
@@ -418,12 +510,24 @@ function MedLabSampleRoutingPage({
         return;
       }
       // Send plate info for well auto-assignment (backend will handle as temporary plate)
+      const unassignedSamples = selectedSampleIds.filter(
+        (id) => !assayWellAssignments[id],
+      );
+      if (unassignedSamples.length > 0) {
+        setError(
+          "Please assign all selected samples to wells (use Auto-Assign or click wells).",
+        );
+        setRouting(false);
+        return;
+      }
+
       routeRequest.assayPlate = {
         id: selectedPlate.id,
         name: selectedPlate.name,
         rows: selectedPlate.rows,
         columns: selectedPlate.columns,
       };
+      routeRequest.wellAssignments = assayWellAssignments;
     } else if (routeDestination.id === "EXTERNAL_LAB") {
       if (!externalLabName.trim()) {
         setError("Please select a destination laboratory.");
@@ -576,6 +680,7 @@ function MedLabSampleRoutingPage({
             `Successfully routed ${response.routedCount} samples to ${routeDestination.label}.`,
           );
           setSelectedSampleIds([]);
+          setAssayWellAssignments({});
           loadPageSamples();
           loadRoutingSummary();
           if (onProgressUpdate) {
@@ -596,6 +701,7 @@ function MedLabSampleRoutingPage({
     pageData?.id,
     assayPlates,
     selectedAssayPlateId,
+    assayWellAssignments,
     loadPageSamples,
     loadRoutingSummary,
     onProgressUpdate,
@@ -1633,6 +1739,12 @@ function MedLabSampleRoutingPage({
               selectedPlateId={selectedAssayPlateId}
               onPlateSelect={setSelectedAssayPlateId}
               sampleCount={selectedSampleIds.length}
+              selectedSampleIds={selectedSampleIds}
+              wellAssignments={assayWellAssignments}
+              onWellAssignmentsChange={(assignments) => {
+                setAssayWellAssignments(assignments);
+                syncAssayPlatesFromWellAssignments(assignments);
+              }}
             />
             <p
               style={{
