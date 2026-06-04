@@ -7,6 +7,7 @@ import static org.mockito.Mockito.when;
 
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -316,25 +317,44 @@ public class DepartmentIsolationServiceTest {
     }
 
     @Test
-    public void assignableLabDepartmentsForAdminUsesActiveTestSections() {
+    public void assignableLabDepartmentsForAdminUsesNotebookLinkedDepartments() {
         when(notebookSecurityService.hasGlobalAdminRole(USER_ID)).thenReturn(true);
-        TestSection bacteriology = buildDepartment("168", "Bacteriology");
-        TestSection immunology = buildDepartment("59", "Immunology");
-        TestSection allLabUnits = buildDepartment("0", "All Lab Units");
-        when(testSectionService.getAllActiveTestSections()).thenReturn(List.of(bacteriology, allLabUnits, immunology));
+        TestSection bacteriology = buildDepartment("168", "Bacteriology Laboratory");
+        TestSection immunology = buildDepartment("59", "Immunology Laboratory");
+
+        NoteBook bacteriologyTemplate = new NoteBook();
+        bacteriologyTemplate.setId(1);
+        bacteriologyTemplate.setTitle("Bacteriology Laboratory");
+        bacteriologyTemplate.setDepartments(Set.of(bacteriology));
+
+        NoteBook immunologyTemplate = new NoteBook();
+        immunologyTemplate.setId(2);
+        immunologyTemplate.setTitle("Immunology Laboratory");
+        immunologyTemplate.setDepartments(Set.of(immunology));
+
+        when(noteBookService.getAllTemplateNoteBooks())
+                .thenReturn(List.of(bacteriologyTemplate, immunologyTemplate));
+        when(testSectionService.getTestSectionById("168")).thenReturn(bacteriology);
+        when(testSectionService.getTestSectionById("59")).thenReturn(immunology);
 
         List<Map<String, String>> rows = service.getAssignableLabDepartments(request);
 
         assertEquals(2, rows.size());
         assertTrue(rows.stream().anyMatch(row -> "168".equals(row.get("id"))));
         assertTrue(rows.stream().anyMatch(row -> "59".equals(row.get("id"))));
-        assertFalse(rows.stream().anyMatch(row -> "All Lab Units".equals(row.get("value"))));
     }
 
     @Test
-    public void assignableLabDepartmentsForRestrictedUserUsesSelectableSections() {
-        TestSection pathology = buildDepartment("7", LAB_UNIT);
+    public void assignableLabDepartmentsForRestrictedUserUsesSelectableNotebookSections() {
+        TestSection pathology = buildDepartment("7", "Pathology Laboratory");
         when(testSectionService.getTestSectionById("7")).thenReturn(pathology);
+
+        NoteBook pathologyTemplate = new NoteBook();
+        pathologyTemplate.setId(1);
+        pathologyTemplate.setTitle("Pathology Laboratory");
+        pathologyTemplate.setDepartments(Set.of(pathology));
+        when(noteBookService.getAllTemplateNoteBooks()).thenReturn(List.of(pathologyTemplate));
+        when(notebookSecurityService.canViewTemplate(1, USER_ID, "Pathology Laboratory")).thenReturn(true);
 
         List<Map<String, String>> rows = service.getAssignableLabDepartments(request);
 

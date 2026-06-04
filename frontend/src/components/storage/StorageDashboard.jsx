@@ -48,6 +48,7 @@ import {
 } from "../utils/Utils";
 import config from "../../config.json";
 import { usePermissions } from "../../hooks/usePermissions";
+import { filterOwningDepartments } from "../notebook/utils/notebookInventoryScope";
 import {
   getStorageCoordinateLabel,
   resolveOccupancyAtCell,
@@ -247,8 +248,24 @@ const StorageDashboard = () => {
   const [filterRoom, setFilterRoom] = useState(""); // Sample Items + other tabs
   const [filterDevice, setFilterDevice] = useState(""); // Sample Items + other tabs
   const [filterStatus, setFilterStatus] = useState("");
+  const [assignableDepartments, setAssignableDepartments] = useState([]);
 
-  // Department-scoped users: default Sample Items filter to the active header department.
+  useEffect(() => {
+    getFromOpenElisServer(
+      "/rest/storage/room-assignable-departments",
+      (response) => {
+        if (!componentMounted.current || !Array.isArray(response)) {
+          return;
+        }
+        setAssignableDepartments(
+          filterOwningDepartments(response).map((dept) => ({
+            id: String(dept.id),
+            label: dept.value || dept.name || String(dept.id),
+          })),
+        );
+      },
+    );
+  }, []);
   useEffect(() => {
     if (isGlobalAdmin || selectedTab !== 0) {
       return;
@@ -3441,35 +3458,24 @@ const StorageDashboard = () => {
                                   id: "",
                                   label: intl.formatMessage({ id: "label.all" }),
                                 },
-                                ...Array.from(
-                                  rooms.reduce((map, room) => {
-                                    const id = room.departmentTestSectionId;
-                                    if (id == null || id === "") {
-                                      return map;
-                                    }
-                                    if (!map.has(String(id))) {
-                                      map.set(String(id), {
-                                        id: String(id),
-                                        label:
-                                          room.departmentName ||
-                                          room.departmentTestSectionName ||
-                                          String(id),
-                                      });
-                                    }
-                                    return map;
-                                  }, new Map()).values(),
-                                ),
+                                ...assignableDepartments,
                               ]}
                               selectedItem={
                                 filterDepartment
                                   ? {
                                       id: filterDepartment,
                                       label:
+                                        assignableDepartments.find(
+                                          (d) =>
+                                            String(d.id) ===
+                                            String(filterDepartment),
+                                        )?.label ||
                                         rooms.find(
                                           (r) =>
                                             String(r.departmentTestSectionId) ===
                                             String(filterDepartment),
-                                        )?.departmentName || filterDepartment,
+                                        )?.departmentName ||
+                                        filterDepartment,
                                     }
                                   : {
                                       id: "",

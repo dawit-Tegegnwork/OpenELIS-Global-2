@@ -146,15 +146,11 @@ public class DepartmentIsolationService {
     /**
      * Lab departments ({@code test_section}) the user may assign when creating
      * department-owned records (storage rooms, inventory catalog items, etc.).
-     * Uses real test sections — not notebook workflow templates.
+     * Same notebook-linked set as {@link #getAssignableWorkflowDepartments(HttpServletRequest)}.
      */
     @Transactional(readOnly = true)
     public List<Map<String, String>> getAssignableLabDepartments(HttpServletRequest request) {
-        if (hasUnrestrictedDepartmentAccess(request)) {
-            List<TestSection> active = testSectionService.getAllActiveTestSections();
-            return buildDepartmentRows(active != null ? active : List.of(), null);
-        }
-        return buildDepartmentRows(loadTestSections(getSelectableUserTestSectionIds(request)), null);
+        return getAssignableWorkflowDepartments(request);
     }
 
     @Transactional(readOnly = true)
