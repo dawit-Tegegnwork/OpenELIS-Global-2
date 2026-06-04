@@ -49,6 +49,10 @@ import { NotificationContext } from "../../layout/Layout";
 import { NotificationKinds } from "../../common/CustomNotification";
 import CustomDatePicker from "../../common/CustomDatePicker";
 import BulkOrderModal from "../workflow/BulkOrderModal";
+import {
+  getPatientId,
+  normalizePatientForOrder,
+} from "./patientOrderHelpers";
 import "../workflow/NotebookWorkflow.css";
 
 // Helper to format date as MM/dd/yyyy (backend expected format)
@@ -177,6 +181,13 @@ function PatientOrderEntryPage({
     };
   }, [loadOrdersForPage, loadRegisteredPatientsForPage]);
 
+  // Refresh session patients when opening Create Lab Order tab
+  useEffect(() => {
+    if (activeTab === 1) {
+      loadRegisteredPatientsForPage();
+    }
+  }, [activeTab, loadRegisteredPatientsForPage]);
+
   // Load test requirements when tests are selected
   useEffect(() => {
     if (selectedTests.length > 0) {
@@ -266,9 +277,9 @@ function PatientOrderEntryPage({
     });
   }, [patientSearchQuery]);
 
-  // Select a patient from search results
+  // Select a patient from search results or session list
   const handleSelectPatient = useCallback((patient) => {
-    setSelectedPatient(patient);
+    setSelectedPatient(normalizePatientForOrder(patient));
     setPatientSearchResults([]);
     setPatientSearchQuery("");
   }, []);
@@ -328,7 +339,7 @@ function PatientOrderEntryPage({
     setSubmitting(true);
 
     const orderData = {
-      patientId: selectedPatient.patientID,
+      patientId: getPatientId(selectedPatient),
       labNo: labOrderForm.labNo,
       requestDate: labOrderForm.requestDate,
       receivedDate: labOrderForm.receivedDate,
@@ -357,7 +368,7 @@ function PatientOrderEntryPage({
             {
               id: response.orderId || `order-${Date.now()}`,
               labNo: labOrderForm.labNo,
-              patientId: selectedPatient.patientID,
+              patientId: getPatientId(selectedPatient),
               patientName: `${selectedPatient.lastName}, ${selectedPatient.firstName}`,
               testCount: selectedTests.length,
               status: response.status || "PENDING_COLLECTION",
@@ -628,7 +639,7 @@ function PatientOrderEntryPage({
   // Helper to get order count for a patient (matches by patient ID)
   const getPatientOrderCount = useCallback(
     (patient) => {
-      const patientId = patient.id || patient.patientID;
+      const patientId = getPatientId(patient);
       if (!patientId) return 0;
       return createdOrders.filter(
         (order) => String(order.patientId) === String(patientId),
@@ -1058,6 +1069,66 @@ function PatientOrderEntryPage({
 
           {/* Tab 2: Lab Order Entry (FR-006, FR-007) */}
           <TabPanel>
+            {/* Session patients from Register tab */}
+            <div
+              className="lab-order-section"
+              style={{ marginBottom: "1.5rem" }}
+            >
+              <h5>
+                <FormattedMessage
+                  id="medlab.order.sessionPatients"
+                  defaultMessage="Patients registered this session"
+                />
+              </h5>
+              {registeredPatients.length > 0 ? (
+                <div>
+                  <p style={{ marginBottom: "0.5rem" }}>
+                    <FormattedMessage
+                      id="medlab.order.selectFromSession"
+                      defaultMessage="Select a patient registered on this page (no order yet):"
+                    />
+                  </p>
+                  {registeredPatients.map((patient) => {
+                    const patientId = getPatientId(patient);
+                    const isSelected =
+                      selectedPatient &&
+                      getPatientId(selectedPatient) === String(patientId);
+                    return (
+                      <Tile
+                        key={patientId}
+                        className="patient-result-tile"
+                        style={{
+                          cursor: "pointer",
+                          marginBottom: "0.5rem",
+                          padding: "0.75rem",
+                          border: isSelected
+                            ? "2px solid #0f62fe"
+                            : "1px solid #e0e0e0",
+                        }}
+                        onClick={() => handleSelectPatient(patient)}
+                      >
+                        <strong>
+                          {patient.lastName}, {patient.firstName}
+                        </strong>{" "}
+                        - {patient.birthDateForDisplay} (
+                        {patient.gender === "M"
+                          ? intl.formatMessage({ id: "patient.male" })
+                          : intl.formatMessage({ id: "patient.female" })}
+                        )
+                      </Tile>
+                    );
+                  })}
+                </div>
+              ) : (
+                <p className="empty-state-message">
+                  <FormattedMessage
+                    id="medlab.order.noSessionPatients"
+                    defaultMessage="No patients waiting for an order. Register a patient on the first tab, or search below."
+                  />
+                </p>
+              )}
+            </div>
+
             {/* Patient Search Section */}
             <div
               className="lab-order-section"
@@ -1065,8 +1136,8 @@ function PatientOrderEntryPage({
             >
               <h5>
                 <FormattedMessage
-                  id="medlab.order.selectPatient"
-                  defaultMessage="1. Select Patient"
+                  id="medlab.order.searchPatientSection"
+                  defaultMessage="Or search all patients"
                 />
               </h5>
               <Grid fullWidth>
