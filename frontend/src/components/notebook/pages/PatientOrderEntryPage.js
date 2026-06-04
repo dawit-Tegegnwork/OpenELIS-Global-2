@@ -12,6 +12,7 @@ import {
   Tile,
   Loading,
   TextInput,
+  NumberInput,
   RadioButton,
   RadioButtonGroup,
   DataTable,
@@ -52,6 +53,12 @@ import BulkOrderModal from "../workflow/BulkOrderModal";
 import {
   getPatientId,
   normalizePatientForOrder,
+  REGISTER_MODE,
+  isRegistrationFormValid,
+  buildPatientManagementPayload,
+  buildRegisteredPatientSnapshot,
+  formatPatientAgeDisplay,
+  birthDateForDisplayFromAge,
 } from "./patientOrderHelpers";
 import "../workflow/NotebookWorkflow.css";
 
@@ -91,13 +98,16 @@ function PatientOrderEntryPage({
   const [patientForm, setPatientForm] = useState({
     firstName: "",
     lastName: "",
-    dateOfBirth: "",
+    age: "",
     gender: "",
     nationalId: "",
+    fatherNameOrProtocolId: "",
   });
 
-  // Registered patients in this session
-  const [registeredPatients, setRegisteredPatients] = useState([]);
+  // Full session list (includes patients who already have orders)
+  const [allRegisteredPatients, setAllRegisteredPatients] = useState([]);
+  // Patients awaiting an order (Tab 2 picker)
+  const [pendingRegisteredPatients, setPendingRegisteredPatients] = useState([]);
 
   // Bulk order selection state
   const [selectedPatientsForBulk, setSelectedPatientsForBulk] = useState([]);
@@ -157,17 +167,55 @@ function PatientOrderEntryPage({
     );
   }, [pageData?.id]);
 
-  const loadRegisteredPatientsForPage = useCallback(() => {
+  const loadAllRegisteredPatientsForPage = useCallback(() => {
+    if (!pageData?.id) return;
+    getFromOpenElisServer(
+      `/rest/medlab/page/${pageData.id}/registered-patients?all=true`,
+      (response) => {
+        if (componentMounted.current && response) {
+          setAllRegisteredPatients(Array.isArray(response) ? response : []);
+        }
+      },
+    );
+  }, [pageData?.id]);
+
+  const loadPendingRegisteredPatientsForPage = useCallback(() => {
     if (!pageData?.id) return;
     getFromOpenElisServer(
       `/rest/medlab/page/${pageData.id}/registered-patients`,
       (response) => {
         if (componentMounted.current && response) {
-          setRegisteredPatients(Array.isArray(response) ? response : []);
+          setPendingRegisteredPatients(Array.isArray(response) ? response : []);
         }
       },
     );
   }, [pageData?.id]);
+
+  const loadRegisteredPatientsForPage = useCallback(() => {
+    loadAllRegisteredPatientsForPage();
+    loadPendingRegisteredPatientsForPage();
+  }, [loadAllRegisteredPatientsForPage, loadPendingRegisteredPatientsForPage]);
+
+  const loadNextLabNumber = useCallback(() => {
+    const year = new Date().getFullYear();
+    const prefix = `MEDLAB-${year}-`;
+    getFromOpenElisServer(
+      `/rest/medlab/lab-number-preview?prefix=${encodeURIComponent(prefix)}&count=1`,
+      (response) => {
+        if (
+          componentMounted.current &&
+          response?.labNumbers?.length > 0
+        ) {
+          setLabOrderForm((prev) => {
+            if (prev.labNo.trim()) {
+              return prev;
+            }
+            return { ...prev, labNo: response.labNumbers[0] };
+          });
+        }
+      },
+    );
+  }, []);
 
   // Load available tests and existing orders on mount
   useEffect(() => {
@@ -185,8 +233,9 @@ function PatientOrderEntryPage({
   useEffect(() => {
     if (activeTab === 1) {
       loadRegisteredPatientsForPage();
+      loadNextLabNumber();
     }
-  }, [activeTab, loadRegisteredPatientsForPage]);
+  }, [activeTab, loadRegisteredPatientsForPage, loadNextLabNumber]);
 
   // Load test requirements when tests are selected
   useEffect(() => {
@@ -278,11 +327,15 @@ function PatientOrderEntryPage({
   }, [patientSearchQuery]);
 
   // Select a patient from search results or session list
-  const handleSelectPatient = useCallback((patient) => {
-    setSelectedPatient(normalizePatientForOrder(patient));
-    setPatientSearchResults([]);
-    setPatientSearchQuery("");
-  }, []);
+  const handleSelectPatient = useCallback(
+    (patient) => {
+      setSelectedPatient(normalizePatientForOrder(patient));
+      setPatientSearchResults([]);
+      setPatientSearchQuery("");
+      loadNextLabNumber();
+    },
+    [loadNextLabNumber],
+  );
 
   // Toggle test selection
   const handleTestToggle = useCallback((testId) => {
@@ -438,31 +491,31 @@ function PatientOrderEntryPage({
     loadRegisteredPatientsForPage,
   ]);
 
-  // Form validation - nationalId is required by default system configuration
-  const isFormValid = useCallback(() => {
-    return (
-      patientForm.firstName.trim() !== "" &&
-      patientForm.lastName.trim() !== "" &&
-      patientForm.dateOfBirth !== "" &&
-      patientForm.gender !== ""
-    );
-  }, [patientForm]);
+  const isFormValid = useCallback(
+    (mode = REGISTER_MODE.PATIENT) =>
+      isRegistrationFormValid(patientForm, mode),
+    [patientForm],
+  );
+
+  const estimatedBirthDate = birthDateForDisplayFromAge(patientForm.age);
 
   // Clear form
   const handleClearForm = useCallback(() => {
     setPatientForm({
       firstName: "",
       lastName: "",
-      dateOfBirth: "",
+      age: "",
       gender: "",
       nationalId: "",
+      fatherNameOrProtocolId: "",
     });
   }, []);
 
   // Clear registered patients list
   const handleClearList = useCallback(() => {
     if (!pageData?.id) {
-      setRegisteredPatients([]);
+      setAllRegisteredPatients([]);
+      setPendingRegisteredPatients([]);
       setSelectedPatientsForBulk([]);
       return;
     }
@@ -470,7 +523,8 @@ function PatientOrderEntryPage({
       `/rest/medlab/page/${pageData.id}/registered-patients`,
       () => {
         if (componentMounted.current) {
-          setRegisteredPatients([]);
+          setAllRegisteredPatients([]);
+          setPendingRegisteredPatients([]);
           setSelectedPatientsForBulk([]);
         }
       },
@@ -491,12 +545,12 @@ function PatientOrderEntryPage({
   }, []);
 
   const handleSelectAllPatients = useCallback(() => {
-    if (selectedPatientsForBulk.length === registeredPatients.length) {
+    if (selectedPatientsForBulk.length === pendingRegisteredPatients.length) {
       setSelectedPatientsForBulk([]);
     } else {
-      setSelectedPatientsForBulk([...registeredPatients]);
+      setSelectedPatientsForBulk([...pendingRegisteredPatients]);
     }
-  }, [registeredPatients, selectedPatientsForBulk.length]);
+  }, [pendingRegisteredPatients, selectedPatientsForBulk.length]);
 
   const isPatientSelected = useCallback(
     (patient) => {
@@ -531,110 +585,144 @@ function PatientOrderEntryPage({
     [loadOrdersForPage, loadRegisteredPatientsForPage, onProgressUpdate],
   );
 
-  // Register patient handler
-  const handleRegisterPatient = useCallback(() => {
-    if (!isFormValid()) {
-      addNotification({
-        title: intl.formatMessage({ id: "notification.title" }),
-        message: intl.formatMessage({
-          id: "medlab.patient.validation.error",
-          defaultMessage: "Please fill in all required fields",
-        }),
-        kind: NotificationKinds.warning,
-      });
-      setNotificationVisible(true);
-      return;
-    }
-
-    setSubmitting(true);
-
-    const patientData = {
-      firstName: patientForm.firstName,
-      lastName: patientForm.lastName,
-      birthDateForDisplay: patientForm.dateOfBirth,
-      gender: patientForm.gender,
-      nationalId: patientForm.nationalId,
-      patientUpdateStatus: "ADD",
-    };
-
-    postToOpenElisServerJsonResponse(
-      "/rest/PatientManagement",
-      JSON.stringify(patientData),
-      (response) => {
-        if (!componentMounted.current) return;
-
-        setSubmitting(false);
-
-        if (response?.success && response?.patientPK) {
-          const newPatient = {
-            id: response.patientPK,
-            firstName: patientForm.firstName,
-            lastName: patientForm.lastName,
-            birthDateForDisplay: patientForm.dateOfBirth,
-            gender: patientForm.gender,
-            nationalId: patientForm.nationalId,
-          };
-
-          if (pageData?.id) {
-            postToOpenElisServerJsonResponse(
-              `/rest/medlab/page/${pageData.id}/registered-patients`,
-              JSON.stringify(newPatient),
-              () => {
-                if (componentMounted.current) {
-                  loadRegisteredPatientsForPage();
-                }
-              },
-            );
-          } else {
-            setRegisteredPatients((prev) => [...prev, newPatient]);
-          }
-
-          // Clear form for next entry
-          handleClearForm();
-
-          // Show success notification
-          addNotification({
-            title: intl.formatMessage({ id: "notification.title" }),
-            message: intl.formatMessage({
-              id: "medlab.patient.created.success",
-              defaultMessage: "Patient registered successfully",
-            }),
-            kind: NotificationKinds.success,
-          });
-          setNotificationVisible(true);
-
-          // Notify parent of progress update
-          if (onProgressUpdate) {
-            onProgressUpdate();
-          }
-        } else {
-          // Show error - either request failed or patient ID was not returned
-          const errorMessage =
-            response?.error ||
-            intl.formatMessage({
-              id: "medlab.patient.created.error",
-              defaultMessage: "Error registering patient",
+  const persistRegisteredPatientOnPage = useCallback(
+    (snapshot, onDone) => {
+      if (!pageData?.id) {
+        setAllRegisteredPatients((prev) => [...prev, snapshot]);
+        setPendingRegisteredPatients((prev) => [...prev, snapshot]);
+        onDone?.();
+        return;
+      }
+      postToOpenElisServerJsonResponse(
+        `/rest/medlab/page/${pageData.id}/registered-patients`,
+        JSON.stringify(snapshot),
+        (response) => {
+          if (!componentMounted.current) return;
+          const isHttpError = typeof response?.statusCode === "number";
+          if (isHttpError || response?.success === false) {
+            addNotification({
+              title: intl.formatMessage({ id: "notification.title" }),
+              message: intl.formatMessage({
+                id: "medlab.patient.sessionPersist.error",
+                defaultMessage:
+                  "Patient saved in LIMS but could not add to this notebook session list. Refresh or redeploy the backend with medlab APIs.",
+              }),
+              kind: NotificationKinds.warning,
             });
-          addNotification({
-            title: intl.formatMessage({ id: "notification.title" }),
-            message: errorMessage,
-            kind: NotificationKinds.error,
-          });
-          setNotificationVisible(true);
-        }
-      },
-    );
-  }, [
-    patientForm,
-    isFormValid,
-    handleClearForm,
-    intl,
-    addNotification,
-    setNotificationVisible,
-    onProgressUpdate,
-    pageData?.id,
-    loadRegisteredPatientsForPage,
-  ]);
+            setNotificationVisible(true);
+            setAllRegisteredPatients((prev) => {
+              if (prev.some((p) => String(p.id) === String(snapshot.id))) {
+                return prev;
+              }
+              return [...prev, snapshot];
+            });
+            setPendingRegisteredPatients((prev) => {
+              if (prev.some((p) => String(p.id) === String(snapshot.id))) {
+                return prev;
+              }
+              return [...prev, snapshot];
+            });
+          }
+          loadRegisteredPatientsForPage();
+          onDone?.();
+        },
+      );
+    },
+    [
+      pageData?.id,
+      intl,
+      addNotification,
+      setNotificationVisible,
+      loadRegisteredPatientsForPage,
+    ],
+  );
+
+  const handleRegisterPatient = useCallback(
+    (mode = REGISTER_MODE.PATIENT) => {
+      if (!isFormValid(mode)) {
+        addNotification({
+          title: intl.formatMessage({ id: "notification.title" }),
+          message: intl.formatMessage({
+            id: "medlab.patient.validation.error",
+            defaultMessage: "Please fill in all required fields",
+          }),
+          kind: NotificationKinds.warning,
+        });
+        setNotificationVisible(true);
+        return;
+      }
+
+      setSubmitting(true);
+
+      const { payload, birthDateForDisplay, age } =
+        buildPatientManagementPayload(patientForm, mode);
+
+      postToOpenElisServerJsonResponse(
+        "/rest/PatientManagement",
+        JSON.stringify(payload),
+        (response) => {
+          if (!componentMounted.current) return;
+
+          setSubmitting(false);
+
+          if (response?.success && response?.patientPK) {
+            const newPatient = buildRegisteredPatientSnapshot(
+              response.patientPK,
+              patientForm,
+              birthDateForDisplay,
+              age,
+              mode,
+            );
+
+            persistRegisteredPatientOnPage(newPatient, () => {
+              handleClearForm();
+              addNotification({
+                title: intl.formatMessage({ id: "notification.title" }),
+                message: intl.formatMessage({
+                  id:
+                    mode === REGISTER_MODE.PARTICIPANT
+                      ? "medlab.participant.created.success"
+                      : "medlab.patient.created.success",
+                  defaultMessage:
+                    mode === REGISTER_MODE.PARTICIPANT
+                      ? "Participant registered successfully"
+                      : "Patient registered successfully",
+                }),
+                kind: NotificationKinds.success,
+              });
+              setNotificationVisible(true);
+              if (onProgressUpdate) {
+                onProgressUpdate();
+              }
+            });
+          } else {
+            const errorMessage =
+              response?.error ||
+              intl.formatMessage({
+                id: "medlab.patient.created.error",
+                defaultMessage: "Error registering patient",
+              });
+            addNotification({
+              title: intl.formatMessage({ id: "notification.title" }),
+              message: errorMessage,
+              kind: NotificationKinds.error,
+            });
+            setNotificationVisible(true);
+          }
+        },
+      );
+    },
+    [
+      patientForm,
+      isFormValid,
+      handleClearForm,
+      intl,
+      addNotification,
+      setNotificationVisible,
+      onProgressUpdate,
+      persistRegisteredPatientOnPage,
+    ],
+  );
 
   // Helper to get order count for a patient (matches by patient ID)
   const getPatientOrderCount = useCallback(
@@ -656,11 +744,24 @@ function PatientOrderEntryPage({
     },
     {
       key: "firstName",
-      header: intl.formatMessage({ id: "patient.first.name" }),
+      header: intl.formatMessage({
+        id: "medlab.patient.firstNameDual",
+        defaultMessage: "Patient Name / Participant ID",
+      }),
     },
     {
-      key: "birthDateForDisplay",
-      header: intl.formatMessage({ id: "patient.dob" }),
+      key: "subjectNumber",
+      header: intl.formatMessage({
+        id: "medlab.patient.fatherProtocol",
+        defaultMessage: "Father Name / Protocol ID",
+      }),
+    },
+    {
+      key: "age",
+      header: intl.formatMessage({
+        id: "medlab.patient.age",
+        defaultMessage: "Age",
+      }),
     },
     {
       key: "gender",
@@ -707,12 +808,23 @@ function PatientOrderEntryPage({
             <Tile className="progress-tile verified">
               <span className="progress-label">
                 <FormattedMessage
-                  id="medlab.patient.registeredThisSession"
-                  defaultMessage="Registered This Session"
+                  id="medlab.patient.registeredTotal"
+                  defaultMessage="Registered (session)"
                 />
               </span>
               <span className="progress-value">
-                {registeredPatients.length}
+                {allRegisteredPatients.length}
+              </span>
+            </Tile>
+            <Tile className="progress-tile verified">
+              <span className="progress-label">
+                <FormattedMessage
+                  id="medlab.patient.awaitingOrder"
+                  defaultMessage="Awaiting order"
+                />
+              </span>
+              <span className="progress-value">
+                {pendingRegisteredPatients.length}
               </span>
             </Tile>
             <Tile className="progress-tile pending">
@@ -742,8 +854,8 @@ function PatientOrderEntryPage({
           </Tab>
           <Tab>
             <FormattedMessage
-              id="medlab.tab.labOrderEntry"
-              defaultMessage="Create Lab Order"
+              id="medlab.tab.labOrderAndSamples"
+              defaultMessage="Lab Order & Samples"
             />
           </Tab>
         </TabList>
@@ -761,7 +873,10 @@ function PatientOrderEntryPage({
                     id="patient-first-name"
                     labelText={
                       <>
-                        {intl.formatMessage({ id: "patient.first.name" })}{" "}
+                        <FormattedMessage
+                          id="medlab.patient.firstNameDual"
+                          defaultMessage="Patient Name / Participant ID"
+                        />{" "}
                         <span className="requiredlabel">*</span>
                       </>
                     }
@@ -773,20 +888,18 @@ function PatientOrderEntryPage({
                       }))
                     }
                     placeholder={intl.formatMessage({
-                      id: "patient.first.name.placeholder",
-                      defaultMessage: "Enter first name",
+                      id: "medlab.patient.firstNameDual.placeholder",
+                      defaultMessage: "Name or participant ID",
                     })}
                   />
                 </Column>
                 <Column lg={4} md={4} sm={4}>
                   <TextInput
                     id="patient-last-name"
-                    labelText={
-                      <>
-                        {intl.formatMessage({ id: "patient.last.name" })}{" "}
-                        <span className="requiredlabel">*</span>
-                      </>
-                    }
+                    labelText={intl.formatMessage({
+                      id: "medlab.patient.lastName",
+                      defaultMessage: "Last name (required for patient)",
+                    })}
                     value={patientForm.lastName}
                     onChange={(e) =>
                       setPatientForm((prev) => ({
@@ -796,25 +909,62 @@ function PatientOrderEntryPage({
                     }
                     placeholder={intl.formatMessage({
                       id: "patient.last.name.placeholder",
-                      defaultMessage: "Enter last name",
+                      defaultMessage: "Enter last name (optional for participants)",
                     })}
                   />
                 </Column>
                 <Column lg={4} md={4} sm={4}>
-                  <CustomDatePicker
-                    id="patient-dob"
+                  <TextInput
+                    id="patient-father-protocol"
                     labelText={
-                      <>
-                        {intl.formatMessage({ id: "patient.dob" })}{" "}
-                        <span className="requiredlabel">*</span>
-                      </>
+                      <FormattedMessage
+                        id="medlab.patient.fatherProtocol"
+                        defaultMessage="Father Name / Protocol ID"
+                      />
                     }
-                    value={patientForm.dateOfBirth}
-                    onChange={(date) =>
-                      setPatientForm((prev) => ({ ...prev, dateOfBirth: date }))
+                    value={patientForm.fatherNameOrProtocolId}
+                    onChange={(e) =>
+                      setPatientForm((prev) => ({
+                        ...prev,
+                        fatherNameOrProtocolId: e.target.value,
+                      }))
                     }
-                    disallowFutureDate={true}
-                    updateStateValue={true}
+                    placeholder={intl.formatMessage({
+                      id: "medlab.patient.fatherProtocol.placeholder",
+                      defaultMessage: "Protocol ID (optional)",
+                    })}
+                  />
+                </Column>
+                <Column lg={4} md={4} sm={4}>
+                  <NumberInput
+                    id="patient-age"
+                    label={
+                      <FormattedMessage
+                        id="medlab.patient.age"
+                        defaultMessage="Age (years)"
+                      />
+                    }
+                    value={patientForm.age}
+                    min={0}
+                    max={150}
+                    onChange={(e, { value }) =>
+                      setPatientForm((prev) => ({
+                        ...prev,
+                        age: value ?? "",
+                      }))
+                    }
+                    helperText={
+                      estimatedBirthDate
+                        ? intl.formatMessage(
+                            {
+                              id: "medlab.patient.ageHint",
+                              defaultMessage:
+                                "Estimated DOB sent to system: {dob}",
+                            },
+                            { dob: estimatedBirthDate },
+                          )
+                        : undefined
+                    }
                   />
                 </Column>
                 <Column lg={4} md={4} sm={4}>
@@ -876,8 +1026,10 @@ function PatientOrderEntryPage({
                 kind="primary"
                 size="sm"
                 renderIcon={UserFollow}
-                onClick={handleRegisterPatient}
-                disabled={submitting || !isFormValid()}
+                onClick={() => handleRegisterPatient(REGISTER_MODE.PATIENT)}
+                disabled={
+                  submitting || !isFormValid(REGISTER_MODE.PATIENT)
+                }
               >
                 {submitting ? (
                   <Loading small withOverlay={false} />
@@ -889,6 +1041,39 @@ function PatientOrderEntryPage({
                 )}
               </Button>
 
+              <Button
+                kind="primary"
+                size="sm"
+                renderIcon={UserFollow}
+                onClick={() =>
+                  handleRegisterPatient(REGISTER_MODE.PARTICIPANT)
+                }
+                disabled={
+                  submitting || !isFormValid(REGISTER_MODE.PARTICIPANT)
+                }
+              >
+                <FormattedMessage
+                  id="medlab.patient.registerParticipant"
+                  defaultMessage="Register Participant"
+                />
+              </Button>
+
+              {pendingRegisteredPatients.length > 0 && (
+                <Button
+                  kind="secondary"
+                  size="sm"
+                  onClick={() => {
+                    setActiveTab(1);
+                    loadNextLabNumber();
+                  }}
+                >
+                  <FormattedMessage
+                    id="medlab.order.goToLabOrder"
+                    defaultMessage="Create lab order"
+                  />
+                </Button>
+              )}
+
               <Button kind="tertiary" size="sm" onClick={handleClearForm}>
                 <FormattedMessage
                   id="medlab.patient.clearForm"
@@ -896,7 +1081,7 @@ function PatientOrderEntryPage({
                 />
               </Button>
 
-              {registeredPatients.length > 0 && (
+              {allRegisteredPatients.length > 0 && (
                 <Button
                   kind="ghost"
                   size="sm"
@@ -912,7 +1097,7 @@ function PatientOrderEntryPage({
             </div>
 
             {/* Registered Patients Table */}
-            {registeredPatients.length > 0 && (
+            {allRegisteredPatients.length > 0 && (
               <div style={{ marginTop: "1.5rem" }}>
                 {/* Bulk Order Action Bar */}
                 <div className="patient-selection-actions">
@@ -923,15 +1108,17 @@ function PatientOrderEntryPage({
                       defaultMessage: "Select All",
                     })}
                     checked={
-                      registeredPatients.length > 0 &&
+                      pendingRegisteredPatients.length > 0 &&
                       selectedPatientsForBulk.length ===
-                        registeredPatients.length
+                        pendingRegisteredPatients.length
                     }
                     indeterminate={
                       selectedPatientsForBulk.length > 0 &&
-                      selectedPatientsForBulk.length < registeredPatients.length
+                      selectedPatientsForBulk.length <
+                        pendingRegisteredPatients.length
                     }
                     onChange={handleSelectAllPatients}
+                    disabled={pendingRegisteredPatients.length === 0}
                   />
                   <span className="patient-selection-count">
                     {selectedPatientsForBulk.length > 0 && (
@@ -958,7 +1145,7 @@ function PatientOrderEntryPage({
                 </div>
 
                 <DataTable
-                  rows={registeredPatients}
+                  rows={allRegisteredPatients}
                   headers={patientHeaders}
                   isSortable
                 >
@@ -966,14 +1153,14 @@ function PatientOrderEntryPage({
                     <TableContainer
                       title={intl.formatMessage({
                         id: "medlab.patient.registeredTitle",
-                        defaultMessage: "Registered Patients This Session",
+                        defaultMessage: "Registered Patients / Participants",
                       })}
                       description={intl.formatMessage(
                         {
                           id: "medlab.patient.registeredCount",
-                          defaultMessage: "{count} patient(s) registered",
+                          defaultMessage: "{count} registered this session",
                         },
-                        { count: registeredPatients.length },
+                        { count: allRegisteredPatients.length },
                       )}
                     >
                       <Table {...getTableProps()}>
@@ -994,9 +1181,12 @@ function PatientOrderEntryPage({
                         </TableHead>
                         <TableBody>
                           {rows.map((row) => {
-                            const patient = registeredPatients.find(
-                              (p) => p.id === row.id,
+                            const patient = allRegisteredPatients.find(
+                              (p) => String(p.id) === String(row.id),
                             );
+                            const canBulkOrder =
+                              patient &&
+                              getPatientOrderCount(patient) === 0;
                             return (
                               <TableRow key={row.id}>
                                 <TableCell>
@@ -1009,8 +1199,10 @@ function PatientOrderEntryPage({
                                         ? isPatientSelected(patient)
                                         : false
                                     }
+                                    disabled={!canBulkOrder}
                                     onChange={() =>
                                       patient &&
+                                      canBulkOrder &&
                                       handleTogglePatientSelection(patient)
                                     }
                                   />
@@ -1025,6 +1217,8 @@ function PatientOrderEntryPage({
                                         : intl.formatMessage({
                                             id: "patient.female",
                                           })
+                                      : cell.info.header === "age"
+                                        ? formatPatientAgeDisplay(patient)
                                       : cell.info.header === "orders"
                                         ? (() => {
                                             const orderCount = patient
@@ -1055,12 +1249,12 @@ function PatientOrderEntryPage({
             )}
 
             {/* Empty state - show helpful message when no patients registered */}
-            {registeredPatients.length === 0 && (
+            {allRegisteredPatients.length === 0 && (
               <div className="empty-state">
                 <p>
                   <FormattedMessage
                     id="medlab.patient.empty"
-                    defaultMessage="No patients registered yet. Fill in the form above and click 'Register Patient' to add patients."
+                    defaultMessage="No patients registered yet. Fill in the form above and click Register Patient or Register Participant."
                   />
                 </p>
               </div>
@@ -1080,7 +1274,7 @@ function PatientOrderEntryPage({
                   defaultMessage="Patients registered this session"
                 />
               </h5>
-              {registeredPatients.length > 0 ? (
+              {pendingRegisteredPatients.length > 0 ? (
                 <div>
                   <p style={{ marginBottom: "0.5rem" }}>
                     <FormattedMessage
@@ -1088,7 +1282,7 @@ function PatientOrderEntryPage({
                       defaultMessage="Select a patient registered on this page (no order yet):"
                     />
                   </p>
-                  {registeredPatients.map((patient) => {
+                  {pendingRegisteredPatients.map((patient) => {
                     const patientId = getPatientId(patient);
                     const isSelected =
                       selectedPatient &&
@@ -1110,11 +1304,10 @@ function PatientOrderEntryPage({
                         <strong>
                           {patient.lastName}, {patient.firstName}
                         </strong>{" "}
-                        - {patient.birthDateForDisplay} (
+                        - {formatPatientAgeDisplay(patient)}{" "}
                         {patient.gender === "M"
                           ? intl.formatMessage({ id: "patient.male" })
                           : intl.formatMessage({ id: "patient.female" })}
-                        )
                       </Tile>
                     );
                   })}
@@ -1237,7 +1430,7 @@ function PatientOrderEntryPage({
               <h5>
                 <FormattedMessage
                   id="medlab.order.selectTests"
-                  defaultMessage="2. Select Tests"
+                  defaultMessage="2. Select Tests & Sample Order"
                 />
               </h5>
               {loadingTests ? (

@@ -1056,6 +1056,9 @@ public class MedLabPatientOrderServiceIntegrationTest extends BaseWebContextSens
         assertEquals(1, list.size());
         assertEquals(TEST_PATIENT_ID, list.get(0).get("id").toString());
 
+        List<Map<String, Object>> allList = medLabPatientOrderService.getAllRegisteredPatientsForPage(8001);
+        assertEquals(1, allList.size());
+
         Map<String, Object> removeResult = medLabPatientOrderService.removeRegisteredPatientForPage(8001,
                 TEST_PATIENT_ID, TEST_USER_ID);
         assertTrue(Boolean.TRUE.equals(removeResult.get("success")));

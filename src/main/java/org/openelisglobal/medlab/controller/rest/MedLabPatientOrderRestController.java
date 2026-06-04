@@ -392,12 +392,17 @@ public class MedLabPatientOrderRestController extends BaseRestController {
     }
 
     /**
-     * Gets patients registered on this page who do not yet have a pending order.
+     * Gets patients registered on this page. Use {@code all=true} for the full session list;
+     * default returns only patients without a pending order on this page.
      */
     @GetMapping(value = "/page/{pageId}/registered-patients", produces = MediaType.APPLICATION_JSON_VALUE)
     @ResponseBody
     public ResponseEntity<List<Map<String, Object>>> getRegisteredPatientsForPage(
-            @PathVariable("pageId") Integer pageId) {
+            @PathVariable("pageId") Integer pageId,
+            @org.springframework.web.bind.annotation.RequestParam(value = "all", defaultValue = "false") boolean all) {
+        if (all) {
+            return ResponseEntity.ok(medLabPatientOrderService.getAllRegisteredPatientsForPage(pageId));
+        }
         return ResponseEntity.ok(medLabPatientOrderService.getRegisteredPatientsForPage(pageId));
     }
 

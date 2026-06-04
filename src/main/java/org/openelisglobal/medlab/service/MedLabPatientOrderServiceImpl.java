@@ -910,6 +910,12 @@ public class MedLabPatientOrderServiceImpl implements MedLabPatientOrderService 
 
     @Override
     @Transactional(readOnly = true)
+    public List<Map<String, Object>> getAllRegisteredPatientsForPage(Integer pageId) {
+        return readRegisteredPatientsFromPage(pageId);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
     public List<Map<String, Object>> getRegisteredPatientsForPage(Integer pageId) {
         List<Map<String, Object>> registered = readRegisteredPatientsFromPage(pageId);
         if (registered.isEmpty()) {

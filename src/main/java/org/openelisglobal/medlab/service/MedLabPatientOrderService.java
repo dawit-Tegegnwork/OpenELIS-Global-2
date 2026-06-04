@@ -108,11 +108,19 @@ public interface MedLabPatientOrderService {
     List<Map<String, Object>> getOrdersForPage(Integer pageId);
 
     /**
+     * Gets all patients registered on a notebook page (full session list).
+     *
+     * @param pageId the notebook page ID (Patient &amp; Lab Order page)
+     * @return list of registered patient snapshots
+     */
+    List<Map<String, Object>> getAllRegisteredPatientsForPage(Integer pageId);
+
+    /**
      * Gets patients registered on a notebook page (session list) who do not yet have
      * a pending order on that page.
      *
      * @param pageId the notebook page ID (Patient &amp; Lab Order page)
-     * @return list of registered patient snapshots
+     * @return list of registered patient snapshots awaiting an order
      */
     List<Map<String, Object>> getRegisteredPatientsForPage(Integer pageId);
 
