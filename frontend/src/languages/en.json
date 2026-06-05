@@ -1594,6 +1594,7 @@
   "medlab.patient.fatherProtocol.placeholder": "Protocol ID (optional)",
   "medlab.patient.age": "Age (years)",
   "medlab.patient.ageHint": "Estimated DOB sent to system: {dob}",
+  "medlab.patient.dobOptional": "Date of Birth (optional)",
   "medlab.patient.sessionPersist.error": "Patient saved in LIMS but could not add to this notebook session list. Refresh or redeploy the backend with medlab APIs.",
   "medlab.participant.created.success": "Participant registered successfully",
   "medlab.patient.validation.error": "Please fill in all required fields",

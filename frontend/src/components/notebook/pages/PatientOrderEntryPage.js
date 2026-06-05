@@ -12,7 +12,6 @@ import {
   Tile,
   Loading,
   TextInput,
-  NumberInput,
   RadioButton,
   RadioButtonGroup,
   DataTable,
@@ -57,8 +56,7 @@ import {
   isRegistrationFormValid,
   buildPatientManagementPayload,
   buildRegisteredPatientSnapshot,
-  formatPatientAgeDisplay,
-  birthDateForDisplayFromAge,
+  formatPatientBirthDateDisplay,
   formatRegistrationError,
 } from "./patientOrderHelpers";
 import "../workflow/NotebookWorkflow.css";
@@ -99,7 +97,7 @@ function PatientOrderEntryPage({
   const [patientForm, setPatientForm] = useState({
     firstName: "",
     lastName: "",
-    age: "",
+    dateOfBirth: "",
     gender: "",
     nationalId: "",
     fatherNameOrProtocolId: "",
@@ -498,14 +496,12 @@ function PatientOrderEntryPage({
     [patientForm],
   );
 
-  const estimatedBirthDate = birthDateForDisplayFromAge(patientForm.age);
-
   // Clear form
   const handleClearForm = useCallback(() => {
     setPatientForm({
       firstName: "",
       lastName: "",
-      age: "",
+      dateOfBirth: "",
       gender: "",
       nationalId: "",
       fatherNameOrProtocolId: "",
@@ -655,7 +651,7 @@ function PatientOrderEntryPage({
 
       setSubmitting(true);
 
-      const { payload, birthDateForDisplay, age } =
+      const { payload, birthDateForDisplay } =
         buildPatientManagementPayload(patientForm, mode);
 
       postToOpenElisServerJsonResponse(
@@ -672,7 +668,6 @@ function PatientOrderEntryPage({
               patientPk,
               patientForm,
               birthDateForDisplay,
-              age,
               mode,
             );
 
@@ -773,10 +768,10 @@ function PatientOrderEntryPage({
       }),
     },
     {
-      key: "age",
+      key: "birthDateForDisplay",
       header: intl.formatMessage({
-        id: "medlab.patient.age",
-        defaultMessage: "Age",
+        id: "patient.dob",
+        defaultMessage: "Date of Birth",
       }),
     },
     {
@@ -952,35 +947,21 @@ function PatientOrderEntryPage({
                   />
                 </Column>
                 <Column lg={4} md={4} sm={4}>
-                  <NumberInput
-                    id="patient-age"
-                    label={
-                      <FormattedMessage
-                        id="medlab.patient.age"
-                        defaultMessage="Age (years)"
-                      />
-                    }
-                    value={patientForm.age}
-                    min={0}
-                    max={150}
-                    onChange={(e, { value }) =>
+                  <CustomDatePicker
+                    id="patient-date-of-birth"
+                    labelText={intl.formatMessage({
+                      id: "medlab.patient.dobOptional",
+                      defaultMessage: "Date of Birth (optional)",
+                    })}
+                    value={patientForm.dateOfBirth}
+                    onChange={(date) =>
                       setPatientForm((prev) => ({
                         ...prev,
-                        age: value ?? "",
+                        dateOfBirth: date || "",
                       }))
                     }
-                    helperText={
-                      estimatedBirthDate
-                        ? intl.formatMessage(
-                            {
-                              id: "medlab.patient.ageHint",
-                              defaultMessage:
-                                "Estimated DOB sent to system: {dob}",
-                            },
-                            { dob: estimatedBirthDate },
-                          )
-                        : undefined
-                    }
+                    disallowFutureDate={true}
+                    updateStateValue={true}
                   />
                 </Column>
                 <Column lg={4} md={4} sm={4}>
@@ -1239,8 +1220,8 @@ function PatientOrderEntryPage({
                                         : intl.formatMessage({
                                             id: "patient.female",
                                           })
-                                      : cell.info.header === "age"
-                                        ? formatPatientAgeDisplay(patient)
+                                      : cell.info.header === "birthDateForDisplay"
+                                        ? formatPatientBirthDateDisplay(patient)
                                       : cell.info.header === "orders"
                                         ? (() => {
                                             const orderCount = patient
@@ -1326,7 +1307,7 @@ function PatientOrderEntryPage({
                         <strong>
                           {patient.lastName}, {patient.firstName}
                         </strong>{" "}
-                        - {formatPatientAgeDisplay(patient)}{" "}
+                        - {formatPatientBirthDateDisplay(patient)}{" "}
                         {patient.gender === "M"
                           ? intl.formatMessage({ id: "patient.male" })
                           : intl.formatMessage({ id: "patient.female" })}

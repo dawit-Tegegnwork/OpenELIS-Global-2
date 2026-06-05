@@ -56,10 +56,7 @@ export function isRegistrationFormValid(form, mode = REGISTER_MODE.PATIENT) {
 }
 
 export function buildPatientManagementPayload(form, mode = REGISTER_MODE.PATIENT) {
-  const ageStr = (form.age ?? "").toString().trim();
-  const birthDateForDisplay = ageStr
-    ? birthDateForDisplayFromAge(ageStr)
-    : "";
+  const birthDateForDisplay = (form.dateOfBirth ?? "").toString().trim();
 
   const lastName =
     mode === REGISTER_MODE.PARTICIPANT &&
@@ -81,14 +78,13 @@ export function buildPatientManagementPayload(form, mode = REGISTER_MODE.PATIENT
     payload.subjectNumber = protocolId;
   }
 
-  return { payload, birthDateForDisplay, age: ageStr };
+  return { payload, birthDateForDisplay };
 }
 
 export function buildRegisteredPatientSnapshot(
   patientPk,
   form,
   birthDateForDisplay,
-  age,
   mode = REGISTER_MODE.PATIENT,
 ) {
   const lastName =
@@ -105,9 +101,6 @@ export function buildRegisteredPatientSnapshot(
     gender: form.gender,
     nationalId: form.nationalId || "",
   };
-  if (age) {
-    snapshot.age = age;
-  }
   const protocolId = (form.fatherNameOrProtocolId || "").trim();
   if (protocolId) {
     snapshot.subjectNumber = protocolId;
@@ -115,12 +108,18 @@ export function buildRegisteredPatientSnapshot(
   return snapshot;
 }
 
-export function formatPatientAgeDisplay(patient) {
-  if (patient?.age != null && String(patient.age).trim() !== "") {
-    return String(patient.age);
+export function formatPatientBirthDateDisplay(patient) {
+  if (patient?.birthDateForDisplay) {
+    return patient.birthDateForDisplay;
   }
-  return patient?.birthDateForDisplay || "-";
+  if (patient?.age != null && String(patient.age).trim() !== "") {
+    return birthDateForDisplayFromAge(patient.age);
+  }
+  return "-";
 }
+
+/** @deprecated Use formatPatientBirthDateDisplay */
+export const formatPatientAgeDisplay = formatPatientBirthDateDisplay;
 
 export function formatRegistrationError(response, fallbackMessage) {
   if (!response) {

@@ -5,7 +5,7 @@ import {
   isRegistrationFormValid,
   buildPatientManagementPayload,
   REGISTER_MODE,
-  formatPatientAgeDisplay,
+  formatPatientBirthDateDisplay,
   formatRegistrationError,
 } from "./patientOrderHelpers";
 
@@ -42,40 +42,40 @@ describe("patientOrderHelpers", () => {
   it("isRegistrationFormValid allows optional last name for participant", () => {
     expect(
       isRegistrationFormValid(
-        { firstName: "P1", lastName: "", gender: "M", age: "" },
+        { firstName: "P1", lastName: "", gender: "M", dateOfBirth: "" },
         REGISTER_MODE.PARTICIPANT,
       ),
     ).toBe(true);
     expect(
       isRegistrationFormValid(
-        { firstName: "P1", lastName: "", gender: "", age: "" },
+        { firstName: "P1", lastName: "", gender: "", dateOfBirth: "" },
         REGISTER_MODE.PATIENT,
       ),
     ).toBe(false);
   });
 
-  it("buildPatientManagementPayload maps age and subjectNumber", () => {
-    const { payload, birthDateForDisplay, age } = buildPatientManagementPayload(
+  it("buildPatientManagementPayload maps dateOfBirth and subjectNumber", () => {
+    const { payload, birthDateForDisplay } = buildPatientManagementPayload(
       {
         firstName: "Test",
         lastName: "User",
         gender: "M",
-        age: "30",
+        dateOfBirth: "01/15/1996",
         nationalId: "",
         fatherNameOrProtocolId: "PROT-001",
       },
       REGISTER_MODE.PATIENT,
     );
-    expect(birthDateForDisplay).toBe("01/01/1996");
-    expect(age).toBe("30");
+    expect(birthDateForDisplay).toBe("01/15/1996");
+    expect(payload.birthDateForDisplay).toBe("01/15/1996");
     expect(payload.subjectNumber).toBe("PROT-001");
   });
 
-  it("formatPatientAgeDisplay prefers age", () => {
-    expect(formatPatientAgeDisplay({ age: "22" })).toBe("22");
-    expect(formatPatientAgeDisplay({ birthDateForDisplay: "01/01/2000" })).toBe(
-      "01/01/2000",
-    );
+  it("formatPatientBirthDateDisplay prefers birthDateForDisplay", () => {
+    expect(
+      formatPatientBirthDateDisplay({ birthDateForDisplay: "01/01/2000" }),
+    ).toBe("01/01/2000");
+    expect(formatPatientBirthDateDisplay({ age: "22" })).toBe("01/01/2004");
   });
 
   it("formatRegistrationError surfaces backend error text", () => {
