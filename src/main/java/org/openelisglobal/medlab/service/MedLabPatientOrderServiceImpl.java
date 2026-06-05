@@ -4,12 +4,19 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.sql.Timestamp;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
+import java.util.stream.Collectors;
 import org.apache.commons.lang3.StringUtils;
+import org.openelisglobal.common.constants.Constants;
+import org.openelisglobal.common.services.DisplayListService;
+import org.openelisglobal.common.util.IdValuePair;
 import org.openelisglobal.analysis.service.AnalysisService;
 import org.openelisglobal.analysis.valueholder.Analysis;
 import org.openelisglobal.common.log.LogEvent;
@@ -44,7 +51,11 @@ import org.openelisglobal.samplehuman.valueholder.SampleHuman;
 import org.openelisglobal.sampleitem.service.SampleItemService;
 import org.openelisglobal.sampleitem.valueholder.SampleItem;
 import org.openelisglobal.spring.util.SpringContext;
+import org.openelisglobal.role.service.RoleService;
+import org.openelisglobal.userrole.service.UserRoleService;
+import org.openelisglobal.systemuser.service.UserService;
 import org.openelisglobal.test.service.TestService;
+import org.openelisglobal.test.service.TestServiceImpl;
 import org.openelisglobal.test.valueholder.Test;
 import org.openelisglobal.typeofsample.service.TypeOfSampleService;
 import org.openelisglobal.typeofsample.valueholder.TypeOfSample;
@@ -113,6 +124,15 @@ public class MedLabPatientOrderServiceImpl implements MedLabPatientOrderService 
 
     @Autowired
     private MedLabTestRequirementsService medLabTestRequirementsService;
+
+    @Autowired
+    private UserService userService;
+
+    @Autowired
+    private UserRoleService userRoleService;
+
+    @Autowired
+    private RoleService roleService;
 
     @Autowired
     private SampleRoutingService sampleRoutingService;
@@ -783,6 +803,73 @@ public class MedLabPatientOrderServiceImpl implements MedLabPatientOrderService 
         }
 
         return previewNumbers;
+    }
+
+    @Override
+    public List<Map<String, Object>> getOrderableTestsForMedLab(String systemUserId) {
+        List<IdValuePair> tests = resolveOrderableTestsForMedLab(systemUserId);
+        List<Map<String, Object>> rows = new ArrayList<>();
+        for (IdValuePair test : tests) {
+            Map<String, Object> row = new HashMap<>();
+            row.put("id", test.getId());
+            row.put("value", test.getValue());
+            rows.add(row);
+        }
+        return rows;
+    }
+
+    private List<IdValuePair> resolveOrderableTestsForMedLab(String systemUserId) {
+        String adminRoleId = roleService.getRoleByName(Constants.ROLE_GLOBAL_ADMIN).getId();
+        if (userRoleService.getRoleIdsForUser(systemUserId).contains(adminRoleId)) {
+            return DisplayListService.getInstance().getList(DisplayListService.ListType.ORDERABLE_TESTS);
+        }
+
+        List<IdValuePair> scopedTests = testsForLabUnits(userService.getUserTestSections(systemUserId, null));
+        if (!scopedTests.isEmpty()) {
+            return scopedTests;
+        }
+
+        List<MedLabTestRequirements> requirements = medLabTestRequirementsService.getActiveRequirements();
+        if (requirements != null && !requirements.isEmpty()) {
+            Set<String> configuredTestIds = requirements.stream()
+                    .map(req -> String.valueOf(req.getTestId()))
+                    .collect(Collectors.toCollection(LinkedHashSet::new));
+            List<IdValuePair> configuredTests = DisplayListService.getInstance()
+                    .getList(DisplayListService.ListType.ORDERABLE_TESTS)
+                    .stream()
+                    .filter(test -> configuredTestIds.contains(test.getId()))
+                    .collect(Collectors.toList());
+            if (!configuredTests.isEmpty()) {
+                return configuredTests;
+            }
+        }
+
+        return DisplayListService.getInstance().getList(DisplayListService.ListType.ORDERABLE_TESTS);
+    }
+
+    private List<IdValuePair> testsForLabUnits(List<IdValuePair> testSections) {
+        if (testSections == null || testSections.isEmpty()) {
+            return List.of();
+        }
+
+        List<Integer> sectionIds = testSections.stream()
+                .map(section -> Integer.valueOf(section.getId()))
+                .collect(Collectors.toList());
+        List<Test> tests = testService.getTestsByTestSectionIds(sectionIds);
+        if (tests == null || tests.isEmpty()) {
+            return List.of();
+        }
+
+        List<IdValuePair> pairs = new ArrayList<>();
+        for (Test test : tests) {
+            if (test == null || !test.isActive()) {
+                continue;
+            }
+            pairs.add(new IdValuePair(test.getId(), TestServiceImpl.getLocalizedTestNameWithType(test)));
+        }
+
+        pairs.sort(Comparator.comparing(IdValuePair::getValue, String.CASE_INSENSITIVE_ORDER));
+        return pairs;
     }
 
     private String reserveNextAvailableLabNumber(String prefix) {

@@ -73,9 +73,12 @@ export function buildPatientManagementPayload(form, mode = REGISTER_MODE.PATIENT
     patientUpdateStatus: "ADD",
   };
 
+  const participantOrPatientId = (form.firstName || "").trim();
   const protocolId = (form.fatherNameOrProtocolId || "").trim();
   if (protocolId) {
     payload.subjectNumber = protocolId;
+  } else if (mode === REGISTER_MODE.PARTICIPANT && participantOrPatientId) {
+    payload.subjectNumber = participantOrPatientId;
   }
 
   return { payload, birthDateForDisplay };
@@ -121,6 +124,23 @@ export function formatPatientBirthDateDisplay(patient) {
 /** @deprecated Use formatPatientBirthDateDisplay */
 export const formatPatientAgeDisplay = formatPatientBirthDateDisplay;
 
+export function normalizeOrderableTestList(response) {
+  if (!Array.isArray(response)) {
+    return [];
+  }
+  return response
+    .map((test) => ({
+      id: String(test.id ?? test.testId ?? ""),
+      value:
+        test.value ||
+        test.localizedTestName ||
+        test.testName ||
+        test.name ||
+        "",
+    }))
+    .filter((test) => test.id);
+}
+
 export function formatRegistrationError(response, fallbackMessage) {
   if (!response) {
     return fallbackMessage;
@@ -129,9 +149,20 @@ export function formatRegistrationError(response, fallbackMessage) {
     return String(response.error);
   }
   if (response.message && response.message !== "No action required") {
-    return String(response.message);
+    const message = String(response.message);
+    if (
+      message === "Not Authorized" ||
+      response.statusCode === 401 ||
+      response.status === 401
+    ) {
+      return `${message}. Your role may be missing patient registration access — ask an admin to assign Sample Collector or Laboratory Technician on CTD, then log out and back in.`;
+    }
+    return message;
   }
   if (typeof response.statusCode === "number") {
+    if (response.statusCode === 401) {
+      return `${fallbackMessage}: Not Authorized. Log out and back in after your admin updates your CTD lab-unit roles.`;
+    }
     return `${fallbackMessage} (HTTP ${response.statusCode})`;
   }
   if (response.success && !response.patientPK) {

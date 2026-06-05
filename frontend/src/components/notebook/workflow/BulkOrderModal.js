@@ -18,6 +18,7 @@ import {
 } from "../../utils/Utils";
 import { NotificationContext } from "../../layout/Layout";
 import { NotificationKinds } from "../../common/CustomNotification";
+import { normalizeOrderableTestList } from "../pages/patientOrderHelpers";
 import "./NotebookWorkflow.css";
 
 /**
@@ -31,6 +32,7 @@ import "./NotebookWorkflow.css";
  * @param {number} props.notebookEntryId - The notebook entry ID
  * @param {number} props.notebookPageId - The notebook page ID
  * @param {number} props.sampleCollectionPageId - The sample collection page ID
+ * @param {Array} [props.tests] - Pre-loaded tests from Page 1 (optional)
  * @param {function} props.onSuccess - Callback when orders are created successfully
  */
 function BulkOrderModal({
@@ -40,6 +42,7 @@ function BulkOrderModal({
   notebookEntryId,
   notebookPageId,
   sampleCollectionPageId,
+  tests: testsFromParent,
   onSuccess,
 }) {
   const intl = useIntl();
@@ -64,33 +67,20 @@ function BulkOrderModal({
   const [error, setError] = useState(null);
   const [validationErrors, setValidationErrors] = useState([]);
 
-  // Load available tests when modal opens
-  useEffect(() => {
-    if (open) {
-      setError(null);
-      setValidationErrors([]);
-      setSelectedTests([]);
-      loadAvailableTests();
-      // Generate default prefix with current year
-      const year = new Date().getFullYear();
-      setLabNumberPrefix(`MEDLAB-${year}-`);
-    }
-  }, [open]);
-
-  // Load preview of lab numbers when prefix changes or patients change
-  useEffect(() => {
-    if (open && labNumberPrefix && selectedPatients.length > 0) {
-      loadLabNumberPreview();
-    }
-  }, [open, labNumberPrefix, selectedPatients.length]);
-
   const loadAvailableTests = useCallback(() => {
     setLoadingTests(true);
-    getFromOpenElisServer("/rest/test-list", (response) => {
-      if (response) {
-        setAvailableTests(Array.isArray(response) ? response : []);
+    getFromOpenElisServer("/rest/medlab/orderable-tests", (response) => {
+      let tests = normalizeOrderableTestList(response);
+      if (tests.length > 0) {
+        setAvailableTests(tests);
+        setLoadingTests(false);
+        return;
       }
-      setLoadingTests(false);
+      getFromOpenElisServer("/rest/test-list", (fallback) => {
+        tests = normalizeOrderableTestList(fallback);
+        setAvailableTests(tests);
+        setLoadingTests(false);
+      });
     });
   }, []);
 
@@ -100,14 +90,12 @@ function BulkOrderModal({
       return;
     }
     setLoadingPreview(true);
-    // Get preview of next N lab numbers from server
     getFromOpenElisServer(
       `/rest/medlab/lab-number-preview?prefix=${encodeURIComponent(labNumberPrefix.trim())}&count=${selectedPatients.length}`,
       (response) => {
         if (response && Array.isArray(response)) {
           setPreviewNumbers(response);
         } else {
-          // Fallback: generate client-side preview (just for display)
           const preview = selectedPatients.map((_, index) => {
             const num = String(index + 1).padStart(3, "0");
             return `${labNumberPrefix.trim()}${num}`;
@@ -119,13 +107,38 @@ function BulkOrderModal({
     );
   }, [labNumberPrefix, selectedPatients.length]);
 
-  const handleTestToggle = useCallback((testId) => {
-    setSelectedTests((prev) => {
-      if (prev.includes(testId)) {
-        return prev.filter((id) => id !== testId);
+  // Load available tests when modal opens
+  useEffect(() => {
+    if (open) {
+      setError(null);
+      setValidationErrors([]);
+      setSelectedTests([]);
+      const preloaded = normalizeOrderableTestList(testsFromParent);
+      if (preloaded.length > 0) {
+        setAvailableTests(preloaded);
       } else {
-        return [...prev, testId];
+        loadAvailableTests();
       }
+      // Generate default prefix with current year
+      const year = new Date().getFullYear();
+      setLabNumberPrefix(`MEDLAB-${year}-`);
+    }
+  }, [open, testsFromParent, loadAvailableTests]);
+
+  // Load preview of lab numbers when prefix changes or patients change
+  useEffect(() => {
+    if (open && labNumberPrefix && selectedPatients.length > 0) {
+      loadLabNumberPreview();
+    }
+  }, [open, labNumberPrefix, selectedPatients.length, loadLabNumberPreview]);
+
+  const handleTestToggle = useCallback((testId) => {
+    const id = String(testId);
+    setSelectedTests((prev) => {
+      if (prev.includes(id)) {
+        return prev.filter((existingId) => existingId !== id);
+      }
+      return [...prev, id];
     });
   }, []);
 
@@ -376,7 +389,15 @@ function BulkOrderModal({
                 />
               ) : (
                 <div className="test-checkbox-grid">
-                  {availableTests.map((test) => (
+                  {availableTests.length === 0 ? (
+                    <p className="empty-state-message">
+                      <FormattedMessage
+                        id="medlab.order.noTestsAvailable"
+                        defaultMessage="No tests available"
+                      />
+                    </p>
+                  ) : (
+                    availableTests.map((test) => (
                     <div
                       key={test.id}
                       className="test-checkbox-item"
@@ -392,11 +413,12 @@ function BulkOrderModal({
                           test.name ||
                           "Unknown Test"
                         }
-                        checked={selectedTests.includes(test.id)}
+                        checked={selectedTests.includes(String(test.id))}
                         onChange={() => {}}
                       />
                     </div>
-                  ))}
+                  ))
+                  )}
                 </div>
               )}
 

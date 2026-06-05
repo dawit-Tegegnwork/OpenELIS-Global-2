@@ -100,6 +100,12 @@ public interface MedLabPatientOrderService {
     List<String> getLabNumberPreview(String prefix, int count);
 
     /**
+     * Returns tests available for MedLab Page 1 order entry for the current user.
+     * Uses lab-unit scope (any assigned role), then falls back to orderable catalog tests.
+     */
+    List<Map<String, Object>> getOrderableTestsForMedLab(String systemUserId);
+
+    /**
      * Gets orders for a notebook page.
      *
      * @param pageId the notebook page ID

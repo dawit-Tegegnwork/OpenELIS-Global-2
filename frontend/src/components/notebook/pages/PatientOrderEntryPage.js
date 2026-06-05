@@ -57,6 +57,7 @@ import {
   buildPatientManagementPayload,
   buildRegisteredPatientSnapshot,
   formatPatientBirthDateDisplay,
+  normalizeOrderableTestList,
   formatRegistrationError,
 } from "./patientOrderHelpers";
 import "../workflow/NotebookWorkflow.css";
@@ -248,11 +249,22 @@ function PatientOrderEntryPage({
   // Load available tests from API
   const loadAvailableTests = useCallback(() => {
     setLoadingTests(true);
-    getFromOpenElisServer("/rest/test-list", (response) => {
-      if (componentMounted.current && response) {
-        setAvailableTests(Array.isArray(response) ? response : []);
+    getFromOpenElisServer("/rest/medlab/orderable-tests", (response) => {
+      if (!componentMounted.current) {
+        return;
       }
-      setLoadingTests(false);
+      let tests = normalizeOrderableTestList(response);
+      if (tests.length > 0) {
+        setAvailableTests(tests);
+        setLoadingTests(false);
+        return;
+      }
+      getFromOpenElisServer("/rest/test-list", (fallback) => {
+        if (componentMounted.current) {
+          setAvailableTests(normalizeOrderableTestList(fallback));
+        }
+        setLoadingTests(false);
+      });
     });
   }, []);
 
@@ -1796,6 +1808,7 @@ function PatientOrderEntryPage({
         notebookEntryId={entryId}
         notebookPageId={pageData?.id}
         sampleCollectionPageId={sampleCollectionPageData?.id}
+        tests={availableTests}
         onSuccess={handleBulkOrderSuccess}
       />
     </div>

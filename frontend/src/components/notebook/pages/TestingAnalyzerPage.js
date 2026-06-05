@@ -804,7 +804,12 @@ function TestingAnalyzerPage({
   const triggerEsigForSave = useCallback(
     (callback, reopenModal) => {
       pendingAction.current = { callback, reopenModal };
-      openAuthoredSignatureModal();
+      // Close parent modals before opening e-sig so Carbon focus traps do not block input.
+      setTestExecutionModalOpen(false);
+      setQcModalOpen(false);
+      setDeviationModalOpen(false);
+      setAssignTestsModalOpen(false);
+      window.setTimeout(openAuthoredSignatureModal, 0);
     },
     [openAuthoredSignatureModal],
   );

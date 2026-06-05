@@ -142,5 +142,6 @@
     <include file="liquibase/3.5.x.x/070-rerun-biorepository-notebook-departments.xml"/>
     <include file="liquibase/3.5.x.x/071-tb-department-sample-types-backfill.xml"/>
     <include file="liquibase/3.5.x.x/072-mntd-sample-archiving-page.xml"/>
+    <include file="liquibase/3.5.x.x/073-medlab-patient-registration-access.xml"/>
 
 </databaseChangeLog>

@@ -128,13 +128,6 @@ function SampleCollectionPage({
     });
   }, []);
 
-  const isVirtualOrderSample = useCallback((sample) => {
-    return (
-      sample?.linkedOrderLabNo &&
-      !/^\d+$/.test(String(sample?.sampleItemId || ""))
-    );
-  }, []);
-
   const resolveSampleTypeId = useCallback(
     (sample, overrideSampleTypeId) => {
       return (
@@ -151,11 +144,12 @@ function SampleCollectionPage({
   useEffect(() => {
     componentMounted.current = true;
     loadPageSamples();
+    loadSampleTypeOptions();
 
     return () => {
       componentMounted.current = false;
     };
-  }, [entryId, pageData?.id]);
+  }, [entryId, pageData?.id, loadSampleTypeOptions]);
 
   const loadPageSamples = useCallback(() => {
     if (!pageData?.id) {
@@ -273,22 +267,18 @@ function SampleCollectionPage({
       const selectedSamples = samples.filter((sample) =>
         sampleIds.includes(String(sample.id)),
       );
-      const virtualOrderSamples = selectedSamples.filter(
-        (sample) =>
-          sample.linkedOrderLabNo &&
-          !/^\d+$/.test(String(sample.sampleItemId || "")),
+      const orderLinkedSamples = selectedSamples.filter(
+        (sample) => sample.linkedOrderLabNo || sample.labNo,
       );
       const regularNotebookSamples = selectedSamples.filter(
-        (sample) =>
-          !sample.linkedOrderLabNo ||
-          /^\d+$/.test(String(sample.sampleItemId || "")),
+        (sample) => !sample.linkedOrderLabNo && !sample.labNo,
       );
 
       let successCount = 0;
       let hadError = false;
       let lastErrorMessage = "";
 
-      for (const sample of virtualOrderSamples) {
+      for (const sample of orderLinkedSamples) {
         const sampleTypeId = resolveSampleTypeId(
           sample,
           collectionOverrides.sampleTypeId,
@@ -545,33 +535,24 @@ function SampleCollectionPage({
       );
 
       const now = new Date();
-      const requiresSampleType = selectedSamples.some(
-        (sample) =>
-          isVirtualOrderSample(sample) &&
-          !resolveSampleTypeId(sample, ""),
-      );
+      const defaultSampleTypeId =
+        selectedSamples
+          .map((sample) => resolveSampleTypeId(sample, ""))
+          .find((sampleTypeId) => sampleTypeId) || "";
 
       setSamplesForCollection(selectedSamples);
       setCollectionDateInput(formatLocalDate(now));
       setCollectionTimeInput(formatLocalTime(now));
-      setNeedsSampleTypeSelection(requiresSampleType);
-      setCollectionSampleTypeId(
-        requiresSampleType
-          ? resolveSampleTypeId(selectedSamples[0], "") || ""
-          : "",
-      );
-      if (requiresSampleType && sampleTypeOptions.length === 0) {
-        loadSampleTypeOptions();
-      }
+      setNeedsSampleTypeSelection(true);
+      setCollectionSampleTypeId(String(defaultSampleTypeId));
+      loadSampleTypeOptions();
       setCollectionModalOpen(true);
     },
     [
       readyForCollection,
       formatLocalDate,
       formatLocalTime,
-      isVirtualOrderSample,
       resolveSampleTypeId,
-      sampleTypeOptions.length,
       loadSampleTypeOptions,
     ],
   );
