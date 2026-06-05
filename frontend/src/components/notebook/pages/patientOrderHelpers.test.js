@@ -6,6 +6,7 @@ import {
   buildPatientManagementPayload,
   REGISTER_MODE,
   formatPatientAgeDisplay,
+  formatRegistrationError,
 } from "./patientOrderHelpers";
 
 describe("patientOrderHelpers", () => {
@@ -75,5 +76,17 @@ describe("patientOrderHelpers", () => {
     expect(formatPatientAgeDisplay({ birthDateForDisplay: "01/01/2000" })).toBe(
       "01/01/2000",
     );
+  });
+
+  it("formatRegistrationError surfaces backend error text", () => {
+    expect(
+      formatRegistrationError(
+        { error: "Validation errors: birthdate" },
+        "Error registering patient",
+      ),
+    ).toBe("Validation errors: birthdate");
+    expect(
+      formatRegistrationError({ statusCode: 400 }, "Error registering patient"),
+    ).toBe("Error registering patient (HTTP 400)");
   });
 });

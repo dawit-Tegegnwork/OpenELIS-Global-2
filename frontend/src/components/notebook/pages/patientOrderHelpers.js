@@ -121,3 +121,22 @@ export function formatPatientAgeDisplay(patient) {
   }
   return patient?.birthDateForDisplay || "-";
 }
+
+export function formatRegistrationError(response, fallbackMessage) {
+  if (!response) {
+    return fallbackMessage;
+  }
+  if (response.error) {
+    return String(response.error);
+  }
+  if (response.message && response.message !== "No action required") {
+    return String(response.message);
+  }
+  if (typeof response.statusCode === "number") {
+    return `${fallbackMessage} (HTTP ${response.statusCode})`;
+  }
+  if (response.success && !response.patientPK) {
+    return `${fallbackMessage}: patient ID was not returned by the server`;
+  }
+  return fallbackMessage;
+}

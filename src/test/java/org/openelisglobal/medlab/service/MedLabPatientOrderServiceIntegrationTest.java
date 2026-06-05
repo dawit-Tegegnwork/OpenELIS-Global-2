@@ -1066,6 +1066,30 @@ public class MedLabPatientOrderServiceIntegrationTest extends BaseWebContextSens
     }
 
     @Test
+    public void registeredPatientsPendingListExcludesPatientsWithOrdersOnPage() {
+        medLabPatientOrderService.clearRegisteredPatientsForPage(8001, TEST_USER_ID);
+
+        Map<String, Object> patient = new HashMap<>();
+        patient.put("id", TEST_PATIENT_ID);
+        patient.put("firstName", "Patient1");
+        patient.put("lastName", "OrderTest");
+
+        assertTrue(Boolean.TRUE.equals(
+                medLabPatientOrderService.addRegisteredPatientForPage(8001, patient, TEST_USER_ID).get("success")));
+
+        String labNo = "TEST-REG-PENDING-001";
+        medLabPatientOrderService.createPatientOrder(TEST_PATIENT_ID, labNo, "2026-01-09", "2026-01-09", "ROUTINE",
+                List.of(TEST_TEST_ID_1), TEST_NOTEBOOK_ENTRY_ID, 8001, TEST_USER_ID);
+
+        List<Map<String, Object>> pending = medLabPatientOrderService.getRegisteredPatientsForPage(8001);
+        assertTrue("Pending list should exclude patients who already have orders on the page", pending.isEmpty());
+
+        List<Map<String, Object>> all = medLabPatientOrderService.getAllRegisteredPatientsForPage(8001);
+        assertEquals(1, all.size());
+        assertEquals(TEST_PATIENT_ID, all.get(0).get("id").toString());
+    }
+
+    @Test
     public void routeSamplesInternalAnalysisStoresWellCoordinates() {
         String labNo = "TEST-ROUTE-WELLS-001";
         List<String> testIds = List.of(TEST_TEST_ID_1);

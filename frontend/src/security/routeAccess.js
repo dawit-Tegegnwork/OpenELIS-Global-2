@@ -24,6 +24,50 @@ export function getDepartmentLabUnitKeys(userSessionDetails) {
   );
 }
 
+const LAB_UNIT_ALIAS_GROUPS = [
+  ["ctd", "ctd department", "medical laboratory"],
+];
+
+function normalizeLabUnitName(name) {
+  if (!name) {
+    return "";
+  }
+  return String(name).trim().toLowerCase().replace(/\s+/g, " ");
+}
+
+function labUnitsAreAliases(a, b) {
+  const na = normalizeLabUnitName(a);
+  const nb = normalizeLabUnitName(b);
+  if (!na || !nb) {
+    return false;
+  }
+  if (na === nb) {
+    return true;
+  }
+  return LAB_UNIT_ALIAS_GROUPS.some(
+    (group) => group.includes(na) && group.includes(nb),
+  );
+}
+
+/**
+ * Resolve roles for a lab unit key, including CTD / CTD Department aliases.
+ */
+export function getRolesForLabUnitKey(userLabRolesMap, labUnitKey) {
+  if (!userLabRolesMap || !labUnitKey) {
+    return [];
+  }
+  const direct = userLabRolesMap[labUnitKey];
+  if (Array.isArray(direct) && direct.length > 0) {
+    return direct;
+  }
+  for (const [key, roles] of Object.entries(userLabRolesMap)) {
+    if (labUnitsAreAliases(key, labUnitKey) && Array.isArray(roles)) {
+      return roles;
+    }
+  }
+  return [];
+}
+
 /**
  * When only one department is assigned, use it for role checks (mirrors server auto-select).
  */
@@ -68,7 +112,7 @@ export function sessionHasAnyRole(userSessionDetails, allowedRoleNames) {
   }
   const activeLabUnit = getEffectiveLabUnitNameForRoleCheck(userSessionDetails);
   if (activeLabUnit) {
-    const labRoles = map[activeLabUnit] || [];
+    const labRoles = getRolesForLabUnitKey(map, activeLabUnit);
     if (labRoles.includes(ExtRoles.LAB_MANAGER)) {
       return true;
     }

@@ -59,6 +59,7 @@ import {
   buildRegisteredPatientSnapshot,
   formatPatientAgeDisplay,
   birthDateForDisplayFromAge,
+  formatRegistrationError,
 } from "./patientOrderHelpers";
 import "../workflow/NotebookWorkflow.css";
 
@@ -665,14 +666,28 @@ function PatientOrderEntryPage({
 
           setSubmitting(false);
 
-          if (response?.success && response?.patientPK) {
+          const patientPk = response?.patientPK ?? response?.patientPk;
+          if (response?.success && patientPk != null && patientPk !== "") {
             const newPatient = buildRegisteredPatientSnapshot(
-              response.patientPK,
+              patientPk,
               patientForm,
               birthDateForDisplay,
               age,
               mode,
             );
+
+            setAllRegisteredPatients((prev) => {
+              if (prev.some((p) => String(p.id) === String(newPatient.id))) {
+                return prev;
+              }
+              return [...prev, newPatient];
+            });
+            setPendingRegisteredPatients((prev) => {
+              if (prev.some((p) => String(p.id) === String(newPatient.id))) {
+                return prev;
+              }
+              return [...prev, newPatient];
+            });
 
             persistRegisteredPatientOnPage(newPatient, () => {
               handleClearForm();
@@ -696,12 +711,13 @@ function PatientOrderEntryPage({
               }
             });
           } else {
-            const errorMessage =
-              response?.error ||
+            const errorMessage = formatRegistrationError(
+              response,
               intl.formatMessage({
                 id: "medlab.patient.created.error",
                 defaultMessage: "Error registering patient",
-              });
+              }),
+            );
             addNotification({
               title: intl.formatMessage({ id: "notification.title" }),
               message: errorMessage,
@@ -1142,6 +1158,12 @@ function PatientOrderEntryPage({
                       values={{ count: selectedPatientsForBulk.length }}
                     />
                   </Button>
+                  <p className="bulk-order-hint" style={{ marginTop: "0.5rem" }}>
+                    <FormattedMessage
+                      id="medlab.patient.bulkOrderHint"
+                      defaultMessage="Select patients awaiting an order, or use the Lab Order & Samples tab for test selection and sample requirements."
+                    />
+                  </p>
                 </div>
 
                 <DataTable

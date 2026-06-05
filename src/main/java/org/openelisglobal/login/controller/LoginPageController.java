@@ -278,22 +278,45 @@ public class LoginPageController extends BaseController {
         UserLabUnitRoles roles = userService.getUserLabUnitRoles(session.getUserId());
         if (roles != null) {
             Set<LabUnitRoleMap> roleMaps = roles.getLabUnitRoleMap();
-            List<String> userLabUnits = new ArrayList<>();
-            roleMaps.forEach(map -> userLabUnits.add(map.getLabUnit()));
             Map<String, List<String>> userLabRolesMap = new HashMap<>();
-            if (userLabUnits.contains(ALL_LAB_UNITS)) {
-                roleMaps.stream().filter(map -> map.getLabUnit().equals(ALL_LAB_UNITS))
-                        .forEach(map -> userLabRolesMap.put(map.getLabUnit(), map.getRoles().stream()
-                                .map(r -> roleService.getRoleById(r).getName().trim()).collect(Collectors.toList())));
-            } else {
-                for (LabUnitRoleMap map : roleMaps) {
-                    userLabRolesMap.put(testSectionService.get(map.getLabUnit()).getLocalizedName(),
-                            map.getRoles().stream().map(r -> roleService.getRoleById(r).getName().trim())
-                                    .collect(Collectors.toList()));
+            for (LabUnitRoleMap map : roleMaps) {
+                if (map == null || map.getLabUnit() == null) {
+                    continue;
+                }
+                List<String> roleNames = map.getRoles().stream()
+                        .map(r -> roleService.getRoleById(r).getName().trim()).collect(Collectors.toList());
+                if (ALL_LAB_UNITS.equalsIgnoreCase(map.getLabUnit().trim())) {
+                    userLabRolesMap.put(ALL_LAB_UNITS, roleNames);
+                    continue;
+                }
+                TestSection testSection = testSectionService.get(map.getLabUnit());
+                if (testSection != null) {
+                    putLabUnitRoleAliases(userLabRolesMap, testSection, roleNames);
+                } else {
+                    userLabRolesMap.put(map.getLabUnit().trim(), roleNames);
                 }
             }
-
             session.setUserLabRolesMap(userLabRolesMap);
+        }
+    }
+
+    /**
+     * Expose roles under every common test-section label so loginLabUnit matches session keys
+     * (e.g. CTD vs CTD Department vs Medical Laboratory).
+     */
+    private void putLabUnitRoleAliases(Map<String, List<String>> userLabRolesMap, TestSection testSection,
+            List<String> roleNames) {
+        if (testSection.getLocalizedName() != null && !testSection.getLocalizedName().isBlank()) {
+            userLabRolesMap.put(testSection.getLocalizedName().trim(), roleNames);
+        }
+        if (testSection.getTestSectionName() != null && !testSection.getTestSectionName().isBlank()) {
+            userLabRolesMap.put(testSection.getTestSectionName().trim(), roleNames);
+        }
+        if (testSection.getDescription() != null && !testSection.getDescription().isBlank()) {
+            userLabRolesMap.put(testSection.getDescription().trim(), roleNames);
+        }
+        if (testSection.getId() != null && !testSection.getId().isBlank()) {
+            userLabRolesMap.put(testSection.getId().trim(), roleNames);
         }
     }
 

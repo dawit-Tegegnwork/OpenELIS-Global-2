@@ -1,6 +1,10 @@
 import { useContext, useCallback, useMemo } from "react";
 import UserSessionDetailsContext from "../UserSessionDetailsContext";
 import { Roles, RoleGroups } from "../constants/roles";
+import {
+  getEffectiveLabUnitNameForRoleCheck,
+  getRolesForLabUnitKey,
+} from "../security/routeAccess";
 
 /**
  * Custom hook for permission checking
@@ -190,11 +194,11 @@ export const usePermissions = () => {
       if (roleList.some((r) => allLabRoles.includes(r))) {
         return true;
       }
-      const activeLabUnit = userSessionDetails.loginLabUnit;
+      const activeLabUnit = getEffectiveLabUnitNameForRoleCheck(userSessionDetails);
       if (!activeLabUnit) {
         return false;
       }
-      const activeRoles = map[activeLabUnit] || [];
+      const activeRoles = getRolesForLabUnitKey(map, activeLabUnit);
       return roleList.some((r) => activeRoles.includes(r));
     },
     [userSessionDetails, isGlobalAdminUser],
@@ -209,11 +213,11 @@ export const usePermissions = () => {
     if (allLabRoles.includes(Roles.LAB_MANAGER)) {
       return true;
     }
-    const activeLabUnit = userSessionDetails.loginLabUnit;
+    const activeLabUnit = getEffectiveLabUnitNameForRoleCheck(userSessionDetails);
     if (!activeLabUnit) {
       return false;
     }
-    const activeRoles = map[activeLabUnit] || [];
+    const activeRoles = getRolesForLabUnitKey(map, activeLabUnit);
     return activeRoles.includes(Roles.LAB_MANAGER);
   }, [userSessionDetails]);
 
@@ -241,11 +245,11 @@ export const usePermissions = () => {
       if (roleList.some((r) => allLabRoles.includes(r))) {
         return true;
       }
-      const activeLabUnit = userSessionDetails.loginLabUnit;
+      const activeLabUnit = getEffectiveLabUnitNameForRoleCheck(userSessionDetails);
       if (!activeLabUnit) {
         return false;
       }
-      const activeRoles = map[activeLabUnit] || [];
+      const activeRoles = getRolesForLabUnitKey(map, activeLabUnit);
       return roleList.some((r) => activeRoles.includes(r));
     },
     [userSessionDetails, isGlobalAdminUser, hasLabManagerForActiveDepartment],
