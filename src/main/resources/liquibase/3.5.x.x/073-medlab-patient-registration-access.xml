@@ -1,0 +1,64 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+    xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+      http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-3.8.xsd">
+
+    <changeSet author="ahri-medlab" id="073-medlab-name-charset-research-ids">
+        <preConditions onFail="MARK_RAN">
+            <tableExists tableName="site_information" schemaName="clinlims"/>
+        </preConditions>
+        <comment>
+            Allow digits and common ID symbols in patient/participant name fields for MedLab research registration.
+        </comment>
+        <sql>
+            UPDATE clinlims.site_information
+            SET value = '.''0-9a-zàâçéèêëîïôûùüÿñæœ _@-'
+            WHERE name = 'firstNameCharset';
+
+            UPDATE clinlims.site_information
+            SET value = '.''0-9a-zàâçéèêëîïôûùüÿñæœ _@-'
+            WHERE name = 'lastNameCharset';
+
+            UPDATE clinlims.site_information
+            SET value = 'a-z0-9/_.-àâçéèêëîïôûùüÿñæœ'
+            WHERE name = 'patientIdCharset';
+        </sql>
+    </changeSet>
+
+    <changeSet author="ahri-medlab" id="073-medlab-sample-patient-entry-role-modules">
+        <preConditions onFail="MARK_RAN">
+            <tableExists tableName="system_role_module" schemaName="clinlims"/>
+            <tableExists tableName="system_role" schemaName="clinlims"/>
+            <tableExists tableName="system_module" schemaName="clinlims"/>
+            <sequenceExists sequenceName="system_role_module_seq" schemaName="clinlims"/>
+        </preConditions>
+        <comment>
+            Grant SamplePatientEntry (/rest/PatientManagement) to AHRI lab-unit roles used on MedLab Page 1.
+            Without this, CTD-only users see "Not Authorized" even with lab-unit roles assigned.
+        </comment>
+        <sql splitStatements="false">
+            INSERT INTO clinlims.system_role_module
+                (id, has_select, has_add, has_update, has_delete, system_role_id, system_module_id)
+            SELECT nextval('clinlims.system_role_module_seq'), 'Y', 'Y', 'Y', 'Y', role_row.id, module_row.id
+            FROM clinlims.system_role role_row
+            CROSS JOIN clinlims.system_module module_row
+            WHERE module_row.name = 'SamplePatientEntry'
+              AND role_row.name IN (
+                  'Sample Collector',
+                  'Laboratory Technician',
+                  'Lab Manager',
+                  'Junior Researcher',
+                  'Senior Researcher'
+              )
+              AND NOT EXISTS (
+                  SELECT 1
+                  FROM clinlims.system_role_module existing
+                  WHERE existing.system_role_id = role_row.id
+                    AND existing.system_module_id = module_row.id
+              );
+        </sql>
+    </changeSet>
+
+</databaseChangeLog>

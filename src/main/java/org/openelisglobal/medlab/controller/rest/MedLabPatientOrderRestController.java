@@ -362,6 +362,18 @@ public class MedLabPatientOrderRestController extends BaseRestController {
      * @param count  the number of lab numbers to preview
      * @return list of preview lab numbers
      */
+    @GetMapping(value = "/orderable-tests", produces = MediaType.APPLICATION_JSON_VALUE)
+    @ResponseBody
+    public ResponseEntity<List<Map<String, Object>>> getOrderableTests(HttpServletRequest request) {
+        try {
+            return ResponseEntity.ok(medLabPatientOrderService.getOrderableTestsForMedLab(getSysUserId(request)));
+        } catch (Exception e) {
+            LogEvent.logError(this.getClass().getSimpleName(), "getOrderableTests",
+                    "Error fetching orderable tests: " + e.getMessage());
+            return ResponseEntity.status(500).body(List.of());
+        }
+    }
+
     @GetMapping(value = "/lab-number-preview", produces = MediaType.APPLICATION_JSON_VALUE)
     @ResponseBody
     public ResponseEntity<List<String>> getLabNumberPreview(

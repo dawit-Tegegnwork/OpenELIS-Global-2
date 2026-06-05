@@ -6,6 +6,7 @@ import {
   buildPatientManagementPayload,
   REGISTER_MODE,
   formatPatientBirthDateDisplay,
+  normalizeOrderableTestList,
   formatRegistrationError,
 } from "./patientOrderHelpers";
 
@@ -71,11 +72,38 @@ describe("patientOrderHelpers", () => {
     expect(payload.subjectNumber).toBe("PROT-001");
   });
 
+  it("buildPatientManagementPayload uses participant id as subjectNumber", () => {
+    const { payload } = buildPatientManagementPayload(
+      {
+        firstName: "P-056",
+        lastName: "",
+        gender: "M",
+        dateOfBirth: "",
+        nationalId: "",
+        fatherNameOrProtocolId: "",
+      },
+      REGISTER_MODE.PARTICIPANT,
+    );
+    expect(payload.subjectNumber).toBe("P-056");
+  });
+
   it("formatPatientBirthDateDisplay prefers birthDateForDisplay", () => {
     expect(
       formatPatientBirthDateDisplay({ birthDateForDisplay: "01/01/2000" }),
     ).toBe("01/01/2000");
     expect(formatPatientBirthDateDisplay({ age: "22" })).toBe("01/01/2004");
+  });
+
+  it("normalizeOrderableTestList maps id and value", () => {
+    expect(
+      normalizeOrderableTestList([
+        { id: 5, value: "Albumin(Urines)" },
+        { testId: "6", testName: "Amylase" },
+      ]),
+    ).toEqual([
+      { id: "5", value: "Albumin(Urines)" },
+      { id: "6", value: "Amylase" },
+    ]);
   });
 
   it("formatRegistrationError surfaces backend error text", () => {
@@ -88,5 +116,11 @@ describe("patientOrderHelpers", () => {
     expect(
       formatRegistrationError({ statusCode: 400 }, "Error registering patient"),
     ).toBe("Error registering patient (HTTP 400)");
+    expect(
+      formatRegistrationError(
+        { message: "Not Authorized", statusCode: 401 },
+        "Error registering patient",
+      ),
+    ).toContain("Not Authorized");
   });
 });
