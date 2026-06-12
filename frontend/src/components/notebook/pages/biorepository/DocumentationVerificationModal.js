@@ -2,6 +2,7 @@ import React, { useState, useCallback, useEffect } from "react";
 import {
   Modal,
   Checkbox,
+  Dropdown,
   TextArea,
   RadioButtonGroup,
   RadioButton,
@@ -27,7 +28,7 @@ import {
 } from "../../../esignature";
 
 /**
- * DocumentationVerificationModal - 7-point verification checklist modal
+ * DocumentationVerificationModal - 6-point verification checklist modal
  * Sub-stage 1b of the Biorepository Intake workflow (linked to shipment)
  *
  * Per SRS Section 4.2.2: Documentation verification happens BEFORE sample
@@ -35,12 +36,11 @@ import {
  *
  * Checklist items:
  * 1. Sample Identifiers Match (shipment manifest matches labels)
- * 2. Project Linkage (valid project reference)
- * 3. Ethics Approval (IRB/ethics reference on file)
- * 4. Biosafety Classification Match
- * 5. Packaging Integrity (manual inspection)
- * 6. Informed Consent Record (for human samples)
- * 7. MTA Documented (for external samples, N/A allowed)
+ * 2. Ethics Approval (IRB/ethics reference on file)
+ * 3. Biosafety Classification Match
+ * 4. Packaging Integrity (manual inspection)
+ * 5. Informed Consent Record (for human samples)
+ * 6. MTA Documented (for external samples, N/A allowed)
  *
  * @param {Object} props
  * @param {boolean} props.open - Whether the modal is open
@@ -60,6 +60,39 @@ function DocumentationVerificationModal({
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState(null);
+  const [additionalInfo, setAdditionalInfo] = useState("");
+  const [biosafetyClassification, setBiosafetyClassification] = useState(null);
+
+  const biosafetyLevels = [
+    {
+      id: "BSL_1",
+      text: intl.formatMessage({
+        id: "biorepository.biosafety.level1",
+        defaultMessage: "Level 1",
+      }),
+    },
+    {
+      id: "BSL_2",
+      text: intl.formatMessage({
+        id: "biorepository.biosafety.level2",
+        defaultMessage: "Level 2",
+      }),
+    },
+    {
+      id: "BSL_3",
+      text: intl.formatMessage({
+        id: "biorepository.biosafety.level3",
+        defaultMessage: "Level 3",
+      }),
+    },
+    {
+      id: "BSL_4",
+      text: intl.formatMessage({
+        id: "biorepository.biosafety.level4",
+        defaultMessage: "Level 4",
+      }),
+    },
+  ];
 
   // Checklist items configuration
   const checklistItems = [
@@ -75,19 +108,6 @@ function DocumentationVerificationModal({
           "Verify that sample identifiers on the tube match the manifest and system records",
       }),
       allowNA: false,
-    },
-    {
-      id: "projectLinkage",
-      label: intl.formatMessage({
-        id: "biorepository.verification.item.projectLinkage",
-        defaultMessage: "Project Linkage",
-      }),
-      description: intl.formatMessage({
-        id: "biorepository.verification.item.projectLinkage.description",
-        defaultMessage: "Confirm sample is correctly linked to a valid project",
-      }),
-      allowNA: false,
-      autoVerify: true,
     },
     {
       id: "ethicsApproval",
@@ -193,6 +213,61 @@ function DocumentationVerificationModal({
       );
     }
   }, [open, shipment?.id]);
+
+  useEffect(() => {
+    setAdditionalInfo(verification?.verificationNotes || "");
+  }, [verification?.verificationNotes]);
+
+  useEffect(() => {
+    setBiosafetyClassification(verification?.biosafetyClassification || null);
+  }, [verification?.biosafetyClassification]);
+
+  const handleBiosafetyClassificationChange = useCallback(
+    (selectedLevel) => {
+      if (!verification?.id || !selectedLevel) return;
+
+      setSaving(true);
+      setError(null);
+
+      putToOpenElisServerJsonResponse(
+        `/rest/biorepository/verification/${verification.id}/biosafety-classification`,
+        JSON.stringify({ biosafetyClassification: selectedLevel }),
+        (response) => {
+          setSaving(false);
+          if (response?.error) {
+            setError(response.error);
+          } else {
+            setBiosafetyClassification(selectedLevel);
+            setVerification((prev) => ({
+              ...prev,
+              biosafetyClassification: selectedLevel,
+              completedCount: response.completedCount,
+            }));
+          }
+        },
+      );
+    },
+    [verification?.id],
+  );
+
+  const handleNotesBlur = useCallback(() => {
+    if (!verification?.id) return;
+
+    putToOpenElisServerJsonResponse(
+      `/rest/biorepository/verification/${verification.id}/notes`,
+      JSON.stringify({ notes: additionalInfo }),
+      (response) => {
+        if (response?.error) {
+          setError(response.error);
+        } else {
+          setVerification((prev) => ({
+            ...prev,
+            verificationNotes: additionalInfo,
+          }));
+        }
+      },
+    );
+  }, [verification?.id, additionalInfo]);
 
   const getItemStatus = useCallback(
     (itemId) => {
@@ -435,6 +510,33 @@ function DocumentationVerificationModal({
                 {item.description}
               </p>
 
+              {item.id === "biosafetyMatch" && (
+                <div style={{ marginBottom: "1rem", maxWidth: "20rem" }}>
+                  <Dropdown
+                    id="verification-biosafety-classification"
+                    titleText={intl.formatMessage({
+                      id: "biorepository.verification.biosafetyClassification.label",
+                      defaultMessage: "Biosafety Classification Level",
+                    })}
+                    helperText={intl.formatMessage({
+                      id: "biorepository.verification.biosafetyClassification.helper",
+                      defaultMessage:
+                        "Select the classification level documented for this shipment (e.g. Marburg Virus → Level 3)",
+                    })}
+                    items={biosafetyLevels}
+                    itemToString={(level) => (level ? level.text : "")}
+                    selectedItem={
+                      biosafetyLevels.find(
+                        (level) => level.id === biosafetyClassification,
+                      ) || null
+                    }
+                    onChange={({ selectedItem }) =>
+                      handleBiosafetyClassificationChange(selectedItem?.id)
+                    }
+                  />
+                </div>
+              )}
+
               {item.allowNA ? (
                 <RadioButtonGroup
                   name={`verification-${item.id}`}
@@ -483,6 +585,9 @@ function DocumentationVerificationModal({
                     defaultMessage: "Verified",
                   })}
                   checked={checked}
+                  disabled={
+                    item.id === "biosafetyMatch" && !biosafetyClassification
+                  }
                   onChange={(e, { checked }) =>
                     handleItemChange(item.id, checked)
                   }
@@ -492,6 +597,23 @@ function DocumentationVerificationModal({
           );
         })}
       </Accordion>
+
+      <TextArea
+        id="verification-additional-info"
+        labelText={intl.formatMessage({
+          id: "biorepository.verification.additionalInfo.label",
+          defaultMessage: "Additional Information",
+        })}
+        helperText={intl.formatMessage({
+          id: "biorepository.verification.additionalInfo.helper",
+          defaultMessage: "Optional — add any extra documentation notes",
+        })}
+        value={additionalInfo}
+        onChange={(e) => setAdditionalInfo(e.target.value)}
+        onBlur={handleNotesBlur}
+        rows={3}
+        style={{ marginTop: "1.5rem" }}
+      />
 
       {!isComplete && (
         <div style={{ marginTop: "1.5rem" }}>

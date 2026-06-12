@@ -1,6 +1,7 @@
 import {
   translateManifestImportMessage,
   translateManifestImportMessages,
+  translateManifestDuplicateWarning,
 } from "./manifestImportErrorMessages";
 
 const formatMessage = ({ defaultMessage }, values = {}) =>
@@ -48,6 +49,18 @@ describe("manifestImportErrorMessages", () => {
       ),
     ).toBe(
       'Sample "BIO-003": This sample type already exists in the system. Please validate the file again and retry the import.',
+    );
+  });
+
+  it("translates duplicate warnings with suggested import ids", () => {
+    expect(
+      translateManifestDuplicateWarning(
+        "Duplicate sample ID in manifest: BIO-001",
+        formatMessage,
+        "BIO-001-R2",
+      ),
+    ).toBe(
+      'Sample ID "BIO-001" appears more than once in this file. Approve to import as "BIO-001-R2".',
     );
   });
 

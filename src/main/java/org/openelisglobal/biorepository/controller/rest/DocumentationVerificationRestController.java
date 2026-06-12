@@ -122,6 +122,55 @@ public class DocumentationVerificationRestController extends BaseRestController 
     }
 
     /**
+     * Record biosafety classification level for documentation verification.
+     */
+    @PutMapping(value = "/{id}/biosafety-classification", produces = MediaType.APPLICATION_JSON_VALUE)
+    public ResponseEntity<?> updateBiosafetyClassification(@PathVariable("id") Integer id,
+            @RequestBody BiosafetyClassificationUpdate classificationUpdate, HttpServletRequest request) {
+
+        String sysUserId = getSysUserId(request);
+
+        try {
+            DocumentationVerification verification = verificationService.updateBiosafetyClassification(id,
+                    classificationUpdate.getBiosafetyClassification(), sysUserId);
+
+            return ResponseEntity.ok(Map.of("id", verification.getId(), "biosafetyClassification",
+                    verification.getBiosafetyClassification(), "completedCount", verification.getCompletedCount(),
+                    "isComplete", verification.isComplete()));
+
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+        } catch (Exception e) {
+            return ResponseEntity.internalServerError()
+                    .body(Map.of("error", "Failed to update biosafety classification: " + e.getMessage()));
+        }
+    }
+
+    /**
+     * Update optional verification notes (additional information).
+     */
+    @PutMapping(value = "/{id}/notes", produces = MediaType.APPLICATION_JSON_VALUE)
+    public ResponseEntity<?> updateVerificationNotes(@PathVariable("id") Integer id,
+            @RequestBody VerificationNotesUpdate notesUpdate, HttpServletRequest request) {
+
+        String sysUserId = getSysUserId(request);
+
+        try {
+            DocumentationVerification verification = verificationService.updateVerificationNotes(id,
+                    notesUpdate.getNotes(), sysUserId);
+
+            return ResponseEntity.ok(Map.of("id", verification.getId(), "verificationNotes",
+                    verification.getVerificationNotes() != null ? verification.getVerificationNotes() : ""));
+
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+        } catch (Exception e) {
+            return ResponseEntity.internalServerError()
+                    .body(Map.of("error", "Failed to update verification notes: " + e.getMessage()));
+        }
+    }
+
+    /**
      * Complete verification for a shipment.
      */
     @PostMapping(value = "/{id}/complete", produces = MediaType.APPLICATION_JSON_VALUE)
@@ -222,6 +271,36 @@ public class DocumentationVerificationRestController extends BaseRestController 
 
         public void setNaJustification(String naJustification) {
             this.naJustification = naJustification;
+        }
+    }
+
+    /**
+     * Request body for updating biosafety classification.
+     */
+    public static class BiosafetyClassificationUpdate {
+        private String biosafetyClassification;
+
+        public String getBiosafetyClassification() {
+            return biosafetyClassification;
+        }
+
+        public void setBiosafetyClassification(String biosafetyClassification) {
+            this.biosafetyClassification = biosafetyClassification;
+        }
+    }
+
+    /**
+     * Request body for updating verification notes.
+     */
+    public static class VerificationNotesUpdate {
+        private String notes;
+
+        public String getNotes() {
+            return notes;
+        }
+
+        public void setNotes(String notes) {
+            this.notes = notes;
         }
     }
 

@@ -20,6 +20,7 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.ResponseBody;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -134,6 +135,48 @@ public class NotebookRoomEnvironmentLogController extends BaseRestController {
         }
     }
 
+    /**
+     * Bulk import room environment readings from CSV-parsed rows. POST
+     * /rest/notebook-entry/{entryId}/room-environment-logs/import
+     */
+    @PostMapping(value = "/{entryId}/room-environment-logs/import", produces = MediaType.APPLICATION_JSON_VALUE)
+    @ResponseBody
+    public ResponseEntity<Map<String, Object>> importRoomEnvironmentLogs(@PathVariable("entryId") Integer entryId,
+            @RequestBody RoomEnvironmentLogImportRequest request,
+            @RequestParam(value = "roomCode", required = false) String roomCode, HttpServletRequest httpRequest) {
+
+        String sysUserId = getSysUserId(httpRequest);
+        if (sysUserId == null) {
+            Map<String, Object> error = new HashMap<>();
+            error.put("error", "User session not found");
+            return ResponseEntity.status(401).body(error);
+        }
+
+        if (request.getRows() == null || request.getRows().isEmpty()) {
+            Map<String, Object> error = new HashMap<>();
+            error.put("error", "No rows provided for import");
+            return ResponseEntity.badRequest().body(error);
+        }
+
+        String scopeRoomCode = roomCode != null && !roomCode.isBlank() ? roomCode.trim()
+                : (request.getRoomCode() != null && !request.getRoomCode().isBlank() ? request.getRoomCode().trim()
+                        : null);
+
+        Map<String, Object> result = roomEnvironmentLogService.importRoomEnvironmentLogs(entryId, request.getRows(),
+                scopeRoomCode, sysUserId);
+
+        if (Boolean.FALSE.equals(result.get("success")) && result.get("importedCount") == null) {
+            return ResponseEntity.badRequest().body(result);
+        }
+
+        Integer importedCount = (Integer) result.get("importedCount");
+        if (importedCount != null && importedCount == 0) {
+            return ResponseEntity.badRequest().body(result);
+        }
+
+        return ResponseEntity.ok(result);
+    }
+
     @Override
     protected String getSysUserId(HttpServletRequest request) {
         UserSessionData usd = (UserSessionData) request.getSession().getAttribute(USER_SESSION_DATA);
@@ -210,6 +253,28 @@ public class NotebookRoomEnvironmentLogController extends BaseRestController {
 
         public void setNotes(String notes) {
             this.notes = notes;
+        }
+    }
+
+    @com.fasterxml.jackson.annotation.JsonIgnoreProperties(ignoreUnknown = true)
+    public static class RoomEnvironmentLogImportRequest {
+        private String roomCode;
+        private List<Map<String, Object>> rows;
+
+        public String getRoomCode() {
+            return roomCode;
+        }
+
+        public void setRoomCode(String roomCode) {
+            this.roomCode = roomCode;
+        }
+
+        public List<Map<String, Object>> getRows() {
+            return rows;
+        }
+
+        public void setRows(List<Map<String, Object>> rows) {
+            this.rows = rows;
         }
     }
 

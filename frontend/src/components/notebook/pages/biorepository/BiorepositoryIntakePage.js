@@ -35,6 +35,7 @@ import {
   putToOpenElisServerJsonResponse,
 } from "../../../utils/Utils";
 import ShipmentReceptionForm from "./ShipmentReceptionForm";
+import ShipmentListTable from "./ShipmentListTable";
 import SampleIntakeForm from "./SampleIntakeForm";
 import DocumentationVerificationModal from "./DocumentationVerificationModal";
 import ManifestUploadModal from "./ManifestUploadModal";
@@ -48,10 +49,10 @@ const SHIPMENT_SAMPLE_FETCH_LIMIT = 5000;
  * BiorepositoryIntakePage - Sample Intake & Registration workflow page
  * Stage 1 of the Biorepository workflow with 5 sub-stages:
  *   1a: Shipment Reception
- *   1b: Documentation Verification (7-point checklist, linked to shipment)
+ *   1b: Documentation Verification (6-point checklist, linked to shipment)
  *   1c: Sample Registration (single entry or bulk manifest import)
  *   1d: Sample Transfer
- *   1e: Sample Inventory (includes barcode generation via batch action)
+ *   1e: Received Samples (includes barcode generation via batch action)
  *
  * Per SRS Section 4.2: Documentation must be verified BEFORE sample registration
  * to prevent entry of samples that cannot be properly tracked.
@@ -80,6 +81,9 @@ function BiorepositoryIntakePage({
   const [loadingSamples, setLoadingSamples] = useState(false);
   const [verificationModalOpen, setVerificationModalOpen] = useState(false);
   const [manifestModalOpen, setManifestModalOpen] = useState(false);
+  const [shipmentListRefreshKey, setShipmentListRefreshKey] = useState(0);
+
+  const shipmentStorageKey = entryId ? `biorepo-shipment-${entryId}` : null;
 
   // Barcode generation state
   const [barcodeSource, setBarcodeSource] = useState("about:blank");
@@ -135,35 +139,74 @@ function BiorepositoryIntakePage({
       key: "inventory",
       label: intl.formatMessage({
         id: "biorepository.intake.substage.inventory",
-        defaultMessage: "Sample Inventory",
+        defaultMessage: "Received Samples",
       }),
     },
   ];
 
-  const handleShipmentCreated = useCallback((shipment) => {
-    setCurrentShipment(shipment);
-    setSubStageComplete((prev) => ({ ...prev, shipment: true }));
-    // Auto-advance to documentation verification
-    setActiveSubStage(1);
-  }, []);
+  const applyShipmentSelection = useCallback(
+    (shipment, { advanceTab = true } = {}) => {
+      setCurrentShipment(shipment);
+      setSubStageComplete((prev) => ({
+        ...prev,
+        shipment: true,
+        documentation:
+          shipment.documentationStatus === "VERIFIED" ||
+          shipment.documentationStatus === "QUARANTINE",
+      }));
+      if (shipmentStorageKey) {
+        sessionStorage.setItem(shipmentStorageKey, String(shipment.id));
+      }
+      if (!advanceTab) {
+        return;
+      }
+      if (
+        shipment.documentationStatus === "VERIFIED" ||
+        shipment.documentationStatus === "QUARANTINE"
+      ) {
+        setActiveSubStage(2);
+      } else {
+        setActiveSubStage(1);
+      }
+    },
+    [shipmentStorageKey],
+  );
 
-  const handleShipmentSelected = useCallback((shipment) => {
-    // When user selects an existing shipment, treat it like a newly created one
-    setCurrentShipment(shipment);
-    setSubStageComplete((prev) => ({ ...prev, shipment: true }));
-    // Check if shipment already has documentation verified
-    if (
-      shipment.documentationStatus === "VERIFIED" ||
-      shipment.documentationStatus === "QUARANTINE"
-    ) {
-      setSubStageComplete((prev) => ({ ...prev, documentation: true }));
-      // Auto-advance to sample registration
-      setActiveSubStage(2);
-    } else {
-      // Auto-advance to documentation verification
-      setActiveSubStage(1);
+  const handleShipmentCreated = useCallback(
+    (shipment) => {
+      setShipmentListRefreshKey((k) => k + 1);
+      applyShipmentSelection(shipment);
+    },
+    [applyShipmentSelection],
+  );
+
+  const handleShipmentSelected = useCallback(
+    (shipment) => {
+      applyShipmentSelection(shipment);
+    },
+    [applyShipmentSelection],
+  );
+
+  const handleClearShipment = useCallback(() => {
+    setCurrentShipment(null);
+    setSubStageComplete((prev) => ({
+      ...prev,
+      shipment: false,
+      documentation: false,
+    }));
+    if (shipmentStorageKey) {
+      sessionStorage.removeItem(shipmentStorageKey);
     }
-  }, []);
+    setActiveSubStage(0);
+  }, [shipmentStorageKey]);
+
+  const handleVerifyShipment = useCallback(
+    (shipment) => {
+      applyShipmentSelection(shipment, { advanceTab: false });
+      setVerificationModalOpen(true);
+    },
+    [applyShipmentSelection],
+  );
 
   const handleSamplesRegistered = useCallback((samples) => {
     setRegisteredSamples((prev) => [...prev, ...samples]);
@@ -214,6 +257,22 @@ function BiorepositoryIntakePage({
   useEffect(() => {
     loadAllBioSamples();
   }, [loadAllBioSamples]);
+
+  // Restore active shipment from session storage
+  useEffect(() => {
+    if (!shipmentStorageKey || currentShipment) {
+      return;
+    }
+    const savedId = sessionStorage.getItem(shipmentStorageKey);
+    if (!savedId) {
+      return;
+    }
+    getFromOpenElisServer(`/rest/biorepository/shipment/${savedId}`, (data) => {
+      if (data && !data.error) {
+        applyShipmentSelection(data, { advanceTab: false });
+      }
+    });
+  }, [shipmentStorageKey, currentShipment, applyShipmentSelection]);
 
   // Load samples for current shipment when shipment changes
   useEffect(() => {
@@ -453,10 +512,79 @@ function BiorepositoryIntakePage({
     ],
   );
 
+  const getDocStatusLabel = (status) => {
+    if (status === "VERIFIED") {
+      return intl.formatMessage({
+        id: "biorepository.shipment.docStatus.verified",
+        defaultMessage: "Verified",
+      });
+    }
+    if (status === "QUARANTINE") {
+      return intl.formatMessage({
+        id: "biorepository.shipment.docStatus.quarantine",
+        defaultMessage: "Quarantine",
+      });
+    }
+    return intl.formatMessage({
+      id: "biorepository.shipment.docStatus.pending",
+      defaultMessage: "Pending",
+    });
+  };
+
   return (
     <div className="biorepository-intake-page">
       <Grid fullWidth>
         <Column lg={16} md={8} sm={4}>
+          {currentShipment && (
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+                gap: "1rem",
+                padding: "0.75rem 1rem",
+                marginBottom: "1rem",
+                backgroundColor: "#e8f4fd",
+                border: "1px solid #78a9ff",
+                borderRadius: "4px",
+                flexWrap: "wrap",
+              }}
+            >
+              <div style={{ fontSize: "0.875rem" }}>
+                <strong>
+                  <FormattedMessage
+                    id="biorepository.intake.activeShipment.label"
+                    defaultMessage="Active shipment:"
+                  />
+                </strong>{" "}
+                {currentShipment.deliveryReference || currentShipment.id}
+                {currentShipment.senderName && (
+                  <span style={{ color: "#525252", marginLeft: "1rem" }}>
+                    <FormattedMessage
+                      id="biorepository.intake.activeShipment.sender"
+                      defaultMessage="Sender:"
+                    />{" "}
+                    {currentShipment.senderName}
+                  </span>
+                )}
+                <span style={{ color: "#525252", marginLeft: "1rem" }}>
+                  <FormattedMessage
+                    id="biorepository.intake.activeShipment.docs"
+                    defaultMessage="Docs:"
+                  />{" "}
+                  {getDocStatusLabel(
+                    currentShipment.documentationStatus || "PENDING",
+                  )}
+                </span>
+              </div>
+              <Button kind="ghost" size="sm" onClick={handleClearShipment}>
+                <FormattedMessage
+                  id="biorepository.intake.activeShipment.change"
+                  defaultMessage="Change shipment"
+                />
+              </Button>
+            </div>
+          )}
           <Tabs
             selectedIndex={activeSubStage}
             onChange={({ selectedIndex }) => setActiveSubStage(selectedIndex)}
@@ -490,35 +618,13 @@ function BiorepositoryIntakePage({
                     />
                   </h4>
 
-                  {subStageComplete.shipment && currentShipment ? (
-                    <InlineNotification
-                      kind="success"
-                      title={intl.formatMessage({
-                        id: "biorepository.intake.shipment.received",
-                        defaultMessage: "Shipment Received",
-                      })}
-                      subtitle={intl.formatMessage(
-                        {
-                          id: "biorepository.intake.shipment.receivedDetails",
-                          defaultMessage:
-                            "Delivery reference: {ref}. Proceed to sample registration.",
-                        },
-                        {
-                          ref:
-                            currentShipment.deliveryReference ||
-                            currentShipment.id,
-                        },
-                      )}
-                      lowContrast
-                      hideCloseButton
-                    />
-                  ) : (
-                    <ShipmentReceptionForm
-                      onShipmentCreated={handleShipmentCreated}
-                      onShipmentSelected={handleShipmentSelected}
-                      onCancel={() => {}}
-                    />
-                  )}
+                  <ShipmentReceptionForm
+                    onShipmentCreated={handleShipmentCreated}
+                    onShipmentSelected={handleShipmentSelected}
+                    onCancel={() => {}}
+                    selectedShipmentId={currentShipment?.id}
+                    refreshKey={shipmentListRefreshKey}
+                  />
                 </div>
               </TabPanel>
 
@@ -533,20 +639,25 @@ function BiorepositoryIntakePage({
                   </h4>
 
                   {!currentShipment ? (
-                    <InlineNotification
-                      kind="info"
-                      title={intl.formatMessage({
-                        id: "biorepository.intake.documentation.noShipment",
-                        defaultMessage: "No Shipment Selected",
-                      })}
-                      subtitle={intl.formatMessage({
-                        id: "biorepository.intake.documentation.noShipment.message",
-                        defaultMessage:
-                          "Receive a shipment first before proceeding to documentation verification.",
-                      })}
-                      lowContrast
-                      hideCloseButton
-                    />
+                    <div>
+                      <p style={{ marginBottom: "1rem" }}>
+                        <FormattedMessage
+                          id="biorepository.intake.documentation.selectShipment"
+                          defaultMessage="Select a shipment below to begin documentation verification."
+                        />
+                      </p>
+                      <ShipmentListTable
+                        onSelect={handleShipmentSelected}
+                        onVerify={handleVerifyShipment}
+                        showDocStatus
+                        showVerifyAction
+                        selectButtonLabel={intl.formatMessage({
+                          id: "biorepository.shipment.button.select",
+                          defaultMessage: "Select",
+                        })}
+                        refreshKey={shipmentListRefreshKey}
+                      />
+                    </div>
                   ) : subStageComplete.documentation ? (
                     <InlineNotification
                       kind={
@@ -576,7 +687,7 @@ function BiorepositoryIntakePage({
                       <p style={{ marginBottom: "1rem" }}>
                         <FormattedMessage
                           id="biorepository.intake.documentation.shipmentInstructions"
-                          defaultMessage="Verify the shipment documentation using the 7-point checklist before registering samples."
+                          defaultMessage="Verify the shipment documentation using the 6-point checklist before registering samples."
                         />
                       </p>
                       <div
@@ -691,7 +802,7 @@ function BiorepositoryIntakePage({
                 </div>
               </TabPanel>
 
-              {/* Sub-stage 1e: Sample Inventory */}
+              {/* Sub-stage 1e: Received Samples */}
               <TabPanel>
                 <div className="substage-content" style={{ padding: "1rem 0" }}>
                   <div
@@ -705,7 +816,7 @@ function BiorepositoryIntakePage({
                     <h4>
                       <FormattedMessage
                         id="biorepository.intake.inventory.title"
-                        defaultMessage="Sample Inventory"
+                        defaultMessage="Received Samples"
                       />
                     </h4>
                     <Button

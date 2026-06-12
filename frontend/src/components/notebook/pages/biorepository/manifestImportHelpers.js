@@ -40,6 +40,9 @@ export const HEADER_ALIASES = {
   transferdate: "collectionDate",
   requiredtempmin: "requiredTempMin",
   requiredtempmax: "requiredTempMax",
+  storagetemperature: "storageTemperaturePreset",
+  storagepreset: "storageTemperaturePreset",
+  temperaturerequirement: "storageTemperaturePreset",
   biosafetylevel: "biosafetyLevel",
   collectiondate: "collectionDate",
   principalinvestigator: "principalInvestigator",
@@ -235,6 +238,14 @@ export const mergeMappedRowValues = (rawHeaders, values) => {
     row._storageNotes = storageParts.join(" | ");
   }
 
+  if (row.storageTemperaturePreset && !row.requiredTempMin && !row.requiredTempMax) {
+    const presetRange = resolveStorageTemperaturePreset(row.storageTemperaturePreset);
+    if (presetRange) {
+      row.requiredTempMin = presetRange.min;
+      row.requiredTempMax = presetRange.max;
+    }
+  }
+
   return row;
 };
 
@@ -248,6 +259,45 @@ export const buildSpecialHandlingNotes = (row) =>
   ]
     .filter(Boolean)
     .join(" | ");
+
+/** Compose special-handling notes for single-entry intake (matches bulk import). */
+export const buildSingleEntrySpecialHandling = ({
+  specialHandling,
+  volume,
+  receiverName,
+  approvalSign,
+}) => {
+  const custodyParts = [];
+  if (receiverName?.trim()) {
+    custodyParts.push(`Received by: ${receiverName.trim()}`);
+  }
+  if (approvalSign?.trim()) {
+    custodyParts.push(`Approval/Sign: ${approvalSign.trim()}`);
+  }
+
+  const baseHandling = [specialHandling?.trim(), custodyParts.join(" | ")]
+    .filter(Boolean)
+    .join(" | ");
+
+  return buildSpecialHandlingNotes({
+    specialHandling: baseHandling,
+    volume: volume?.trim() || "",
+  });
+};
+
+export const resolveStorageTemperaturePreset = (value) => {
+  const normalized = normalizeCellValue(value).toUpperCase().replace(/\s/g, "");
+  if (
+    normalized === "FROZEN_150" ||
+    normalized === "-150" ||
+    normalized === "-150C" ||
+    normalized === "150C" ||
+    normalized === "VAPORPHASE"
+  ) {
+    return { min: "-196", max: "-150" };
+  }
+  return null;
+};
 
 export const inferLegacyTemperatureRange = (sampleType, sheetName) => {
   const normalized = `${sampleType || ""} ${sheetName || ""}`.toLowerCase();
@@ -393,4 +443,179 @@ export const convertLegacyWorksheetRows = (rows, sheetName) => {
   }
 
   return convertedRows;
+};
+
+export const DUPLICATE_ISSUE = {
+  NONE: "NONE",
+  IN_MANIFEST: "IN_MANIFEST",
+  IN_DATABASE: "IN_DATABASE",
+};
+
+export const isDuplicateWarningMessage = (message) => {
+  const normalized = String(message || "").toLowerCase();
+  return (
+    normalized.startsWith("duplicate sample id in manifest:") ||
+    normalized.startsWith("sample id already exists:")
+  );
+};
+
+export const parseDuplicateSampleId = (message) => {
+  const detail = String(message || "");
+  const colonIndex = detail.indexOf(":");
+  if (colonIndex < 0) {
+    return detail.trim();
+  }
+  return detail.slice(colonIndex + 1).trim();
+};
+
+export const buildSuffixedBarcode = (baseBarcode, replicaIndex) =>
+  `${baseBarcode}-R${replicaIndex}`;
+
+export const resolveUniqueBarcodePreview = (
+  baseBarcode,
+  reservedInBatch = new Set(),
+  existingInDb = new Set(),
+) => {
+  const normalized = normalizeCellValue(baseBarcode);
+  if (!normalized) {
+    return normalized;
+  }
+  if (!reservedInBatch.has(normalized) && !existingInDb.has(normalized)) {
+    return normalized;
+  }
+
+  let replicaIndex = 2;
+  let candidate = buildSuffixedBarcode(normalized, replicaIndex);
+  while (reservedInBatch.has(candidate) || existingInDb.has(candidate)) {
+    replicaIndex += 1;
+    candidate = buildSuffixedBarcode(normalized, replicaIndex);
+  }
+  return candidate;
+};
+
+export const getDuplicateIssueType = (duplicateIssue, messages = []) => {
+  if (duplicateIssue && duplicateIssue !== DUPLICATE_ISSUE.NONE) {
+    return duplicateIssue;
+  }
+  if (!messages.some(isDuplicateWarningMessage)) {
+    return DUPLICATE_ISSUE.NONE;
+  }
+  const manifestMessage = messages.find((message) =>
+    String(message).toLowerCase().startsWith("duplicate sample id in manifest:"),
+  );
+  if (manifestMessage) {
+    return DUPLICATE_ISSUE.IN_MANIFEST;
+  }
+  return DUPLICATE_ISSUE.IN_DATABASE;
+};
+
+export const partitionDuplicateMessages = (messages = []) => {
+  const duplicateMessages = [];
+  const hardErrors = [];
+
+  messages.forEach((message) => {
+    if (isDuplicateWarningMessage(message)) {
+      duplicateMessages.push(message);
+    } else {
+      hardErrors.push(message);
+    }
+  });
+
+  return { duplicateMessages, hardErrors };
+};
+
+export const reclassifyLegacyDuplicateValidationRows = (rows = []) =>
+  rows.map((row) => {
+    if (!row) {
+      return row;
+    }
+    const { duplicateMessages, hardErrors } = partitionDuplicateMessages(
+      row.errors || [],
+    );
+    const duplicateIssue = getDuplicateIssueType(row.duplicateIssue, [
+      ...(row.warnings || []),
+      ...duplicateMessages,
+    ]);
+    const warnings = [...(row.warnings || []), ...duplicateMessages];
+
+    return {
+      ...row,
+      errors: hardErrors,
+      warnings,
+      duplicateIssue,
+      valid: hardErrors.length === 0,
+    };
+  });
+
+export const reconcileCrossBatchManifestDuplicates = (samples, rows) => {
+  const seenBarcodes = new Set();
+
+  const reconciledRows = rows.map((row, index) => {
+    const sample = samples[index] || {};
+    const barcode = normalizeCellValue(
+      firstNonEmptyValue(sample.barcode, sample.externalId),
+    );
+    if (!barcode) {
+      return row;
+    }
+
+    const updatedRow = { ...row };
+    if (seenBarcodes.has(barcode)) {
+      if (
+        !updatedRow.duplicateIssue ||
+        updatedRow.duplicateIssue === DUPLICATE_ISSUE.NONE
+      ) {
+        updatedRow.duplicateIssue = DUPLICATE_ISSUE.IN_MANIFEST;
+        updatedRow.warnings = [...(updatedRow.warnings || [])];
+        updatedRow.warnings.push(`Duplicate sample ID in manifest: ${barcode}`);
+      }
+      if (!updatedRow.errors || updatedRow.errors.length === 0) {
+        updatedRow.valid = true;
+      }
+    } else {
+      seenBarcodes.add(barcode);
+    }
+
+    return updatedRow;
+  });
+
+  return reclassifyLegacyDuplicateValidationRows(reconciledRows);
+};
+
+export const computeDuplicateImportPreviews = (
+  rows,
+  duplicateApprovals = {},
+  existingBarcodes = new Set(),
+) => {
+  const reserved = new Set();
+  const previews = {};
+
+  rows.forEach((row) => {
+    const barcode = normalizeCellValue(
+      firstNonEmptyValue(row.barcode, row.externalId),
+    );
+    if (!barcode) {
+      return;
+    }
+
+    const isDuplicate = row._isDuplicate;
+    const approved = Boolean(duplicateApprovals[row._rowNumber]);
+
+    if (isDuplicate) {
+      const resolved = resolveUniqueBarcodePreview(
+        barcode,
+        reserved,
+        existingBarcodes,
+      );
+      previews[row._rowNumber] = resolved;
+      if (approved) {
+        reserved.add(resolved);
+      }
+      return;
+    }
+
+    reserved.add(barcode);
+  });
+
+  return previews;
 };

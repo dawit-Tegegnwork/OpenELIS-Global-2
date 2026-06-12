@@ -327,6 +327,60 @@ public class BioSampleRestControllerIntegrationTest extends BaseWebContextSensit
         assertTrue("Barcode should have date portion", barcode.length() > 12);
     }
 
+    // ========== REGISTER SINGLE SAMPLE TESTS ==========
+
+    @Test
+    public void testRegisterSample_WithManifestFields_PersistsAllFields() throws Exception {
+        String timestamp = String.valueOf(System.currentTimeMillis());
+        String barcode = "SINGLE-REG-" + timestamp;
+        String externalId = "LAB-" + timestamp;
+
+        String requestBody = "{"
+                + "\"barcode\":\"" + barcode + "\","
+                + "\"externalId\":\"" + externalId + "\","
+                + "\"originLab\":\"Bacteriology Unit\","
+                + "\"sampleTypeId\":\"" + testSampleType.getId() + "\","
+                + "\"receiptDate\":\"2026-02-09 08:00:00\","
+                + "\"collectionDate\":\"2026-02-11 00:00:00\","
+                + "\"requiredTempMin\":-80,"
+                + "\"requiredTempMax\":-20,"
+                + "\"biosafetyLevel\":\"BSL_2\","
+                + "\"projectId\":\"HIEPV\","
+                + "\"principalInvestigator\":\"Dr. Test PI\","
+                + "\"consentId\":\"CONSENT-" + timestamp + "\","
+                + "\"ethicsApprovalRef\":\"ETH-" + timestamp + "\","
+                + "\"mtaReference\":\"MTA-" + timestamp + "\","
+                + "\"preservationMedium\":\"EDTA\","
+                + "\"arrivalCondition\":\"thawed once\","
+                + "\"specialHandling\":\"Received by: Abay A. | Approval/Sign: AAA | Volume: insufficient\""
+                + "}";
+
+        MvcResult result = mockMvc
+                .perform(post("/rest/biorepository/sample/register").contentType(MediaType.APPLICATION_JSON)
+                        .sessionAttr("userSessionData", userSessionData).content(requestBody))
+                .andExpect(status().isOk()).andReturn();
+
+        JsonNode responseJson = objectMapper.readTree(result.getResponse().getContentAsString());
+        assertTrue("Response should have id", responseJson.has("id"));
+        assertEquals("Barcode should match", barcode, responseJson.get("barcode").asText());
+
+        BioSample bioSample = bioSampleService.get(responseJson.get("id").asInt());
+        assertNotNull("BioSample should exist", bioSample);
+        assertEquals("Biosafety level should be BSL_2", BiosafetyLevel.BSL_2, bioSample.getBiosafetyLevel());
+        assertEquals("PI should be stored", "Dr. Test PI", bioSample.getPrincipalInvestigator());
+        assertEquals("Consent ID should be stored", "CONSENT-" + timestamp, bioSample.getConsentId());
+        assertEquals("Preservation medium should be stored", "EDTA", bioSample.getPreservationMedium());
+        assertEquals("Arrival condition should be stored", "thawed once", bioSample.getArrivalCondition());
+        assertEquals("Project ID should be stored", "HIEPV", bioSample.getProjectId());
+        assertEquals("Origin lab should be stored", "Bacteriology Unit", bioSample.getOriginLab());
+        assertTrue("Special handling should include receiver note",
+                bioSample.getSpecialHandling().contains("Received by: Abay A."));
+        assertTrue("Special handling should include approval note",
+                bioSample.getSpecialHandling().contains("Approval/Sign: AAA"));
+        assertTrue("Special handling should include volume note",
+                bioSample.getSpecialHandling().contains("Volume: insufficient"));
+    }
+
     // ========== VALIDATE MANIFEST TESTS ==========
 
     @Test
@@ -382,9 +436,10 @@ public class BioSampleRestControllerIntegrationTest extends BaseWebContextSensit
         assertTrue("Should have at least one row", rows.size() > 0);
 
         JsonNode firstRow = rows.get(0);
-        assertTrue("Row should have 'errors' field", firstRow.has("errors"));
-        JsonNode errors = firstRow.get("errors");
-        assertTrue("Should have errors for duplicate barcode", errors.size() > 0);
+        assertTrue("Row should have 'warnings' field", firstRow.has("warnings"));
+        JsonNode warnings = firstRow.get("warnings");
+        assertTrue("Should have warnings for duplicate barcode", warnings.size() > 0);
+        assertEquals("IN_DATABASE", firstRow.get("duplicateIssue").asText());
     }
 
     @Test

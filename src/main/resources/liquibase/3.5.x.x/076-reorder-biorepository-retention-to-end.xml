@@ -1,0 +1,228 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+    xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+      http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-3.8.xsd">
+
+    <!-- ======================================================== -->
+    <!-- REORDER BIOREPOSITORY: RETENTION & DISPOSAL TO END -->
+    <!-- New order: -->
+    <!--   1. Sample Intake & Registration -->
+    <!--   2. Storage Assignment -->
+    <!--   3. Ongoing Storage and Monitoring -->
+    <!--   4. Sample Request & Retrieval -->
+    <!--   5. QC Inspection -->
+    <!--   6. Reporting & Audit -->
+    <!--   7. Retention & Disposal -->
+    <!-- ======================================================== -->
+
+    <changeSet id="076-reorder-biorepository-retention-to-end" author="ahri-biorepository">
+        <preConditions onFail="MARK_RAN">
+            <sqlCheck expectedResult="1">
+                SELECT CASE WHEN COUNT(*) &gt; 0 THEN 1 ELSE 0 END
+                FROM clinlims.notebook_page
+                WHERE title = 'Retention &amp; Disposal'
+                  AND notebook_id IN (
+                    SELECT DISTINCT np.notebook_id
+                    FROM clinlims.notebook_page np
+                    WHERE np.title = 'Storage Assignment'
+                      AND EXISTS (
+                        SELECT 1
+                        FROM clinlims.notebook_page np2
+                        WHERE np2.notebook_id = np.notebook_id
+                          AND np2.title = 'Retention &amp; Disposal'
+                      )
+                  )
+            </sqlCheck>
+        </preConditions>
+        <comment>Move Retention &amp; Disposal to the last biorepository workflow page</comment>
+
+        <!-- Step 1: temporary page_order values to avoid unique constraint violations -->
+        <sql>
+            UPDATE clinlims.notebook_page
+            SET page_order = 204
+            WHERE title = 'Sample Request &amp; Retrieval'
+              AND notebook_id IN (
+                SELECT DISTINCT np.notebook_id
+                FROM clinlims.notebook_page np
+                WHERE np.title = 'Storage Assignment'
+                  AND EXISTS (
+                    SELECT 1 FROM clinlims.notebook_page np2
+                    WHERE np2.notebook_id = np.notebook_id
+                      AND np2.title = 'Retention &amp; Disposal'
+                  )
+              );
+
+            UPDATE clinlims.notebook_page
+            SET page_order = 205
+            WHERE title = 'QC Inspection'
+              AND notebook_id IN (
+                SELECT DISTINCT np.notebook_id
+                FROM clinlims.notebook_page np
+                WHERE np.title = 'Storage Assignment'
+                  AND EXISTS (
+                    SELECT 1 FROM clinlims.notebook_page np2
+                    WHERE np2.notebook_id = np.notebook_id
+                      AND np2.title = 'Retention &amp; Disposal'
+                  )
+              );
+
+            UPDATE clinlims.notebook_page
+            SET page_order = 206
+            WHERE title = 'Reporting &amp; Audit'
+              AND notebook_id IN (
+                SELECT DISTINCT np.notebook_id
+                FROM clinlims.notebook_page np
+                WHERE np.title = 'Storage Assignment'
+                  AND EXISTS (
+                    SELECT 1 FROM clinlims.notebook_page np2
+                    WHERE np2.notebook_id = np.notebook_id
+                      AND np2.title = 'Retention &amp; Disposal'
+                  )
+              );
+
+            UPDATE clinlims.notebook_page
+            SET page_order = 207
+            WHERE title = 'Retention &amp; Disposal'
+              AND notebook_id IN (
+                SELECT DISTINCT np.notebook_id
+                FROM clinlims.notebook_page np
+                WHERE np.title = 'Storage Assignment'
+                  AND EXISTS (
+                    SELECT 1 FROM clinlims.notebook_page np2
+                    WHERE np2.notebook_id = np.notebook_id
+                      AND np2.title = 'Retention &amp; Disposal'
+                  )
+              );
+        </sql>
+
+        <!-- Step 2: assign final page_order values -->
+        <sql>
+            UPDATE clinlims.notebook_page
+            SET page_order = 4
+            WHERE title = 'Sample Request &amp; Retrieval' AND page_order = 204;
+
+            UPDATE clinlims.notebook_page
+            SET page_order = 5
+            WHERE title = 'QC Inspection' AND page_order = 205;
+
+            UPDATE clinlims.notebook_page
+            SET page_order = 6
+            WHERE title = 'Reporting &amp; Audit' AND page_order = 206;
+
+            UPDATE clinlims.notebook_page
+            SET page_order = 7
+            WHERE title = 'Retention &amp; Disposal' AND page_order = 207;
+        </sql>
+    </changeSet>
+
+    <changeSet id="076-update-biorepository-nextpage-retention-end" author="ahri-biorepository">
+        <preConditions onFail="MARK_RAN">
+            <sqlCheck expectedResult="1">
+                SELECT CASE WHEN COUNT(*) &gt; 0 THEN 1 ELSE 0 END
+                FROM clinlims.notebook_page
+                WHERE title = 'Ongoing Storage and Monitoring'
+                  AND content LIKE '%nextPage%'
+            </sqlCheck>
+        </preConditions>
+        <comment>Update nextPage links after moving Retention &amp; Disposal to the end</comment>
+
+        <!-- Monitoring -> Sample Request (undo 023 change if applied) -->
+        <sql>
+            UPDATE clinlims.notebook_page
+            SET content = REPLACE(
+                content,
+                '&quot;nextPage&quot;: &quot;Retention &amp; Disposal&quot;',
+                '&quot;nextPage&quot;: &quot;Sample Request &amp; Retrieval&quot;'
+            )
+            WHERE title = 'Ongoing Storage and Monitoring'
+              AND content LIKE '%&quot;nextPage&quot;: &quot;Retention &amp; Disposal&quot;%';
+
+            UPDATE clinlims.notebook_page
+            SET content = REPLACE(
+                content,
+                '&quot;nextPage&quot;: &quot;Retention &amp; Disposal&quot;',
+                '&quot;nextPage&quot;: &quot;Reporting &amp; Audit&quot;'
+            )
+            WHERE title = 'QC Inspection'
+              AND content LIKE '%&quot;nextPage&quot;: &quot;Retention &amp; Disposal&quot;%';
+
+            UPDATE clinlims.notebook_page
+            SET content = REPLACE(
+                content,
+                '&quot;systemActions&quot;:',
+                '&quot;nextPage&quot;: &quot;Retention &amp; Disposal&quot;,
+  &quot;systemActions&quot;:'
+            )
+            WHERE title = 'Reporting &amp; Audit'
+              AND content NOT LIKE '%nextPage%';
+
+            UPDATE clinlims.notebook_page
+            SET content = REPLACE(
+                content,
+                '&quot;nextPage&quot;: &quot;Sample Request &amp; Retrieval&quot;,
+  ',
+                ''
+            )
+            WHERE title = 'Retention &amp; Disposal'
+              AND content LIKE '%&quot;nextPage&quot;: &quot;Sample Request &amp; Retrieval&quot;%';
+
+            UPDATE clinlims.notebook_page
+            SET content = REPLACE(
+                content,
+                '&quot;nextPage&quot;: &quot;Reporting &amp; Audit&quot;,
+  ',
+                ''
+            )
+            WHERE title = 'Retention &amp; Disposal'
+              AND content LIKE '%&quot;nextPage&quot;: &quot;Reporting &amp; Audit&quot;%';
+        </sql>
+    </changeSet>
+
+    <changeSet id="076-reorder-biorepository-workflow-templates-retention-end" author="ahri-biorepository">
+        <preConditions onFail="MARK_RAN">
+            <tableExists tableName="workflow_page_template" schemaName="clinlims"/>
+            <sqlCheck expectedResult="1">
+                SELECT COUNT(*) FROM clinlims.workflow_page_template
+                WHERE workflow_category = 'BIOREPOSITORY' AND name = 'Retention &amp; Disposal'
+            </sqlCheck>
+        </preConditions>
+        <comment>Reorder biorepository workflow page templates: Retention &amp; Disposal last</comment>
+
+        <sql>
+            UPDATE clinlims.workflow_page_template
+            SET display_order = 204
+            WHERE workflow_category = 'BIOREPOSITORY' AND name = 'Sample Request &amp; Retrieval';
+
+            UPDATE clinlims.workflow_page_template
+            SET display_order = 205
+            WHERE workflow_category = 'BIOREPOSITORY' AND name = 'QC Inspection';
+
+            UPDATE clinlims.workflow_page_template
+            SET display_order = 206
+            WHERE workflow_category = 'BIOREPOSITORY' AND name = 'Reporting &amp; Audit';
+
+            UPDATE clinlims.workflow_page_template
+            SET display_order = 207
+            WHERE workflow_category = 'BIOREPOSITORY' AND name = 'Retention &amp; Disposal';
+
+            UPDATE clinlims.workflow_page_template
+            SET display_order = 4
+            WHERE workflow_category = 'BIOREPOSITORY' AND display_order = 204;
+
+            UPDATE clinlims.workflow_page_template
+            SET display_order = 5
+            WHERE workflow_category = 'BIOREPOSITORY' AND display_order = 205;
+
+            UPDATE clinlims.workflow_page_template
+            SET display_order = 6
+            WHERE workflow_category = 'BIOREPOSITORY' AND display_order = 206;
+
+            UPDATE clinlims.workflow_page_template
+            SET display_order = 7
+            WHERE workflow_category = 'BIOREPOSITORY' AND display_order = 207;
+        </sql>
+    </changeSet>
+
+</databaseChangeLog>

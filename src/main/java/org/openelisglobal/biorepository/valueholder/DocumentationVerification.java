@@ -156,6 +156,9 @@ public class DocumentationVerification extends BaseObject<Integer> {
     @Column(name = "verification_notes", columnDefinition = "TEXT")
     private String verificationNotes;
 
+    @Column(name = "biosafety_classification", length = 10)
+    private String biosafetyClassification;
+
     @Column(name = "sys_user_id", nullable = false, length = 36)
     private String sysUserId;
 
@@ -367,6 +370,14 @@ public class DocumentationVerification extends BaseObject<Integer> {
         this.verificationNotes = verificationNotes;
     }
 
+    public String getBiosafetyClassification() {
+        return biosafetyClassification;
+    }
+
+    public void setBiosafetyClassification(String biosafetyClassification) {
+        this.biosafetyClassification = biosafetyClassification;
+    }
+
     /**
      * Checks if all required verifications are complete (verified or N/A with
      * justification).
@@ -374,9 +385,8 @@ public class DocumentationVerification extends BaseObject<Integer> {
      * @return true if all required items are complete
      */
     public boolean isComplete() {
-        return isItemComplete(statusSampleIdentifiers, null) && isItemComplete(statusProjectLinkage, null)
-                && isItemComplete(statusEthicsApproval, null) && isItemComplete(statusBiosafetyMatch, null)
-                && isItemComplete(statusPackagingIntegrity, null)
+        return isItemComplete(statusSampleIdentifiers, null) && isItemComplete(statusEthicsApproval, null)
+                && isBiosafetyItemComplete() && isItemComplete(statusPackagingIntegrity, null)
                 && isItemComplete(statusConsentRecord, naJustificationConsent)
                 && isItemComplete(statusMtaDocumented, naJustificationMta);
     }
@@ -385,6 +395,13 @@ public class DocumentationVerification extends BaseObject<Integer> {
      * Checks if a single verification item is complete. VERIFIED is always
      * complete. N/A requires justification for conditional items.
      */
+    private boolean isBiosafetyItemComplete() {
+        if (!VerificationItemStatus.VERIFIED.equals(statusBiosafetyMatch)) {
+            return false;
+        }
+        return biosafetyClassification != null && !biosafetyClassification.trim().isEmpty();
+    }
+
     private boolean isItemComplete(VerificationItemStatus status, String naJustification) {
         if (VerificationItemStatus.VERIFIED.equals(status)) {
             return true;
@@ -405,11 +422,9 @@ public class DocumentationVerification extends BaseObject<Integer> {
         int count = 0;
         if (isItemComplete(statusSampleIdentifiers, null))
             count++;
-        if (isItemComplete(statusProjectLinkage, null))
-            count++;
         if (isItemComplete(statusEthicsApproval, null))
             count++;
-        if (isItemComplete(statusBiosafetyMatch, null))
+        if (isBiosafetyItemComplete())
             count++;
         if (isItemComplete(statusPackagingIntegrity, null))
             count++;
@@ -423,10 +438,10 @@ public class DocumentationVerification extends BaseObject<Integer> {
     /**
      * Total number of verification items.
      * 
-     * @return 7 (the number of verification checkpoints)
+     * @return 6 (the number of verification checkpoints)
      */
     public int getTotalCount() {
-        return 7;
+        return 6;
     }
 
     /**

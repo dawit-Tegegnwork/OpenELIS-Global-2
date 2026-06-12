@@ -9,7 +9,7 @@ import ExportReportsTab from "./reporting/ExportReportsTab";
 
 /**
  * BiorepositoryReportingPage - Reporting & Audit workflow page
- * Stage 7 of the Biorepository workflow
+ * Stage 6 of the Biorepository workflow
  *
  * Provides 4 tabs:
  * 1. Overview Dashboard - High-level KPIs and charts

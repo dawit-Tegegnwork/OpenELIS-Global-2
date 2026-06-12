@@ -14,7 +14,6 @@ import {
   ContentSwitcher,
   Switch,
   NumberInput,
-  Tag,
 } from "@carbon/react";
 import { Add, Upload, Renew } from "@carbon/icons-react";
 import { FormattedMessage, useIntl } from "react-intl";
@@ -32,6 +31,7 @@ import {
   filterOwningDepartments,
   loadNotebookDepartmentIds,
 } from "../../utils/notebookInventoryScope";
+import { buildSingleEntrySpecialHandling } from "./manifestImportHelpers";
 
 /**
  * SampleIntakeForm - Form for registering samples
@@ -44,11 +44,11 @@ import {
  * - Sample type and category
  * - Date/time of receipt
  * - Storage temperature requirement
- * - Receiving personnel ID (auto-populated from logged-in user)
+ * - Chain of custody: receiver name, external/donor ID, sample code
  *
  * Conditional/Optional Fields:
  * - Ethical approval reference (required if human samples)
- * - Project/study association (required if project-linked)
+ * - Project/study association (optional free text)
  * - Material transfer agreement (required if external)
  *
  * @param {Object} props
@@ -99,15 +99,22 @@ function SampleIntakeForm({
     storageTemperature: "AMBIENT", // Storage temperature requirement
     requiredTempMin: null, // Min temp for custom range
     requiredTempMax: null, // Max temp for custom range
+    biosafetyLevel: "BSL_2", // Biosafety level (manifest field)
+    receiverName: "", // Chain of custody: receiving personnel
 
     // Conditional/Optional fields
-    externalId: "", // External/Donor ID
-    projectId: null, // Project/study association
+    externalId: "", // External/Donor ID (chain of custody)
+    approvalSign: "", // Approval/sign (chain of custody)
+    projectName: "", // Project/study association (optional)
     ethicsApprovalRef: "", // Ethical approval reference
     mtaReference: "", // Material transfer agreement
-    biosafetyLevel: "BSL_1", // Biosafety level
     specialHandling: "", // Special handling instructions
     collectionDate: null, // Original collection date (optional)
+    arrivalCondition: "", // Sample condition at receipt
+    volume: "", // Volume assessment
+    preservationMedium: "", // Preservation medium
+    principalInvestigator: "", // Principal investigator
+    consentId: "", // Consent ID
   });
 
   const [loading, setLoading] = useState(false);
@@ -118,7 +125,6 @@ function SampleIntakeForm({
 
   // Dropdown options
   const [sampleTypes, setSampleTypes] = useState([]);
-  const [projects, setProjects] = useState([]);
   const [organizations, setOrganizations] = useState([]);
   const [departments, setDepartments] = useState([]);
   const [departmentId, setDepartmentId] = useState("");
@@ -155,6 +161,13 @@ function SampleIntakeForm({
       }),
     },
     {
+      id: "FROZEN_150",
+      text: intl.formatMessage({
+        id: "biorepository.temp.frozen150",
+        defaultMessage: "Vapor Phase (-150°C)",
+      }),
+    },
+    {
       id: "LIQUID_N2",
       text: intl.formatMessage({
         id: "biorepository.temp.liquidN2",
@@ -171,10 +184,34 @@ function SampleIntakeForm({
   ];
 
   const biosafetyLevels = [
-    { id: "BSL_1", text: "BSL-1" },
-    { id: "BSL_2", text: "BSL-2" },
-    { id: "BSL_3", text: "BSL-3" },
-    { id: "BSL_4", text: "BSL-4" },
+    {
+      id: "BSL_1",
+      text: intl.formatMessage({
+        id: "biorepository.bsl.1",
+        defaultMessage: "BSL-1",
+      }),
+    },
+    {
+      id: "BSL_2",
+      text: intl.formatMessage({
+        id: "biorepository.bsl.2",
+        defaultMessage: "BSL-2",
+      }),
+    },
+    {
+      id: "BSL_3",
+      text: intl.formatMessage({
+        id: "biorepository.bsl.3",
+        defaultMessage: "BSL-3",
+      }),
+    },
+    {
+      id: "BSL_4",
+      text: intl.formatMessage({
+        id: "biorepository.bsl.4",
+        defaultMessage: "BSL-4",
+      }),
+    },
   ];
 
   // Validation state
@@ -189,13 +226,6 @@ function SampleIntakeForm({
       }
     });
 
-    // Load projects
-    getFromOpenElisServer("/rest/displayList/PROJECT", (data) => {
-      if (data) {
-        setProjects(data.map((item) => ({ id: item.id, text: item.value })));
-      }
-    });
-
     // Load organizations for origin lab dropdown
     getFromOpenElisServer("/rest/displayList/REFERRING_CLINIC", (data) => {
       if (data) {
@@ -205,6 +235,18 @@ function SampleIntakeForm({
       }
     });
   }, []);
+
+  useEffect(() => {
+    const first = userSessionDetails?.firstName?.trim() || "";
+    const last = userSessionDetails?.lastName?.trim() || "";
+    const name = `${first} ${last}`.trim();
+    if (!name) {
+      return;
+    }
+    setFormData((prev) =>
+      prev.receiverName ? prev : { ...prev, receiverName: name },
+    );
+  }, [userSessionDetails]);
 
   const applyDefaultDepartmentSelection = useCallback(
     (list, preferredIds = []) => {
@@ -315,6 +357,8 @@ function SampleIntakeForm({
         return { min: -25, max: -15 };
       case "FROZEN_80":
         return { min: -86, max: -76 };
+      case "FROZEN_150":
+        return { min: -196, max: -150 };
       case "LIQUID_N2":
         return { min: -200, max: -190 };
       default:
@@ -341,6 +385,20 @@ function SampleIntakeForm({
       });
     }
 
+    if (!formData.receiverName.trim()) {
+      newErrors.receiverName = intl.formatMessage({
+        id: "biorepository.sample.error.receiverName.required",
+        defaultMessage: "Receiver name is required",
+      });
+    }
+
+    if (!formData.externalId.trim()) {
+      newErrors.externalId = intl.formatMessage({
+        id: "biorepository.sample.error.externalId.required",
+        defaultMessage: "External/Donor ID is required",
+      });
+    }
+
     // Required: Sample type
     if (!formData.sampleTypeId) {
       newErrors.sampleTypeId = intl.formatMessage({
@@ -362,6 +420,17 @@ function SampleIntakeForm({
       newErrors.storageTemperature = intl.formatMessage({
         id: "biorepository.sample.error.storageTemp.required",
         defaultMessage: "Storage temperature requirement is required",
+      });
+    }
+
+    if (
+      formData.biosafetyLevel &&
+      !["BSL_1", "BSL_2", "BSL_3", "BSL_4"].includes(formData.biosafetyLevel)
+    ) {
+      newErrors.biosafetyLevel = intl.formatMessage({
+        id: "biorepository.sample.error.biosafetyLevel.invalid",
+        defaultMessage:
+          "Invalid biosafety level. Must be BSL_1, BSL_2, BSL_3, or BSL_4",
       });
     }
 
@@ -479,20 +548,31 @@ function SampleIntakeForm({
         collectionDateFormatted = `${format(parsedCollDate, "yyyy-MM-dd")} 00:00:00`;
       }
 
+      const composedSpecialHandling = buildSingleEntrySpecialHandling({
+        specialHandling: formData.specialHandling,
+        volume: formData.volume,
+        receiverName: formData.receiverName,
+        approvalSign: formData.approvalSign,
+      });
+
       const sampleData = {
         barcode: formData.barcode.trim(),
-        externalId: formData.externalId.trim() || formData.barcode.trim(), // Default to barcode if no external ID
+        externalId: formData.externalId.trim(),
         originLab: formData.originLab.trim(),
         sampleTypeId: formData.sampleTypeId,
         receiptDate: receiptDateTime,
         collectionDate: collectionDateFormatted,
         requiredTempMin: tempRange.min,
         requiredTempMax: tempRange.max,
-        projectId: formData.projectId,
         biosafetyLevel: formData.biosafetyLevel,
+        projectId: formData.projectName.trim() || null,
+        principalInvestigator: formData.principalInvestigator.trim() || null,
+        consentId: formData.consentId.trim() || null,
         ethicsApprovalRef: formData.ethicsApprovalRef.trim() || null,
         mtaReference: formData.mtaReference.trim() || null,
-        specialHandling: formData.specialHandling.trim() || null,
+        preservationMedium: formData.preservationMedium.trim() || null,
+        arrivalCondition: formData.arrivalCondition.trim() || null,
+        specialHandling: composedSpecialHandling || null,
         shipmentId: shipment?.id || null,
       };
 
@@ -521,8 +601,14 @@ function SampleIntakeForm({
               ...prev,
               barcode: "",
               externalId: "",
+              approvalSign: "",
               collectionDate: null,
               specialHandling: "",
+              arrivalCondition: "",
+              volume: "",
+              preservationMedium: "",
+              principalInvestigator: "",
+              consentId: "",
             }));
             // Generate new barcode for next sample
             generateNewBarcode();
@@ -603,21 +689,6 @@ function SampleIntakeForm({
           </ContentSwitcher>
         </Column>
 
-        {/* Display receiving personnel info */}
-        <Column lg={16} md={8} sm={4} style={{ marginBottom: "1rem" }}>
-          <Tag type="blue">
-            <FormattedMessage
-              id="biorepository.sample.receivingPersonnel"
-              defaultMessage="Receiving Personnel: {name}"
-              values={{
-                name:
-                  userSessionDetails?.firstName +
-                    " " +
-                    userSessionDetails?.lastName || "Current User",
-              }}
-            />
-          </Tag>
-        </Column>
       </Grid>
 
       {mode === 0 ? (
@@ -653,50 +724,6 @@ function SampleIntakeForm({
                   invalid={!!errors.originLab}
                   invalidText={errors.originLab}
                 />
-              </FormGroup>
-            </Column>
-
-            {/* Sample ID (Barcode) */}
-            <Column lg={8} md={4} sm={4}>
-              <FormGroup legendText="">
-                <div
-                  style={{
-                    display: "flex",
-                    alignItems: "flex-end",
-                    gap: "0.5rem",
-                  }}
-                >
-                  <TextInput
-                    id="barcode"
-                    labelText={intl.formatMessage({
-                      id: "biorepository.sample.field.barcode",
-                      defaultMessage: "Sample ID (Barcode) *",
-                    })}
-                    placeholder={intl.formatMessage({
-                      id: "biorepository.sample.field.barcode.placeholder",
-                      defaultMessage: "Auto-generated or enter manually",
-                    })}
-                    value={formData.barcode}
-                    onChange={(e) =>
-                      handleInputChange("barcode", e.target.value)
-                    }
-                    invalid={!!errors.barcode}
-                    invalidText={errors.barcode}
-                    style={{ flexGrow: 1 }}
-                  />
-                  <Button
-                    kind="ghost"
-                    size="md"
-                    hasIconOnly
-                    renderIcon={Renew}
-                    iconDescription={intl.formatMessage({
-                      id: "biorepository.sample.button.generateBarcode",
-                      defaultMessage: "Generate new barcode",
-                    })}
-                    onClick={generateNewBarcode}
-                    disabled={generatingBarcode}
-                  />
-                </div>
               </FormGroup>
             </Column>
 
@@ -895,6 +922,220 @@ function SampleIntakeForm({
               </>
             )}
 
+            {/* Biosafety Level */}
+            <Column lg={8} md={4} sm={4}>
+              <FormGroup legendText="">
+                <Dropdown
+                  id="biosafetyLevel"
+                  titleText={intl.formatMessage({
+                    id: "biorepository.sample.field.biosafetyLevel",
+                    defaultMessage: "Biosafety Level *",
+                  })}
+                  label={intl.formatMessage({
+                    id: "biorepository.sample.field.biosafetyLevel.placeholder",
+                    defaultMessage: "Select biosafety level",
+                  })}
+                  items={biosafetyLevels}
+                  itemToString={(item) => (item ? item.text : "")}
+                  selectedItem={biosafetyLevels.find(
+                    (level) => level.id === formData.biosafetyLevel,
+                  )}
+                  onChange={({ selectedItem }) =>
+                    handleInputChange("biosafetyLevel", selectedItem?.id)
+                  }
+                  invalid={!!errors.biosafetyLevel}
+                  invalidText={errors.biosafetyLevel}
+                />
+              </FormGroup>
+            </Column>
+
+            {/* CHAIN OF CUSTODY SECTION */}
+            <Column lg={16} md={8} sm={4}>
+              <h4 style={{ marginBottom: "1rem", marginTop: "1.5rem" }}>
+                <FormattedMessage
+                  id="biorepository.sample.section.chainOfCustody"
+                  defaultMessage="Chain of Custody"
+                />
+              </h4>
+            </Column>
+
+            <Column lg={8} md={4} sm={4}>
+              <FormGroup legendText="">
+                <TextInput
+                  id="receiverName"
+                  labelText={intl.formatMessage({
+                    id: "biorepository.sample.field.receiverName",
+                    defaultMessage: "Receiver Name *",
+                  })}
+                  helperText={intl.formatMessage({
+                    id: "biorepository.sample.field.receiverName.helper",
+                    defaultMessage:
+                      "Person receiving the sample into biorepository custody",
+                  })}
+                  value={formData.receiverName}
+                  onChange={(e) =>
+                    handleInputChange("receiverName", e.target.value)
+                  }
+                  invalid={!!errors.receiverName}
+                  invalidText={errors.receiverName}
+                />
+              </FormGroup>
+            </Column>
+
+            <Column lg={8} md={4} sm={4}>
+              <FormGroup legendText="">
+                <TextInput
+                  id="externalId"
+                  labelText={intl.formatMessage({
+                    id: "biorepository.sample.field.externalId",
+                    defaultMessage: "External/Donor ID *",
+                  })}
+                  placeholder={intl.formatMessage({
+                    id: "biorepository.sample.field.externalId.placeholder",
+                    defaultMessage: "Enter external or donor identifier",
+                  })}
+                  value={formData.externalId}
+                  onChange={(e) =>
+                    handleInputChange("externalId", e.target.value)
+                  }
+                  invalid={!!errors.externalId}
+                  invalidText={errors.externalId}
+                />
+              </FormGroup>
+            </Column>
+
+            <Column lg={8} md={4} sm={4}>
+              <FormGroup legendText="">
+                <TextInput
+                  id="approvalSign"
+                  labelText={intl.formatMessage({
+                    id: "biorepository.sample.field.approvalSign",
+                    defaultMessage: "Approval/Sign",
+                  })}
+                  placeholder={intl.formatMessage({
+                    id: "biorepository.sample.field.approvalSign.placeholder",
+                    defaultMessage: "Enter approval or signature reference",
+                  })}
+                  value={formData.approvalSign}
+                  onChange={(e) =>
+                    handleInputChange("approvalSign", e.target.value)
+                  }
+                />
+              </FormGroup>
+            </Column>
+
+            <Column lg={8} md={4} sm={4}>
+              <FormGroup legendText="">
+                <div
+                  style={{
+                    display: "flex",
+                    alignItems: "flex-end",
+                    gap: "0.5rem",
+                  }}
+                >
+                  <TextInput
+                    id="barcode"
+                    labelText={intl.formatMessage({
+                      id: "biorepository.sample.field.sampleCode",
+                      defaultMessage: "Sample Code *",
+                    })}
+                    placeholder={intl.formatMessage({
+                      id: "biorepository.sample.field.barcode.placeholder",
+                      defaultMessage: "Auto-generated or enter manually",
+                    })}
+                    value={formData.barcode}
+                    onChange={(e) =>
+                      handleInputChange("barcode", e.target.value)
+                    }
+                    invalid={!!errors.barcode}
+                    invalidText={errors.barcode}
+                    style={{ flexGrow: 1 }}
+                  />
+                  <Button
+                    kind="ghost"
+                    size="md"
+                    hasIconOnly
+                    renderIcon={Renew}
+                    iconDescription={intl.formatMessage({
+                      id: "biorepository.sample.button.generateBarcode",
+                      defaultMessage: "Generate new barcode",
+                    })}
+                    onClick={generateNewBarcode}
+                    disabled={generatingBarcode}
+                  />
+                </div>
+              </FormGroup>
+            </Column>
+
+            {/* SAMPLE DETAILS SECTION */}
+            <Column lg={16} md={8} sm={4}>
+              <h4 style={{ marginBottom: "1rem", marginTop: "1.5rem" }}>
+                <FormattedMessage
+                  id="biorepository.sample.section.sampleDetails"
+                  defaultMessage="Sample Details"
+                />
+              </h4>
+            </Column>
+
+            <Column lg={8} md={4} sm={4}>
+              <FormGroup legendText="">
+                <TextInput
+                  id="arrivalCondition"
+                  labelText={intl.formatMessage({
+                    id: "biorepository.sample.field.arrivalCondition",
+                    defaultMessage: "Sample Condition",
+                  })}
+                  placeholder={intl.formatMessage({
+                    id: "biorepository.sample.field.arrivalCondition.placeholder",
+                    defaultMessage:
+                      "e.g. thawed once, hemolyzed, good condition",
+                  })}
+                  value={formData.arrivalCondition}
+                  onChange={(e) =>
+                    handleInputChange("arrivalCondition", e.target.value)
+                  }
+                />
+              </FormGroup>
+            </Column>
+
+            <Column lg={8} md={4} sm={4}>
+              <FormGroup legendText="">
+                <TextInput
+                  id="volume"
+                  labelText={intl.formatMessage({
+                    id: "biorepository.sample.field.volume",
+                    defaultMessage: "Volume",
+                  })}
+                  placeholder={intl.formatMessage({
+                    id: "biorepository.sample.field.volume.placeholder",
+                    defaultMessage: "e.g. sufficient, insufficient volume",
+                  })}
+                  value={formData.volume}
+                  onChange={(e) => handleInputChange("volume", e.target.value)}
+                />
+              </FormGroup>
+            </Column>
+
+            <Column lg={8} md={4} sm={4}>
+              <FormGroup legendText="">
+                <TextInput
+                  id="preservationMedium"
+                  labelText={intl.formatMessage({
+                    id: "biorepository.sample.field.preservationMedium",
+                    defaultMessage: "Preservation Medium",
+                  })}
+                  placeholder={intl.formatMessage({
+                    id: "biorepository.sample.field.preservationMedium.placeholder",
+                    defaultMessage: "e.g. EDTA, Heparin, formalin",
+                  })}
+                  value={formData.preservationMedium}
+                  onChange={(e) =>
+                    handleInputChange("preservationMedium", e.target.value)
+                  }
+                />
+              </FormGroup>
+            </Column>
+
             {/* CONDITIONAL/OPTIONAL FIELDS SECTION */}
             <Column lg={16} md={8} sm={4}>
               <h4 style={{ marginBottom: "1rem", marginTop: "1.5rem" }}>
@@ -905,47 +1146,22 @@ function SampleIntakeForm({
               </h4>
             </Column>
 
-            {/* External/Donor ID */}
-            <Column lg={8} md={4} sm={4}>
-              <FormGroup legendText="">
-                <TextInput
-                  id="externalId"
-                  labelText={intl.formatMessage({
-                    id: "biorepository.sample.field.externalId",
-                    defaultMessage: "External/Donor ID",
-                  })}
-                  placeholder={intl.formatMessage({
-                    id: "biorepository.sample.field.externalId.placeholder",
-                    defaultMessage: "Enter external or donor identifier",
-                  })}
-                  value={formData.externalId}
-                  onChange={(e) =>
-                    handleInputChange("externalId", e.target.value)
-                  }
-                />
-              </FormGroup>
-            </Column>
-
             {/* Project */}
             <Column lg={8} md={4} sm={4}>
               <FormGroup legendText="">
-                <Dropdown
-                  id="project"
-                  titleText={intl.formatMessage({
+                <TextInput
+                  id="projectName"
+                  labelText={intl.formatMessage({
                     id: "biorepository.sample.field.project",
                     defaultMessage: "Project/Study Association",
                   })}
-                  label={intl.formatMessage({
+                  placeholder={intl.formatMessage({
                     id: "biorepository.sample.field.project.placeholder",
-                    defaultMessage: "Select project (if applicable)",
+                    defaultMessage: "Enter project or study name (optional)",
                   })}
-                  items={projects}
-                  itemToString={(item) => (item ? item.text : "")}
-                  selectedItem={projects.find(
-                    (p) => p.id === formData.projectId,
-                  )}
-                  onChange={({ selectedItem }) =>
-                    handleInputChange("projectId", selectedItem?.id)
+                  value={formData.projectName}
+                  onChange={(e) =>
+                    handleInputChange("projectName", e.target.value)
                   }
                 />
               </FormGroup>
@@ -970,22 +1186,45 @@ function SampleIntakeForm({
               </FormGroup>
             </Column>
 
-            {/* Biosafety Level */}
             <Column lg={8} md={4} sm={4}>
               <FormGroup legendText="">
-                <Dropdown
-                  id="biosafetyLevel"
-                  titleText={intl.formatMessage({
-                    id: "biorepository.sample.field.biosafetyLevel",
-                    defaultMessage: "Biosafety Level",
+                <TextInput
+                  id="principalInvestigator"
+                  labelText={intl.formatMessage({
+                    id: "biorepository.sample.field.principalInvestigator",
+                    defaultMessage: "Principal Investigator",
                   })}
-                  items={biosafetyLevels}
-                  itemToString={(item) => (item ? item.text : "")}
-                  selectedItem={biosafetyLevels.find(
-                    (l) => l.id === formData.biosafetyLevel,
-                  )}
-                  onChange={({ selectedItem }) =>
-                    handleInputChange("biosafetyLevel", selectedItem?.id)
+                  placeholder={intl.formatMessage({
+                    id: "biorepository.sample.field.principalInvestigator.placeholder",
+                    defaultMessage: "Enter principal investigator name",
+                  })}
+                  value={formData.principalInvestigator}
+                  onChange={(e) =>
+                    handleInputChange("principalInvestigator", e.target.value)
+                  }
+                />
+              </FormGroup>
+            </Column>
+
+            <Column lg={8} md={4} sm={4}>
+              <FormGroup legendText="">
+                <TextInput
+                  id="consentId"
+                  labelText={intl.formatMessage({
+                    id: "biorepository.sample.field.consentId",
+                    defaultMessage: "Consent ID",
+                  })}
+                  helperText={intl.formatMessage({
+                    id: "biorepository.sample.field.consentId.helper",
+                    defaultMessage: "Required for human samples",
+                  })}
+                  placeholder={intl.formatMessage({
+                    id: "biorepository.sample.field.consentId.placeholder",
+                    defaultMessage: "Enter consent identifier",
+                  })}
+                  value={formData.consentId}
+                  onChange={(e) =>
+                    handleInputChange("consentId", e.target.value)
                   }
                 />
               </FormGroup>

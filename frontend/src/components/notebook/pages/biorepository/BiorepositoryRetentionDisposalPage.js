@@ -41,7 +41,7 @@ import {
 
 /**
  * BiorepositoryRetentionDisposalPage - Retention & Disposal workflow page
- * Stage 6 of the Biorepository workflow
+ * Stage 7 of the Biorepository workflow
  *
  * Features:
  * - Dashboard showing expired and expiring samples

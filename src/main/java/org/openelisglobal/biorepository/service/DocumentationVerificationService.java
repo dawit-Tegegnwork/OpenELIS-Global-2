@@ -102,4 +102,25 @@ public interface DocumentationVerificationService extends BaseObjectService<Docu
      */
     DocumentationVerification quarantineShipment(Integer verificationId, Integer verifierUserId,
             String quarantineReason);
+
+    /**
+     * Update optional verification notes (additional information).
+     *
+     * @param verificationId the verification ID
+     * @param notes          optional free-text notes
+     * @param sysUserId      the system user ID
+     * @return the updated verification record
+     */
+    DocumentationVerification updateVerificationNotes(Integer verificationId, String notes, String sysUserId);
+
+    /**
+     * Record the biosafety classification level documented for this shipment.
+     *
+     * @param verificationId          the verification ID
+     * @param biosafetyClassification BSL_1, BSL_2, BSL_3, or BSL_4
+     * @param sysUserId               the system user ID
+     * @return the updated verification record
+     */
+    DocumentationVerification updateBiosafetyClassification(Integer verificationId, String biosafetyClassification,
+            String sysUserId);
 }

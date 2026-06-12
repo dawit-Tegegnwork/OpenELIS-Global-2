@@ -54,20 +54,6 @@ const REGISTRY_BY_WORKFLOW_TYPE = {
     },
     {
       "stageOrder": 4,
-      "stageId": "retention",
-      "pageKey": "retention",
-      "stageTitle": "Retention & Disposal",
-      "requiredActions": [
-        "VIEW",
-        "EDIT",
-        "COMPLETE"
-      ],
-      "allowedPersonas": [
-        "Lab Manager"
-      ]
-    },
-    {
-      "stageOrder": 5,
       "stageId": "request",
       "pageKey": "request",
       "stageTitle": "Sample Request & Retrieval",
@@ -82,7 +68,7 @@ const REGISTRY_BY_WORKFLOW_TYPE = {
       ]
     },
     {
-      "stageOrder": 6,
+      "stageOrder": 5,
       "stageId": "qc",
       "pageKey": "qc",
       "stageTitle": "QC Inspection",
@@ -97,7 +83,7 @@ const REGISTRY_BY_WORKFLOW_TYPE = {
       ]
     },
     {
-      "stageOrder": 7,
+      "stageOrder": 6,
       "stageId": "reporting",
       "pageKey": "reporting",
       "stageTitle": "Reporting & Audit",
@@ -109,6 +95,20 @@ const REGISTRY_BY_WORKFLOW_TYPE = {
       "allowedPersonas": [
         "Lab Manager",
         "Senior Researcher"
+      ]
+    },
+    {
+      "stageOrder": 7,
+      "stageId": "retention",
+      "pageKey": "retention",
+      "stageTitle": "Retention & Disposal",
+      "requiredActions": [
+        "VIEW",
+        "EDIT",
+        "COMPLETE"
+      ],
+      "allowedPersonas": [
+        "Lab Manager"
       ]
     }
   ],

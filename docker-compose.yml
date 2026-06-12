@@ -66,9 +66,7 @@ services:
             - ./volume/properties/SystemConfiguration.properties:/var/lib/openelis-global/properties/SystemConfiguration.properties
             - ./volume/odoo/odoo-test-product-mapping.csv:/var/lib/openelis-global/odoo/odoo-test-product-mapping.csv
             - ./configuration:/var/lib/openelis-global/configuration
-            # Local WAR mount disabled: current branch Liquibase migration fails on this DB.
-            # Re-enable after DB migration is fixed: mvn clean package -DskipTests -Dmaven.test.skip=true
-            # - ./target/OpenELIS-Global.war:/usr/local/tomcat/webapps/OpenELIS-Global.war
+            - ./target/OpenELIS-Global.war:/usr/local/tomcat/webapps/OpenELIS-Global.war
         secrets:
             - source: common.properties
             

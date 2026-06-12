@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useEffect } from "react";
+import React, { useState, useCallback } from "react";
 import {
   Form,
   FormGroup,
@@ -13,23 +13,12 @@ import {
   Loading,
   Grid,
   Column,
-  DataTable,
-  Table,
-  TableHead,
-  TableRow,
-  TableHeader,
-  TableBody,
-  TableCell,
-  Tag,
-  Modal,
 } from "@carbon/react";
-import { Add, ArrowRight } from "@carbon/icons-react";
+import { Add } from "@carbon/icons-react";
 import { FormattedMessage, useIntl } from "react-intl";
 import PropTypes from "prop-types";
-import {
-  postToOpenElisServerJsonResponse,
-  getFromOpenElisServer,
-} from "../../../utils/Utils";
+import { postToOpenElisServerJsonResponse } from "../../../utils/Utils";
+import ShipmentListTable from "./ShipmentListTable";
 
 /**
  * ShipmentReceptionForm - Form for receiving incoming shipments
@@ -49,15 +38,14 @@ function ShipmentReceptionForm({
   onShipmentCreated,
   onShipmentSelected,
   onCancel,
+  selectedShipmentId,
+  refreshKey = 0,
 }) {
   const intl = useIntl();
 
   // View state: 'list' or 'form'
   const [viewMode, setViewMode] = useState("list");
-
-  // Existing shipments
-  const [shipments, setShipments] = useState([]);
-  const [loadingShipments, setLoadingShipments] = useState(true);
+  const [listRefreshKey, setListRefreshKey] = useState(0);
 
   // Form state
   const [formData, setFormData] = useState({
@@ -76,30 +64,6 @@ function ShipmentReceptionForm({
 
   // Validation state
   const [errors, setErrors] = useState({});
-
-  // Load existing shipments
-  useEffect(() => {
-    loadShipments();
-  }, []);
-
-  const loadShipments = useCallback(() => {
-    setLoadingShipments(true);
-    getFromOpenElisServer(
-      "/rest/biorepository/shipment?limit=50",
-      (data) => {
-        if (data && Array.isArray(data)) {
-          setShipments(data);
-        } else if (data && data.shipments) {
-          setShipments(data.shipments);
-        }
-        setLoadingShipments(false);
-      },
-      (err) => {
-        console.error("Failed to load shipments:", err);
-        setLoadingShipments(false);
-      },
-    );
-  }, []);
 
   const validateForm = useCallback(() => {
     const newErrors = {};
@@ -179,14 +143,7 @@ function ShipmentReceptionForm({
           if (response.error) {
             setError(response.error);
           } else {
-            // Notify parent first — this triggers a tab switch which
-            // unmounts this component, making local state updates unnecessary
-            if (onShipmentCreated) {
-              onShipmentCreated(response);
-              return;
-            }
-            // Only do local cleanup if there's no parent callback
-            loadShipments();
+            setListRefreshKey((k) => k + 1);
             setViewMode("list");
             setFormData({
               deliveryReference: "",
@@ -197,11 +154,14 @@ function ShipmentReceptionForm({
               transportTemperature: null,
               expectedSampleCount: null,
             });
+            if (onShipmentCreated) {
+              onShipmentCreated(response);
+            }
           }
         },
       );
     },
-    [formData, validateForm, onShipmentCreated, intl, loadShipments],
+    [formData, validateForm, onShipmentCreated],
   );
 
   const handleFileChange = useCallback((event) => {
@@ -220,116 +180,10 @@ function ShipmentReceptionForm({
     [onShipmentSelected],
   );
 
-  const getStatusTag = (status) => {
-    const statusColors = {
-      RECEIVED: "blue",
-      PROCESSING: "cyan",
-      COMPLETED: "green",
-      CANCELLED: "red",
-    };
-    return (
-      <Tag type={statusColors[status] || "gray"} size="sm">
-        {status}
-      </Tag>
-    );
-  };
-
-  const getConditionTag = (condition) => {
-    return (
-      <Tag type={condition === "INTACT" ? "green" : "red"} size="sm">
-        {condition}
-      </Tag>
-    );
-  };
-
-  const formatDate = (dateString) => {
-    if (!dateString) return "-";
-    try {
-      return new Date(dateString).toLocaleString();
-    } catch {
-      return dateString;
-    }
-  };
-
-  // Table headers
-  const headers = [
-    {
-      key: "deliveryReference",
-      header: intl.formatMessage({
-        id: "biorepository.shipment.table.deliveryRef",
-        defaultMessage: "Delivery Ref",
-      }),
-    },
-    {
-      key: "senderName",
-      header: intl.formatMessage({
-        id: "biorepository.shipment.table.sender",
-        defaultMessage: "Sender",
-      }),
-    },
-    {
-      key: "senderOrganization",
-      header: intl.formatMessage({
-        id: "biorepository.shipment.table.organization",
-        defaultMessage: "Organization",
-      }),
-    },
-    {
-      key: "packagingCondition",
-      header: intl.formatMessage({
-        id: "biorepository.shipment.table.condition",
-        defaultMessage: "Condition",
-      }),
-    },
-    {
-      key: "expectedSampleCount",
-      header: intl.formatMessage({
-        id: "biorepository.shipment.table.samples",
-        defaultMessage: "Expected Samples",
-      }),
-    },
-    {
-      key: "status",
-      header: intl.formatMessage({
-        id: "biorepository.shipment.table.status",
-        defaultMessage: "Status",
-      }),
-    },
-    {
-      key: "receptionTimestamp",
-      header: intl.formatMessage({
-        id: "biorepository.shipment.table.received",
-        defaultMessage: "Received",
-      }),
-    },
-    {
-      key: "actions",
-      header: intl.formatMessage({
-        id: "biorepository.shipment.table.actions",
-        defaultMessage: "Actions",
-      }),
-    },
-  ];
-
-  // Transform shipments for DataTable
-  const rows = shipments.map((shipment) => ({
-    id: String(shipment.id),
-    deliveryReference: shipment.deliveryReference,
-    senderName: shipment.senderName,
-    senderOrganization: shipment.senderOrganization || "-",
-    packagingCondition: shipment.packagingCondition,
-    expectedSampleCount: shipment.expectedSampleCount ?? "-",
-    status: shipment.status,
-    receptionTimestamp: shipment.receptionTimestamp,
-    _original: shipment,
-  }));
-
   // List view with existing shipments
   if (viewMode === "list") {
     return (
       <div className="shipment-reception-list">
-        {loadingShipments && <Loading withOverlay description="Loading..." />}
-
         <Grid>
           <Column lg={16} md={8} sm={4}>
             <div
@@ -361,105 +215,12 @@ function ShipmentReceptionForm({
           </Column>
 
           <Column lg={16} md={8} sm={4}>
-            {shipments.length === 0 && !loadingShipments ? (
-              <InlineNotification
-                kind="info"
-                title={intl.formatMessage({
-                  id: "biorepository.shipment.list.empty.title",
-                  defaultMessage: "No Shipments",
-                })}
-                subtitle={intl.formatMessage({
-                  id: "biorepository.shipment.list.empty.message",
-                  defaultMessage:
-                    "No shipments have been received yet. Click 'Receive New Shipment' to get started.",
-                })}
-                lowContrast
-                hideCloseButton
-              />
-            ) : (
-              <DataTable rows={rows} headers={headers} isSortable>
-                {({
-                  rows,
-                  headers,
-                  getTableProps,
-                  getHeaderProps,
-                  getRowProps,
-                }) => (
-                  <Table {...getTableProps()}>
-                    <TableHead>
-                      <TableRow>
-                        {headers.map((header) => (
-                          <TableHeader
-                            key={header.key}
-                            {...getHeaderProps({ header })}
-                          >
-                            {header.header}
-                          </TableHeader>
-                        ))}
-                      </TableRow>
-                    </TableHead>
-                    <TableBody>
-                      {rows.map((row) => {
-                        const originalShipment = shipments.find(
-                          (s) => String(s.id) === row.id,
-                        );
-                        return (
-                          <TableRow key={row.id} {...getRowProps({ row })}>
-                            {row.cells.map((cell) => {
-                              if (cell.info.header === "packagingCondition") {
-                                return (
-                                  <TableCell key={cell.id}>
-                                    {getConditionTag(cell.value)}
-                                  </TableCell>
-                                );
-                              }
-                              if (cell.info.header === "status") {
-                                return (
-                                  <TableCell key={cell.id}>
-                                    {getStatusTag(cell.value)}
-                                  </TableCell>
-                                );
-                              }
-                              if (cell.info.header === "receptionTimestamp") {
-                                return (
-                                  <TableCell key={cell.id}>
-                                    {formatDate(cell.value)}
-                                  </TableCell>
-                                );
-                              }
-                              if (cell.info.header === "actions") {
-                                return (
-                                  <TableCell key={cell.id}>
-                                    <Button
-                                      kind="ghost"
-                                      size="sm"
-                                      renderIcon={ArrowRight}
-                                      onClick={() =>
-                                        handleSelectShipment(originalShipment)
-                                      }
-                                    >
-                                      <FormattedMessage
-                                        id="biorepository.shipment.button.continue"
-                                        defaultMessage="Continue"
-                                      />
-                                    </Button>
-                                  </TableCell>
-                                );
-                              }
-                              return (
-                                <TableCell key={cell.id}>
-                                  {cell.value}
-                                </TableCell>
-                              );
-                            })}
-                          </TableRow>
-                        );
-                      })}
-                    </TableBody>
-                  </Table>
-                )}
-              </DataTable>
-            )}
+            <ShipmentListTable
+              onSelect={handleSelectShipment}
+              selectedShipmentId={selectedShipmentId}
+              showDocStatus
+              refreshKey={refreshKey + listRefreshKey}
+            />
           </Column>
         </Grid>
       </div>
@@ -726,6 +487,8 @@ ShipmentReceptionForm.propTypes = {
   onShipmentCreated: PropTypes.func,
   onShipmentSelected: PropTypes.func,
   onCancel: PropTypes.func,
+  selectedShipmentId: PropTypes.oneOfType([PropTypes.number, PropTypes.string]),
+  refreshKey: PropTypes.number,
 };
 
 export default ShipmentReceptionForm;
