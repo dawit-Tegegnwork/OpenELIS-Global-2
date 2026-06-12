@@ -1,6 +1,7 @@
 package org.openelisglobal.notebook.service;
 
 import java.sql.Timestamp;
+import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -660,7 +661,7 @@ public class NotebookBulkOperationServiceImpl implements NotebookBulkOperationSe
                             storageData != null ? (String) storageData.get("notes") : null, reassign, userId);
 
                     if (persistStorageAssignmentOnPageSample(nps, assignmentResult, storageData, wellCoordinate,
-                            sampleId, errors)) {
+                            sampleId, userId, errors)) {
                         assignedCount++;
                         LogEvent.logInfo(this.getClass().getName(), "assignSamplesToStorage",
                                 "Assigned sample " + sampleItemId + " to box " + boxId + " well " + wellCoordinate);
@@ -1089,7 +1090,7 @@ public class NotebookBulkOperationServiceImpl implements NotebookBulkOperationSe
                             storageData != null ? (String) storageData.get("notes") : null, reassign, userId);
 
                     if (persistStorageAssignmentOnPageSample(nps, assignmentResult, storageData, wellCoordinate,
-                            sampleId, errors)) {
+                            sampleId, userId, errors)) {
                         assignedCount++;
                         LogEvent.logInfo(this.getClass().getName(), "assignSamplesToStorageWithWellMap",
                                 "Assigned sample " + sampleItemId + " to box " + boxId + " well " + wellCoordinate);
@@ -1154,7 +1155,8 @@ public class NotebookBulkOperationServiceImpl implements NotebookBulkOperationSe
     }
 
     private boolean persistStorageAssignmentOnPageSample(NotebookPageSample nps, Map<String, Object> assignmentResult,
-            Map<String, Object> storageData, String wellCoordinate, Integer sampleIdForError, List<String> errors) {
+            Map<String, Object> storageData, String wellCoordinate, Integer sampleIdForError, String userId,
+            List<String> errors) {
         if (assignmentResult == null || !assignmentResult.containsKey("assignmentId")) {
             errors.add("Failed to persist storage for sample " + sampleIdForError
                     + ": storage service did not return an assignment ID");
@@ -1183,6 +1185,7 @@ public class NotebookBulkOperationServiceImpl implements NotebookBulkOperationSe
         nps.setLastupdated(new Timestamp(System.currentTimeMillis()));
         try {
             notebookPageSampleService.update(nps);
+            updateBioSampleRetentionFromStorageData(parseSampleItemId(nps.getSampleItemId()), storageData, userId);
             return true;
         } catch (Exception e) {
             String assignmentId = String.valueOf(assignmentResult.get("assignmentId"));
@@ -1192,6 +1195,66 @@ public class NotebookBulkOperationServiceImpl implements NotebookBulkOperationSe
                     "Page sample update failed after storage assignment " + assignmentId + ": " + e.getMessage());
             return false;
         }
+    }
+
+    private Integer parseSampleItemId(String sampleItemId) {
+        if (sampleItemId == null || sampleItemId.isBlank()) {
+            return null;
+        }
+        try {
+            return Integer.valueOf(sampleItemId.trim());
+        } catch (NumberFormatException e) {
+            return null;
+        }
+    }
+
+    private void updateBioSampleRetentionFromStorageData(Integer sampleItemId, Map<String, Object> storageData,
+            String userId) {
+        if (sampleItemId == null || storageData == null) {
+            return;
+        }
+
+        Object retentionYearsObj = storageData.get("retentionYears");
+        if (retentionYearsObj == null) {
+            return;
+        }
+
+        int retentionYears;
+        if (retentionYearsObj instanceof Number) {
+            retentionYears = ((Number) retentionYearsObj).intValue();
+        } else {
+            try {
+                retentionYears = Integer.parseInt(retentionYearsObj.toString());
+            } catch (NumberFormatException e) {
+                return;
+            }
+        }
+        if (retentionYears <= 0) {
+            return;
+        }
+
+        LocalDate expiryDate;
+        Object expiryObj = storageData.get("retentionExpiry");
+        if (expiryObj != null && !expiryObj.toString().isBlank()) {
+            try {
+                expiryDate = LocalDate.parse(expiryObj.toString());
+            } catch (Exception e) {
+                expiryDate = LocalDate.now().plusYears(retentionYears);
+            }
+        } else {
+            expiryDate = LocalDate.now().plusYears(retentionYears);
+        }
+
+        BioSample bioSample = bioSampleService.getBySampleItemId(sampleItemId);
+        if (bioSample == null) {
+            return;
+        }
+
+        bioSample.setRetentionExpiryDate(java.sql.Date.valueOf(expiryDate));
+        if (userId != null) {
+            bioSample.setSysUserId(userId);
+        }
+        bioSampleService.update(bioSample);
     }
 
     private boolean isSampleInQuarantine(Integer sampleItemId) {

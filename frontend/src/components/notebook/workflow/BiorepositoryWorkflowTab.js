@@ -14,6 +14,11 @@ import { NotificationContext } from "../../layout/Layout";
 import PageNavigation from "./PageNavigation";
 import { usePageAccessControl } from "../../../hooks/usePageAccessControl";
 import {
+  findRegistryStage,
+  getRegistryStages,
+  resolvePageKey,
+} from "../../../constants/ahriWorkflowRegistry";
+import {
   BiorepositoryIntakePage,
   BiorepositoryStorageAssignmentPage,
   BiorepositoryEnvironmentalMonitoringPage,
@@ -24,28 +29,104 @@ import {
 } from "../pages/biorepository";
 import "./NotebookWorkflow.css";
 
+const BIOREPOSITORY_PAGE_KEY_BY_TITLE = {
+  "Sample Intake & Registration": "intake",
+  "Storage Assignment": "storage_assign",
+  "Ongoing Storage and Monitoring": "monitoring",
+  "Sample Request & Retrieval": "request",
+  "QC Inspection": "qc",
+  "Reporting & Audit": "reporting",
+  "Retention & Disposal": "retention",
+};
+
+function resolveBiorepositoryPageKey(page) {
+  if (!page) {
+    return "";
+  }
+  if (page.pageKey && !String(page.pageKey).startsWith("stage-")) {
+    return page.pageKey;
+  }
+  if (page.title && BIOREPOSITORY_PAGE_KEY_BY_TITLE[page.title]) {
+    return BIOREPOSITORY_PAGE_KEY_BY_TITLE[page.title];
+  }
+  const stage = findRegistryStage("biorepository", page);
+  return stage?.pageKey || resolvePageKey(page);
+}
+
+function normalizeBiorepositoryPages(sourcePages) {
+  const stageByKey = Object.fromEntries(
+    getRegistryStages("biorepository").map((stage) => [stage.pageKey, stage]),
+  );
+
+  return [...sourcePages]
+    .map((page) => {
+      const pageKey = resolveBiorepositoryPageKey(page);
+      const stage = stageByKey[pageKey];
+      const stageOrder = stage?.stageOrder ?? page.pageOrder ?? page.order;
+
+      return {
+        ...page,
+        pageKey,
+        title: stage?.stageTitle || page.title,
+        order: stageOrder,
+        pageOrder: stageOrder,
+      };
+    })
+    .sort((a, b) => {
+      const orderA = a.pageOrder ?? a.order ?? 0;
+      const orderB = b.pageOrder ?? b.order ?? 0;
+      return orderA - orderB;
+    });
+}
+
 /**
  * Default workflow pages for Biorepository workflow.
  * Page 1: Sample Intake & Registration (4 sub-stages)
  * Page 2: Storage Assignment
  * Page 3: Ongoing Storage and Monitoring
- * Page 4: Retention & Disposal (moved from 6 per 023-reorder-biorepository-pages.xml)
- * Page 5: Sample Request & Retrieval (moved from 4)
- * Page 6: QC Inspection (moved from 5)
- * Page 7: Reporting & Audit
+ * Page 4: Sample Request & Retrieval
+ * Page 5: QC Inspection
+ * Page 6: Reporting & Audit
+ * Page 7: Retention & Disposal (end of lifecycle)
  */
 const DEFAULT_BIOREPOSITORY_WORKFLOW_PAGES = [
   {
     id: "default-1",
     order: 1,
+    pageKey: "intake",
     title: "Sample Intake & Registration",
   },
-  { id: "default-2", order: 2, title: "Storage Assignment" },
-  { id: "default-3", order: 3, title: "Ongoing Storage and Monitoring" },
-  { id: "default-4", order: 4, title: "Retention & Disposal" },
-  { id: "default-5", order: 5, title: "Sample Request & Retrieval" },
-  { id: "default-6", order: 6, title: "QC Inspection" },
-  { id: "default-7", order: 7, title: "Reporting & Audit" },
+  {
+    id: "default-2",
+    order: 2,
+    pageKey: "storage_assign",
+    title: "Storage Assignment",
+  },
+  {
+    id: "default-3",
+    order: 3,
+    pageKey: "monitoring",
+    title: "Ongoing Storage and Monitoring",
+  },
+  {
+    id: "default-4",
+    order: 4,
+    pageKey: "request",
+    title: "Sample Request & Retrieval",
+  },
+  { id: "default-5", order: 5, pageKey: "qc", title: "QC Inspection" },
+  {
+    id: "default-6",
+    order: 6,
+    pageKey: "reporting",
+    title: "Reporting & Audit",
+  },
+  {
+    id: "default-7",
+    order: 7,
+    pageKey: "retention",
+    title: "Retention & Disposal",
+  },
 ];
 
 /**
@@ -77,11 +158,7 @@ function BiorepositoryWorkflowTab({ notebookId, entryId: propEntryId }) {
     if (!pages || pages.length === 0) {
       return [];
     }
-    return [...pages].sort((a, b) => {
-      const orderA = a.pageOrder ?? a.order ?? 0;
-      const orderB = b.pageOrder ?? b.order ?? 0;
-      return orderA - orderB;
-    });
+    return normalizeBiorepositoryPages(pages);
   }, [pages]);
 
   const { effectivePages, activePage, handlePageChange } = usePageAccessControl(
@@ -265,14 +342,13 @@ function BiorepositoryWorkflowTab({ notebookId, entryId: propEntryId }) {
     }
   }, [entryId]);
 
-  // Render Biorepository page-specific content based on page order
+  // Render Biorepository page-specific content based on stable page key/title
   const renderPageContent = (page) => {
-    const pageOrder = page.order || page.pageOrder || 1;
+    const pageKey = resolveBiorepositoryPageKey(page);
     const progress = getProgressForPage(page.id);
 
-    switch (pageOrder) {
-      case 1:
-        // Page 1: Sample Intake & Registration (with 4 sub-stages)
+    switch (pageKey) {
+      case "intake":
         return (
           <BiorepositoryIntakePage
             key={`intake-${page.id}`}
@@ -283,8 +359,7 @@ function BiorepositoryWorkflowTab({ notebookId, entryId: propEntryId }) {
             notebookId={notebook?.id}
           />
         );
-      case 2:
-        // Page 2: Storage Assignment
+      case "storage_assign":
         return (
           <BiorepositoryStorageAssignmentPage
             key={`storage-${page.id}`}
@@ -295,8 +370,7 @@ function BiorepositoryWorkflowTab({ notebookId, entryId: propEntryId }) {
             notebookId={notebook?.id}
           />
         );
-      case 3:
-        // Page 3: Ongoing Storage and Monitoring
+      case "monitoring":
         return (
           <BiorepositoryEnvironmentalMonitoringPage
             key={`environmental-${page.id}`}
@@ -307,20 +381,7 @@ function BiorepositoryWorkflowTab({ notebookId, entryId: propEntryId }) {
             notebookId={notebook?.id}
           />
         );
-      case 4:
-        // Page 4: Retention & Disposal (reordered from page 6)
-        return (
-          <BiorepositoryRetentionDisposalPage
-            key={`disposal-${page.id}`}
-            entryId={entryId}
-            pageData={page}
-            progress={progress}
-            onProgressUpdate={handleProgressUpdate}
-            notebookId={notebook?.id}
-          />
-        );
-      case 5:
-        // Page 5: Sample Request & Retrieval (reordered from page 4)
+      case "request":
         return (
           <BiorepositorySampleRequestPage
             key={`request-${page.id}`}
@@ -331,8 +392,7 @@ function BiorepositoryWorkflowTab({ notebookId, entryId: propEntryId }) {
             notebookId={notebook?.id}
           />
         );
-      case 6:
-        // Page 6: QC Inspection (reordered from page 5)
+      case "qc":
         return (
           <BiorepositoryQCInspectionPage
             key={`qc-${page.id}`}
@@ -343,11 +403,21 @@ function BiorepositoryWorkflowTab({ notebookId, entryId: propEntryId }) {
             notebookId={notebook?.id}
           />
         );
-      case 7:
-        // Page 7: Reporting & Audit
+      case "reporting":
         return (
           <BiorepositoryReportingPage
             key={`reporting-${page.id}`}
+            entryId={entryId}
+            pageData={page}
+            progress={progress}
+            onProgressUpdate={handleProgressUpdate}
+            notebookId={notebook?.id}
+          />
+        );
+      case "retention":
+        return (
+          <BiorepositoryRetentionDisposalPage
+            key={`disposal-${page.id}`}
             entryId={entryId}
             pageData={page}
             progress={progress}
@@ -361,7 +431,7 @@ function BiorepositoryWorkflowTab({ notebookId, entryId: propEntryId }) {
             <FormattedMessage
               id="notebook.workflow.pageDefault.description"
               defaultMessage="Page content for workflow step {step}"
-              values={{ step: pageOrder }}
+              values={{ step: page.title || pageKey || "unknown" }}
             />
           </div>
         );

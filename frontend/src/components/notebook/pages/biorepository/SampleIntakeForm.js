@@ -14,7 +14,6 @@ import {
   ContentSwitcher,
   Switch,
   NumberInput,
-  Tag,
 } from "@carbon/react";
 import { Add, Upload, Renew } from "@carbon/icons-react";
 import { FormattedMessage, useIntl } from "react-intl";
@@ -44,11 +43,11 @@ import {
  * - Sample type and category
  * - Date/time of receipt
  * - Storage temperature requirement
- * - Receiving personnel ID (auto-populated from logged-in user)
+ * - Chain of custody: receiver name, external/donor ID, sample code
  *
  * Conditional/Optional Fields:
  * - Ethical approval reference (required if human samples)
- * - Project/study association (required if project-linked)
+ * - Project/study association (optional free text)
  * - Material transfer agreement (required if external)
  *
  * @param {Object} props
@@ -99,13 +98,13 @@ function SampleIntakeForm({
     storageTemperature: "AMBIENT", // Storage temperature requirement
     requiredTempMin: null, // Min temp for custom range
     requiredTempMax: null, // Max temp for custom range
+    receiverName: "", // Chain of custody: receiving personnel
 
     // Conditional/Optional fields
-    externalId: "", // External/Donor ID
-    projectId: null, // Project/study association
+    externalId: "", // External/Donor ID (chain of custody)
+    projectName: "", // Project/study association (optional)
     ethicsApprovalRef: "", // Ethical approval reference
     mtaReference: "", // Material transfer agreement
-    biosafetyLevel: "BSL_1", // Biosafety level
     specialHandling: "", // Special handling instructions
     collectionDate: null, // Original collection date (optional)
   });
@@ -118,7 +117,6 @@ function SampleIntakeForm({
 
   // Dropdown options
   const [sampleTypes, setSampleTypes] = useState([]);
-  const [projects, setProjects] = useState([]);
   const [organizations, setOrganizations] = useState([]);
   const [departments, setDepartments] = useState([]);
   const [departmentId, setDepartmentId] = useState("");
@@ -155,6 +153,13 @@ function SampleIntakeForm({
       }),
     },
     {
+      id: "FROZEN_150",
+      text: intl.formatMessage({
+        id: "biorepository.temp.frozen150",
+        defaultMessage: "Vapor Phase (-150°C)",
+      }),
+    },
+    {
       id: "LIQUID_N2",
       text: intl.formatMessage({
         id: "biorepository.temp.liquidN2",
@@ -170,13 +175,6 @@ function SampleIntakeForm({
     },
   ];
 
-  const biosafetyLevels = [
-    { id: "BSL_1", text: "BSL-1" },
-    { id: "BSL_2", text: "BSL-2" },
-    { id: "BSL_3", text: "BSL-3" },
-    { id: "BSL_4", text: "BSL-4" },
-  ];
-
   // Validation state
   const [errors, setErrors] = useState({});
 
@@ -189,13 +187,6 @@ function SampleIntakeForm({
       }
     });
 
-    // Load projects
-    getFromOpenElisServer("/rest/displayList/PROJECT", (data) => {
-      if (data) {
-        setProjects(data.map((item) => ({ id: item.id, text: item.value })));
-      }
-    });
-
     // Load organizations for origin lab dropdown
     getFromOpenElisServer("/rest/displayList/REFERRING_CLINIC", (data) => {
       if (data) {
@@ -205,6 +196,18 @@ function SampleIntakeForm({
       }
     });
   }, []);
+
+  useEffect(() => {
+    const first = userSessionDetails?.firstName?.trim() || "";
+    const last = userSessionDetails?.lastName?.trim() || "";
+    const name = `${first} ${last}`.trim();
+    if (!name) {
+      return;
+    }
+    setFormData((prev) =>
+      prev.receiverName ? prev : { ...prev, receiverName: name },
+    );
+  }, [userSessionDetails]);
 
   const applyDefaultDepartmentSelection = useCallback(
     (list, preferredIds = []) => {
@@ -315,6 +318,8 @@ function SampleIntakeForm({
         return { min: -25, max: -15 };
       case "FROZEN_80":
         return { min: -86, max: -76 };
+      case "FROZEN_150":
+        return { min: -196, max: -150 };
       case "LIQUID_N2":
         return { min: -200, max: -190 };
       default:
@@ -338,6 +343,20 @@ function SampleIntakeForm({
       newErrors.barcode = intl.formatMessage({
         id: "biorepository.sample.error.barcode.required",
         defaultMessage: "Sample ID (barcode) is required",
+      });
+    }
+
+    if (!formData.receiverName.trim()) {
+      newErrors.receiverName = intl.formatMessage({
+        id: "biorepository.sample.error.receiverName.required",
+        defaultMessage: "Receiver name is required",
+      });
+    }
+
+    if (!formData.externalId.trim()) {
+      newErrors.externalId = intl.formatMessage({
+        id: "biorepository.sample.error.externalId.required",
+        defaultMessage: "External/Donor ID is required",
       });
     }
 
@@ -481,15 +500,14 @@ function SampleIntakeForm({
 
       const sampleData = {
         barcode: formData.barcode.trim(),
-        externalId: formData.externalId.trim() || formData.barcode.trim(), // Default to barcode if no external ID
+        externalId: formData.externalId.trim(),
         originLab: formData.originLab.trim(),
         sampleTypeId: formData.sampleTypeId,
         receiptDate: receiptDateTime,
         collectionDate: collectionDateFormatted,
         requiredTempMin: tempRange.min,
         requiredTempMax: tempRange.max,
-        projectId: formData.projectId,
-        biosafetyLevel: formData.biosafetyLevel,
+        projectId: formData.projectName.trim() || null,
         ethicsApprovalRef: formData.ethicsApprovalRef.trim() || null,
         mtaReference: formData.mtaReference.trim() || null,
         specialHandling: formData.specialHandling.trim() || null,
@@ -603,21 +621,6 @@ function SampleIntakeForm({
           </ContentSwitcher>
         </Column>
 
-        {/* Display receiving personnel info */}
-        <Column lg={16} md={8} sm={4} style={{ marginBottom: "1rem" }}>
-          <Tag type="blue">
-            <FormattedMessage
-              id="biorepository.sample.receivingPersonnel"
-              defaultMessage="Receiving Personnel: {name}"
-              values={{
-                name:
-                  userSessionDetails?.firstName +
-                    " " +
-                    userSessionDetails?.lastName || "Current User",
-              }}
-            />
-          </Tag>
-        </Column>
       </Grid>
 
       {mode === 0 ? (
@@ -653,50 +656,6 @@ function SampleIntakeForm({
                   invalid={!!errors.originLab}
                   invalidText={errors.originLab}
                 />
-              </FormGroup>
-            </Column>
-
-            {/* Sample ID (Barcode) */}
-            <Column lg={8} md={4} sm={4}>
-              <FormGroup legendText="">
-                <div
-                  style={{
-                    display: "flex",
-                    alignItems: "flex-end",
-                    gap: "0.5rem",
-                  }}
-                >
-                  <TextInput
-                    id="barcode"
-                    labelText={intl.formatMessage({
-                      id: "biorepository.sample.field.barcode",
-                      defaultMessage: "Sample ID (Barcode) *",
-                    })}
-                    placeholder={intl.formatMessage({
-                      id: "biorepository.sample.field.barcode.placeholder",
-                      defaultMessage: "Auto-generated or enter manually",
-                    })}
-                    value={formData.barcode}
-                    onChange={(e) =>
-                      handleInputChange("barcode", e.target.value)
-                    }
-                    invalid={!!errors.barcode}
-                    invalidText={errors.barcode}
-                    style={{ flexGrow: 1 }}
-                  />
-                  <Button
-                    kind="ghost"
-                    size="md"
-                    hasIconOnly
-                    renderIcon={Renew}
-                    iconDescription={intl.formatMessage({
-                      id: "biorepository.sample.button.generateBarcode",
-                      defaultMessage: "Generate new barcode",
-                    })}
-                    onClick={generateNewBarcode}
-                    disabled={generatingBarcode}
-                  />
-                </div>
               </FormGroup>
             </Column>
 
@@ -895,6 +854,104 @@ function SampleIntakeForm({
               </>
             )}
 
+            {/* CHAIN OF CUSTODY SECTION */}
+            <Column lg={16} md={8} sm={4}>
+              <h4 style={{ marginBottom: "1rem", marginTop: "1.5rem" }}>
+                <FormattedMessage
+                  id="biorepository.sample.section.chainOfCustody"
+                  defaultMessage="Chain of Custody"
+                />
+              </h4>
+            </Column>
+
+            <Column lg={8} md={4} sm={4}>
+              <FormGroup legendText="">
+                <TextInput
+                  id="receiverName"
+                  labelText={intl.formatMessage({
+                    id: "biorepository.sample.field.receiverName",
+                    defaultMessage: "Receiver Name *",
+                  })}
+                  helperText={intl.formatMessage({
+                    id: "biorepository.sample.field.receiverName.helper",
+                    defaultMessage:
+                      "Person receiving the sample into biorepository custody",
+                  })}
+                  value={formData.receiverName}
+                  onChange={(e) =>
+                    handleInputChange("receiverName", e.target.value)
+                  }
+                  invalid={!!errors.receiverName}
+                  invalidText={errors.receiverName}
+                />
+              </FormGroup>
+            </Column>
+
+            <Column lg={8} md={4} sm={4}>
+              <FormGroup legendText="">
+                <TextInput
+                  id="externalId"
+                  labelText={intl.formatMessage({
+                    id: "biorepository.sample.field.externalId",
+                    defaultMessage: "External/Donor ID *",
+                  })}
+                  placeholder={intl.formatMessage({
+                    id: "biorepository.sample.field.externalId.placeholder",
+                    defaultMessage: "Enter external or donor identifier",
+                  })}
+                  value={formData.externalId}
+                  onChange={(e) =>
+                    handleInputChange("externalId", e.target.value)
+                  }
+                  invalid={!!errors.externalId}
+                  invalidText={errors.externalId}
+                />
+              </FormGroup>
+            </Column>
+
+            <Column lg={8} md={4} sm={4}>
+              <FormGroup legendText="">
+                <div
+                  style={{
+                    display: "flex",
+                    alignItems: "flex-end",
+                    gap: "0.5rem",
+                  }}
+                >
+                  <TextInput
+                    id="barcode"
+                    labelText={intl.formatMessage({
+                      id: "biorepository.sample.field.sampleCode",
+                      defaultMessage: "Sample Code *",
+                    })}
+                    placeholder={intl.formatMessage({
+                      id: "biorepository.sample.field.barcode.placeholder",
+                      defaultMessage: "Auto-generated or enter manually",
+                    })}
+                    value={formData.barcode}
+                    onChange={(e) =>
+                      handleInputChange("barcode", e.target.value)
+                    }
+                    invalid={!!errors.barcode}
+                    invalidText={errors.barcode}
+                    style={{ flexGrow: 1 }}
+                  />
+                  <Button
+                    kind="ghost"
+                    size="md"
+                    hasIconOnly
+                    renderIcon={Renew}
+                    iconDescription={intl.formatMessage({
+                      id: "biorepository.sample.button.generateBarcode",
+                      defaultMessage: "Generate new barcode",
+                    })}
+                    onClick={generateNewBarcode}
+                    disabled={generatingBarcode}
+                  />
+                </div>
+              </FormGroup>
+            </Column>
+
             {/* CONDITIONAL/OPTIONAL FIELDS SECTION */}
             <Column lg={16} md={8} sm={4}>
               <h4 style={{ marginBottom: "1rem", marginTop: "1.5rem" }}>
@@ -905,47 +962,22 @@ function SampleIntakeForm({
               </h4>
             </Column>
 
-            {/* External/Donor ID */}
-            <Column lg={8} md={4} sm={4}>
-              <FormGroup legendText="">
-                <TextInput
-                  id="externalId"
-                  labelText={intl.formatMessage({
-                    id: "biorepository.sample.field.externalId",
-                    defaultMessage: "External/Donor ID",
-                  })}
-                  placeholder={intl.formatMessage({
-                    id: "biorepository.sample.field.externalId.placeholder",
-                    defaultMessage: "Enter external or donor identifier",
-                  })}
-                  value={formData.externalId}
-                  onChange={(e) =>
-                    handleInputChange("externalId", e.target.value)
-                  }
-                />
-              </FormGroup>
-            </Column>
-
             {/* Project */}
             <Column lg={8} md={4} sm={4}>
               <FormGroup legendText="">
-                <Dropdown
-                  id="project"
-                  titleText={intl.formatMessage({
+                <TextInput
+                  id="projectName"
+                  labelText={intl.formatMessage({
                     id: "biorepository.sample.field.project",
                     defaultMessage: "Project/Study Association",
                   })}
-                  label={intl.formatMessage({
+                  placeholder={intl.formatMessage({
                     id: "biorepository.sample.field.project.placeholder",
-                    defaultMessage: "Select project (if applicable)",
+                    defaultMessage: "Enter project or study name (optional)",
                   })}
-                  items={projects}
-                  itemToString={(item) => (item ? item.text : "")}
-                  selectedItem={projects.find(
-                    (p) => p.id === formData.projectId,
-                  )}
-                  onChange={({ selectedItem }) =>
-                    handleInputChange("projectId", selectedItem?.id)
+                  value={formData.projectName}
+                  onChange={(e) =>
+                    handleInputChange("projectName", e.target.value)
                   }
                 />
               </FormGroup>
@@ -966,27 +998,6 @@ function SampleIntakeForm({
                   }
                   disallowFutureDate={true}
                   updateStateValue={true}
-                />
-              </FormGroup>
-            </Column>
-
-            {/* Biosafety Level */}
-            <Column lg={8} md={4} sm={4}>
-              <FormGroup legendText="">
-                <Dropdown
-                  id="biosafetyLevel"
-                  titleText={intl.formatMessage({
-                    id: "biorepository.sample.field.biosafetyLevel",
-                    defaultMessage: "Biosafety Level",
-                  })}
-                  items={biosafetyLevels}
-                  itemToString={(item) => (item ? item.text : "")}
-                  selectedItem={biosafetyLevels.find(
-                    (l) => l.id === formData.biosafetyLevel,
-                  )}
-                  onChange={({ selectedItem }) =>
-                    handleInputChange("biosafetyLevel", selectedItem?.id)
-                  }
                 />
               </FormGroup>
             </Column>

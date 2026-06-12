@@ -2,6 +2,7 @@ package org.openelisglobal.notebook.service;
 
 import java.sql.Timestamp;
 import java.util.List;
+import java.util.Map;
 import org.openelisglobal.common.service.BaseObjectService;
 import org.openelisglobal.notebook.valueholder.NotebookEntryRoomEnvironmentLog;
 
@@ -53,5 +54,17 @@ public interface NotebookEntryRoomEnvironmentLogService
      */
     NotebookEntryRoomEnvironmentLog logRoomEnvironment(Integer entryId, String roomId, String roomName,
             Double oxygenLevel, Double humidity, String checkedBy, Timestamp checkedDateTime, String notes,
+            String sysUserId);
+
+    /**
+     * Bulk import room environment readings for a notebook entry.
+     *
+     * @param entryId      notebook entry ID
+     * @param rows         import rows (roomCode, checkedDateTime, etc.)
+     * @param scopeRoomCode when set, all rows apply to this room code
+     * @param sysUserId    current user
+     * @return map with importedCount, skippedCount, errors
+     */
+    Map<String, Object> importRoomEnvironmentLogs(Integer entryId, List<Map<String, Object>> rows, String scopeRoomCode,
             String sysUserId);
 }

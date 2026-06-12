@@ -11,6 +11,7 @@ public class ManifestImportRequest {
     private List<SampleRegistrationDTO> samples;
     private Integer shipmentId;
     private Integer departmentTestSectionId;
+    private DuplicateResolution duplicateResolution;
 
     public List<SampleRegistrationDTO> getSamples() {
         return samples;
@@ -34,5 +35,37 @@ public class ManifestImportRequest {
 
     public void setDepartmentTestSectionId(Integer departmentTestSectionId) {
         this.departmentTestSectionId = departmentTestSectionId;
+    }
+
+    public DuplicateResolution getDuplicateResolution() {
+        return duplicateResolution;
+    }
+
+    public void setDuplicateResolution(DuplicateResolution duplicateResolution) {
+        this.duplicateResolution = duplicateResolution;
+    }
+
+    /**
+     * User-approved strategy for importing rows with duplicate Sample IDs.
+     */
+    public static class DuplicateResolution {
+        private String mode = "SUFFIX";
+        private List<Integer> allowedRowIndexes;
+
+        public String getMode() {
+            return mode;
+        }
+
+        public void setMode(String mode) {
+            this.mode = mode;
+        }
+
+        public List<Integer> getAllowedRowIndexes() {
+            return allowedRowIndexes;
+        }
+
+        public void setAllowedRowIndexes(List<Integer> allowedRowIndexes) {
+            this.allowedRowIndexes = allowedRowIndexes;
+        }
     }
 }

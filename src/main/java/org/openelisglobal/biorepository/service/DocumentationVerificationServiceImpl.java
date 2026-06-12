@@ -139,6 +139,11 @@ public class DocumentationVerificationServiceImpl extends
             verification.setStatusEthicsApproval(status);
             break;
         case "biosafetyMatch":
+            if (verified && (verification.getBiosafetyClassification() == null
+                    || verification.getBiosafetyClassification().trim().isEmpty())) {
+                throw new IllegalArgumentException(
+                        "Select a biosafety classification level before verifying biosafety match");
+            }
             verification.setCheckBiosafetyMatch(verified);
             verification.setStatusBiosafetyMatch(status);
             break;
@@ -211,6 +216,43 @@ public class DocumentationVerificationServiceImpl extends
         // Update shipment documentation status
         shipmentService.updateDocumentationStatus(verification.getShipment().getId(), DocumentationStatus.QUARANTINE);
 
+        return update(verification);
+    }
+
+    @Override
+    @Transactional
+    public DocumentationVerification updateVerificationNotes(Integer verificationId, String notes, String sysUserId) {
+        DocumentationVerification verification = get(verificationId);
+        if (verification == null) {
+            throw new IllegalArgumentException("Verification not found: " + verificationId);
+        }
+
+        verification.setVerificationNotes(notes);
+        verification.setSysUserId(sysUserId);
+        return update(verification);
+    }
+
+    @Override
+    @Transactional
+    public DocumentationVerification updateBiosafetyClassification(Integer verificationId,
+            String biosafetyClassification, String sysUserId) {
+        DocumentationVerification verification = get(verificationId);
+        if (verification == null) {
+            throw new IllegalArgumentException("Verification not found: " + verificationId);
+        }
+
+        if (biosafetyClassification == null || biosafetyClassification.trim().isEmpty()) {
+            throw new IllegalArgumentException("Biosafety classification is required");
+        }
+
+        String normalized = biosafetyClassification.trim().toUpperCase();
+        if (!normalized.matches("BSL_[1-4]")) {
+            throw new IllegalArgumentException("Invalid biosafety classification: " + biosafetyClassification);
+        }
+
+        verification.setBiosafetyClassification(normalized);
+        verification.setSysUserId(sysUserId);
+        verification.updateOverallStatus();
         return update(verification);
     }
 }

@@ -6,18 +6,17 @@
       http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-3.8.xsd">
 
     <changeSet id="053-backfill-notebook-scope-and-demo-stock" author="orbithealth">
+        <!-- Accept checksum from DB after file was edited post-deploy -->
+        <validCheckSum>8:0ef88621d5891a4b6439c55064553225</validCheckSum>
+        <validCheckSum>8:63ac58388bcaabbbcfefb23da3174109</validCheckSum>
         <preConditions onFail="MARK_RAN">
             <tableExists schemaName="clinlims" tableName="notebook"/>
             <tableExists schemaName="clinlims" tableName="notebook_departments"/>
             <tableExists schemaName="clinlims" tableName="test_section"/>
             <columnExists schemaName="clinlims" tableName="notebook" columnName="workflow_type"/>
-            <tableExists schemaName="clinlims" tableName="inventory_item"/>
-            <tableExists schemaName="clinlims" tableName="inventory_lot"/>
         </preConditions>
         <comment>
-            Backfill legacy Viral Vaccine, Virology, and Genomics notebook scope
-            and seed a minimal stock baseline so workflow stock pickers have
-            real lot-backed options in training/demo environments.
+            Backfill legacy Viral Vaccine, Virology, and Genomics notebook scope.
         </comment>
 
         <sql>
@@ -67,6 +66,18 @@
                   AND existing.test_section_id = ndm.department_id
             );
         </sql>
+    </changeSet>
+
+    <changeSet id="053-seed-notebook-demo-stock" author="orbithealth">
+        <preConditions onFail="MARK_RAN">
+            <tableExists schemaName="clinlims" tableName="inventory_item"/>
+            <tableExists schemaName="clinlims" tableName="inventory_lot"/>
+            <columnExists schemaName="clinlims" tableName="inventory_item" columnName="department_test_section_id"/>
+        </preConditions>
+        <comment>
+            Seed a minimal stock baseline so workflow stock pickers have
+            real lot-backed options in training/demo environments.
+        </comment>
 
         <sql>
             WITH seed_items(department_id, item_name, category, manufacturer, catalog_number, units, lot_number) AS (

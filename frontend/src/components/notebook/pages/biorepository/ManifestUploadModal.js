@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useEffect, useContext } from "react";
+import React, { useState, useCallback, useEffect, useContext, useMemo } from "react";
 import {
   Modal,
   FileUploader,
@@ -14,6 +14,7 @@ import {
   Loading,
   Tag,
   Dropdown,
+  Checkbox,
 } from "@carbon/react";
 import { Checkmark, Warning, Download } from "@carbon/icons-react";
 import { FormattedMessage, useIntl } from "react-intl";
@@ -32,6 +33,7 @@ import {
 import {
   translateManifestImportMessage,
   translateManifestImportMessages,
+  translateManifestDuplicateWarning,
 } from "./manifestImportErrorMessages";
 import {
   MANIFEST_FIELDS,
@@ -49,10 +51,18 @@ import {
   buildSpecialHandlingNotes,
   HEADER_ALIASES,
   STORAGE_METADATA_ALIASES,
+  DUPLICATE_ISSUE,
+  getDuplicateIssueType,
+  partitionDuplicateMessages,
+  isDuplicateWarningMessage,
+  reconcileCrossBatchManifestDuplicates,
+  computeDuplicateImportPreviews,
+  parseDuplicateSampleId,
 } from "./manifestImportHelpers";
 
 const REQUIRED_FIELDS = [
   "barcode",
+  "externalId",
   "sampleType",
   "originLab",
   "receiptDate",
@@ -118,6 +128,8 @@ function ManifestUploadModal({
   const [departmentId, setDepartmentId] = useState("");
   const [departmentsLoading, setDepartmentsLoading] = useState(false);
   const [departmentError, setDepartmentError] = useState(null);
+  const [duplicateRowApprovals, setDuplicateRowApprovals] = useState({});
+  const [allowAllDuplicates, setAllowAllDuplicates] = useState(false);
 
   const requiredFields = REQUIRED_FIELDS;
   const conditionalFields = CONDITIONAL_FIELDS;
@@ -350,8 +362,8 @@ function ManifestUploadModal({
         const values = normalizedRows[i];
         const row = mergeMappedRowValues(rawHeaders, values);
 
-        row.barcode = row.barcode || row.externalId || "";
-        row.externalId = row.externalId || row.barcode;
+        row.barcode = row.barcode || "";
+        row.externalId = row.externalId || "";
 
         row.receiptDate = normalizeDateValue(
           firstNonEmptyValue(
@@ -556,10 +568,10 @@ function ManifestUploadModal({
    */
   const transformToBackendFormat = useCallback((data) => {
     return data.map((row) => {
-      const barcode = row.barcode || row.externalId || "";
+      const barcode = row.barcode || "";
       const sample = {
         barcode,
-        externalId: row.externalId || barcode,
+        externalId: row.externalId || "",
         sampleType: row.sampleType,
         originLab: row.originLab,
         receiptDate: row.receiptDate,
@@ -699,22 +711,36 @@ function ManifestUploadModal({
         total: allSamples.length,
       });
 
+      const reconciledRows = reconcileCrossBatchManifestDuplicates(
+        allSamples,
+        mergedRows,
+      );
+      let reconciledInvalidCount = 0;
+      reconciledRows.forEach((row) => {
+        if (row && row.valid === false) {
+          reconciledInvalidCount += 1;
+        }
+      });
+
       return {
-        valid: mergedValid,
-        invalidCount: mergedInvalidCount,
-        rows: mergedRows,
+        valid: reconciledInvalidCount === 0,
+        invalidCount: reconciledInvalidCount,
+        rows: reconciledRows,
       };
     },
     [validateBatchWithBackend],
   );
 
   const registerBatchWithBackend = useCallback(
-    (samples) =>
+    (samples, duplicateResolution) =>
       new Promise((resolve) => {
         const payload = {
           samples,
           shipmentId,
         };
+        if (duplicateResolution) {
+          payload.duplicateResolution = duplicateResolution;
+        }
         if (requiresDepartmentSelection && departmentId) {
           const deptNum = parseInt(departmentId, 10);
           if (!Number.isNaN(deptNum)) {
@@ -731,7 +757,7 @@ function ManifestUploadModal({
   );
 
   const runBatchedImport = useCallback(
-    async (allSamples) => {
+    async (allSamples, duplicateResolution) => {
       const merged = {
         registeredCount: 0,
         failedCount: 0,
@@ -750,7 +776,26 @@ function ManifestUploadModal({
         const batch = allSamples.slice(start, start + VALIDATION_BATCH_SIZE);
         setImportProgress({ completed: start, total: allSamples.length });
 
-        const response = await registerBatchWithBackend(batch);
+        let batchDuplicateResolution;
+        if (duplicateResolution?.allowedRowIndexes?.length) {
+          const batchAllowed = duplicateResolution.allowedRowIndexes
+            .filter(
+              (index) =>
+                index >= start && index < start + VALIDATION_BATCH_SIZE,
+            )
+            .map((index) => index - start);
+          if (batchAllowed.length > 0) {
+            batchDuplicateResolution = {
+              mode: duplicateResolution.mode || "SUFFIX",
+              allowedRowIndexes: batchAllowed,
+            };
+          }
+        }
+
+        const response = await registerBatchWithBackend(
+          batch,
+          batchDuplicateResolution,
+        );
         if (!response) {
           throw { status: 0 };
         }
@@ -785,41 +830,83 @@ function ManifestUploadModal({
     (validationResult) => {
       const backendErrors = [];
       const backendWarnings = [];
-      const updatedData = parsedData.map((row, index) => {
+      const provisionalRows = parsedData.map((row, index) => {
         const backendRow = validationResult.rows?.[index];
-        if (backendRow && !backendRow.valid && backendRow.errors) {
-          backendRow.errors.forEach((errMsg) => {
-            backendErrors.push({
-              row: row._rowNumber,
-              field: "backend",
-              message: formatImportMessage(errMsg),
-            });
+        const { duplicateMessages, hardErrors } = partitionDuplicateMessages(
+          backendRow?.errors || [],
+        );
+        const duplicateIssue = getDuplicateIssueType(backendRow?.duplicateIssue, [
+          ...(backendRow?.warnings || []),
+          ...duplicateMessages,
+        ]);
+        const isDuplicate = duplicateIssue !== DUPLICATE_ISSUE.NONE;
+
+        hardErrors.forEach((errMsg) => {
+          backendErrors.push({
+            row: row._rowNumber,
+            field: "backend",
+            message: formatImportMessage(errMsg),
           });
-        }
-        if (backendRow?.warnings) {
-          backendRow.warnings.forEach((warningMsg) => {
-            backendWarnings.push({
-              row: row._rowNumber,
-              field: "sampleType",
-              message: warningMsg,
-            });
+        });
+
+        const nonDuplicateWarnings = (backendRow?.warnings || []).filter(
+          (warningMsg) => !isDuplicateWarningMessage(warningMsg),
+        );
+        nonDuplicateWarnings.forEach((warningMsg) => {
+          backendWarnings.push({
+            row: row._rowNumber,
+            field: "sampleType",
+            message: warningMsg,
           });
-        }
+        });
+
         return {
           ...row,
-          _valid: backendRow?.valid ?? row._valid,
-          _backendErrors: backendRow?.errors || [],
-          _backendWarnings: backendRow?.warnings || [],
+          _valid: hardErrors.length === 0,
+          _backendErrors: hardErrors,
+          _backendWarnings: [
+            ...(backendRow?.warnings || []),
+            ...duplicateMessages,
+          ],
+          _duplicateIssue: duplicateIssue,
+          _isDuplicate: isDuplicate,
         };
       });
 
+      const duplicatePreviews = computeDuplicateImportPreviews(provisionalRows, {});
+      const updatedData = provisionalRows.map((row) => {
+        if (!row._isDuplicate) {
+          return row;
+        }
+        const duplicateWarning = row._backendWarnings.find((warningMsg) =>
+          isDuplicateWarningMessage(warningMsg),
+        );
+        const suggestedId =
+          duplicatePreviews[row._rowNumber] ||
+          parseDuplicateSampleId(duplicateWarning);
+        backendWarnings.push({
+          row: row._rowNumber,
+          field: "duplicate",
+          message: translateManifestDuplicateWarning(
+            duplicateWarning,
+            intl.formatMessage,
+            suggestedId,
+          ),
+        });
+        return row;
+      });
+
+      const hardErrorCount = updatedData.filter((row) => !row._valid).length;
+
       setParsedData(updatedData);
-      setValidationErrors((prev) => [...prev, ...backendErrors]);
+      setValidationErrors(backendErrors);
       setValidationWarnings(backendWarnings);
+      setDuplicateRowApprovals({});
+      setAllowAllDuplicates(false);
       setBackendValidationDone(true);
       setImportStatus("preview");
 
-      if (!validationResult.valid) {
+      if (hardErrorCount > 0) {
         setError(
           intl.formatMessage(
             {
@@ -827,9 +914,11 @@ function ManifestUploadModal({
               defaultMessage:
                 "{count} sample(s) have validation errors. Please review below.",
             },
-            { count: validationResult.invalidCount },
+            { count: hardErrorCount },
           ),
         );
+      } else {
+        setError(null);
       }
     },
     [parsedData, formatImportMessage, intl],
@@ -884,8 +973,58 @@ function ManifestUploadModal({
     formatServerRequestError,
   ]);
 
-  // Count of valid samples for display and logic
-  const validSampleCount = parsedData.filter((row) => row._valid).length;
+  const duplicateRows = useMemo(
+    () => parsedData.filter((row) => row._isDuplicate),
+    [parsedData],
+  );
+
+  const duplicateImportPreviews = useMemo(
+    () => computeDuplicateImportPreviews(parsedData, duplicateRowApprovals),
+    [parsedData, duplicateRowApprovals],
+  );
+
+  const isRowImportable = useCallback(
+    (row) => {
+      if (!row._valid) {
+        return false;
+      }
+      if (row._isDuplicate && !duplicateRowApprovals[row._rowNumber]) {
+        return false;
+      }
+      return true;
+    },
+    [duplicateRowApprovals],
+  );
+
+  const importableSampleCount = parsedData.filter(isRowImportable).length;
+  const approvedDuplicateCount = duplicateRows.filter(
+    (row) => duplicateRowApprovals[row._rowNumber],
+  ).length;
+  const hardErrorCount = parsedData.filter((row) => !row._valid).length;
+
+  const handleToggleAllowAllDuplicates = useCallback(
+    (checked) => {
+      setAllowAllDuplicates(checked);
+      if (!checked) {
+        setDuplicateRowApprovals({});
+        return;
+      }
+      const approvals = {};
+      duplicateRows.forEach((row) => {
+        approvals[row._rowNumber] = true;
+      });
+      setDuplicateRowApprovals(approvals);
+    },
+    [duplicateRows],
+  );
+
+  const handleToggleDuplicateRow = useCallback((rowNumber, checked) => {
+    setDuplicateRowApprovals((prev) => ({
+      ...prev,
+      [rowNumber]: checked,
+    }));
+    setAllowAllDuplicates(false);
+  }, []);
 
   const handleImport = useCallback(() => {
     if (requiresDepartmentSelection) {
@@ -930,10 +1069,11 @@ function ManifestUploadModal({
       return;
     }
 
-    // Filter to only valid samples
-    const validSamples = parsedData.filter((row) => row._valid);
+    const importableEntries = parsedData
+      .map((row, index) => ({ row, index }))
+      .filter(({ row }) => isRowImportable(row));
 
-    if (validSamples.length === 0) {
+    if (importableEntries.length === 0) {
       setError(
         intl.formatMessage({
           id: "biorepository.manifest.error.noValidSamples",
@@ -949,9 +1089,21 @@ function ManifestUploadModal({
     setImportStatus("importing");
     setImportResult(null);
 
-    const samples = transformToBackendFormat(validSamples);
+    const samples = transformToBackendFormat(
+      importableEntries.map((entry) => entry.row),
+    );
+    const allowedRowIndexes = importableEntries
+      .map((entry, sentIndex) => ({ ...entry, sentIndex }))
+      .filter(
+        ({ row }) => row._isDuplicate && duplicateRowApprovals[row._rowNumber],
+      )
+      .map(({ sentIndex }) => sentIndex);
+    const duplicateResolution =
+      allowedRowIndexes.length > 0
+        ? { mode: "SUFFIX", allowedRowIndexes }
+        : undefined;
 
-    runBatchedImport(samples)
+    runBatchedImport(samples, duplicateResolution)
       .then((response) => {
         setLoading(false);
         const rowErrors = translateManifestImportMessages(
@@ -1011,6 +1163,8 @@ function ManifestUploadModal({
     departmentsLoading,
     departments.length,
     departmentId,
+    isRowImportable,
+    duplicateRowApprovals,
   ]);
 
   const handleClear = useCallback(() => {
@@ -1024,6 +1178,8 @@ function ManifestUploadModal({
     setImportResult(null);
     setValidationProgress({ completed: 0, total: 0 });
     setImportProgress({ completed: 0, total: 0 });
+    setDuplicateRowApprovals({});
+    setAllowAllDuplicates(false);
   }, []);
 
   const handleClose = useCallback(() => {
@@ -1031,66 +1187,154 @@ function ManifestUploadModal({
     onClose();
   }, [handleClear, onClose]);
 
-  const tableHeaders = [
-    { key: "row", header: "#" },
-    {
-      key: "barcode",
-      header: intl.formatMessage({
-        id: "biorepository.manifest.column.barcode",
-        defaultMessage: "Sample ID",
-      }),
-    },
-    {
-      key: "sampleType",
-      header: intl.formatMessage({
-        id: "biorepository.manifest.column.sampleType",
-        defaultMessage: "Sample Type",
-      }),
-    },
-    {
-      key: "originLab",
-      header: intl.formatMessage({
-        id: "biorepository.manifest.column.originLab",
-        defaultMessage: "Origin Lab",
-      }),
-    },
-    {
-      key: "receiptDate",
-      header: intl.formatMessage({
-        id: "biorepository.manifest.column.receiptDate",
-        defaultMessage: "Receipt Date",
-      }),
-    },
-    {
-      key: "biosafetyLevel",
-      header: intl.formatMessage({
-        id: "biorepository.manifest.column.bsl",
-        defaultMessage: "BSL",
-      }),
-    },
-    {
+  const showDuplicateColumns =
+    importStatus === "preview" && duplicateRows.length > 0;
+
+  const tableHeaders = useMemo(() => {
+    const headers = [
+      { key: "row", header: "#" },
+      {
+        key: "barcode",
+        header: intl.formatMessage({
+          id: "biorepository.manifest.column.barcode",
+          defaultMessage: "Sample ID",
+        }),
+      },
+      {
+        key: "sampleType",
+        header: intl.formatMessage({
+          id: "biorepository.manifest.column.sampleType",
+          defaultMessage: "Sample Type",
+        }),
+      },
+      {
+        key: "originLab",
+        header: intl.formatMessage({
+          id: "biorepository.manifest.column.originLab",
+          defaultMessage: "Origin Lab",
+        }),
+      },
+      {
+        key: "receiptDate",
+        header: intl.formatMessage({
+          id: "biorepository.manifest.column.receiptDate",
+          defaultMessage: "Receipt Date",
+        }),
+      },
+      {
+        key: "biosafetyLevel",
+        header: intl.formatMessage({
+          id: "biorepository.manifest.column.bsl",
+          defaultMessage: "BSL",
+        }),
+      },
+    ];
+
+    if (showDuplicateColumns) {
+      headers.push({
+        key: "include",
+        header: intl.formatMessage({
+          id: "biorepository.manifest.duplicate.column.include",
+          defaultMessage: "Include",
+        }),
+      });
+      headers.push({
+        key: "importAs",
+        header: intl.formatMessage({
+          id: "biorepository.manifest.duplicate.column.importAs",
+          defaultMessage: "Import as",
+        }),
+      });
+    }
+
+    headers.push({
       key: "status",
       header: intl.formatMessage({
         id: "biorepository.manifest.column.status",
         defaultMessage: "Status",
       }),
-    },
-  ];
+    });
 
-  const tableRows = parsedData.map((row) => ({
-    id: String(row._rowNumber),
-    row: row._rowNumber,
-    barcode: row.barcode || row.externalId || "-",
-    sampleType: row.sampleType || "-",
-    originLab: row.originLab || "-",
-    receiptDate: row.receiptDate || "-",
-    biosafetyLevel: row.biosafetyLevel || "BSL_1",
-    status: row._valid
-      ? row._backendWarnings?.length > 0
-        ? "warning"
-        : "valid"
-      : "error",
-  }));
+    return headers;
+  }, [intl, showDuplicateColumns]);
+
+  const tableRows = parsedData.map((row) => {
+    const hasNonDuplicateWarnings = (row._backendWarnings || []).some(
+      (warningMsg) =>
+        !String(warningMsg).toLowerCase().startsWith("duplicate sample id in manifest:") &&
+        !String(warningMsg).toLowerCase().startsWith("sample id already exists:"),
+    );
+    let status = "error";
+    if (row._valid) {
+      if (row._isDuplicate) {
+        status = "duplicate";
+      } else if (hasNonDuplicateWarnings) {
+        status = "warning";
+      } else {
+        status = "valid";
+      }
+    }
+
+    const tableRow = {
+      id: String(row._rowNumber),
+      row: row._rowNumber,
+      barcode: row.barcode || row.externalId || "-",
+      sampleType: row.sampleType || "-",
+      originLab: row.originLab || "-",
+      receiptDate: row.receiptDate || "-",
+      biosafetyLevel: row.biosafetyLevel || "BSL_1",
+      status,
+      _isDuplicate: row._isDuplicate,
+    };
+
+    if (showDuplicateColumns) {
+      tableRow.include = row._isDuplicate ? "checkbox" : "";
+      tableRow.importAs = row._isDuplicate
+        ? duplicateImportPreviews[row._rowNumber] || "-"
+        : "";
+    }
+
+    return tableRow;
+  });
+
+  const importButtonLabel = useMemo(() => {
+    if (approvedDuplicateCount > 0) {
+      return intl.formatMessage(
+        {
+          id: "biorepository.manifest.button.importWithDuplicates",
+          defaultMessage:
+            "Import {count} Samples ({duplicateCount} as new IDs)",
+        },
+        {
+          count: importableSampleCount,
+          duplicateCount: approvedDuplicateCount,
+        },
+      );
+    }
+    if (hardErrorCount > 0 || duplicateRows.some((row) => !duplicateRowApprovals[row._rowNumber])) {
+      return intl.formatMessage(
+        {
+          id: "biorepository.manifest.button.import",
+          defaultMessage: "Import {count} Valid Samples",
+        },
+        { count: importableSampleCount },
+      );
+    }
+    return intl.formatMessage(
+      {
+        id: "biorepository.manifest.button.importAll",
+        defaultMessage: "Import {count} Samples",
+      },
+      { count: importableSampleCount },
+    );
+  }, [
+    intl,
+    importableSampleCount,
+    approvedDuplicateCount,
+    hardErrorCount,
+    duplicateRows,
+    duplicateRowApprovals,
+  ]);
 
   // Show errors for specific rows
   const getRowErrors = (rowNumber) => {
@@ -1126,15 +1370,7 @@ function ManifestUploadModal({
         defaultMessage: "Bulk Sample Registration",
       })}
       primaryButtonText={
-        importStatus === "preview"
-          ? intl.formatMessage(
-              {
-                id: "biorepository.manifest.button.import",
-                defaultMessage: "Import {count} Valid Samples",
-              },
-              { count: validSampleCount },
-            )
-          : undefined
+        importStatus === "preview" ? importButtonLabel : undefined
       }
       secondaryButtonText={
         importStatus === "preview"
@@ -1159,7 +1395,7 @@ function ManifestUploadModal({
       }
       primaryButtonDisabled={
         loading ||
-        validSampleCount === 0 ||
+        importableSampleCount === 0 ||
         importStatus !== "preview" ||
         (requiresDepartmentSelection &&
           (departmentsLoading || departments.length === 0 || !departmentId))
@@ -1249,12 +1485,12 @@ function ManifestUploadModal({
                 "{importedCount} samples registered in intake successfully.{skippedMessage}",
             },
             {
-              importedCount: importResult?.registeredCount ?? validSampleCount,
+              importedCount: importResult?.registeredCount ?? importableSampleCount,
               skippedMessage:
                 (importResult?.failedCount ?? 0) > 0
                   ? ` ${importResult.failedCount} sample(s) could not be imported.`
-                  : parsedData.length > validSampleCount
-                    ? ` ${parsedData.length - validSampleCount} invalid sample(s) were skipped.`
+                  : parsedData.length > importableSampleCount
+                    ? ` ${parsedData.length - importableSampleCount} sample(s) were skipped.`
                     : "",
             },
           )}
@@ -1646,7 +1882,7 @@ function ManifestUploadModal({
                 {validationErrors.length} error(s)
               </Tag>
             )}
-            {validationErrors.length === 0 && (
+            {validationErrors.length === 0 && duplicateRows.length === 0 && (
               <Tag type="green">
                 <Checkmark size={16} style={{ marginRight: "0.25rem" }} />
                 <FormattedMessage
@@ -1655,13 +1891,84 @@ function ManifestUploadModal({
                 />
               </Tag>
             )}
-            {validationWarnings.length > 0 && (
+            {duplicateRows.length > 0 && (
+              <Tag type="purple" style={{ marginLeft: "0.5rem" }}>
+                <Warning size={16} style={{ marginRight: "0.25rem" }} />
+                {intl.formatMessage(
+                  {
+                    id: "biorepository.manifest.duplicate.count",
+                    defaultMessage: "{count} duplicate(s)",
+                  },
+                  { count: duplicateRows.length },
+                )}
+              </Tag>
+            )}
+            {validationWarnings.some((warning) => warning.field === "sampleType") && (
               <Tag type="warm-gray" style={{ marginLeft: "0.5rem" }}>
                 <Warning size={16} style={{ marginRight: "0.25rem" }} />
-                {validationWarnings.length} warning(s)
+                <FormattedMessage
+                  id="biorepository.manifest.preview.sampleTypeWarnings"
+                  defaultMessage="New sample type warnings"
+                />
               </Tag>
             )}
           </div>
+
+          {duplicateRows.length > 0 && (
+            <InlineNotification
+              kind="info"
+              title={intl.formatMessage({
+                id: "biorepository.manifest.duplicate.title",
+                defaultMessage: "Duplicate Sample IDs",
+              })}
+              subtitle={intl.formatMessage(
+                {
+                  id: "biorepository.manifest.duplicate.descriptionCount",
+                  defaultMessage:
+                    "{count} row(s) reuse a Sample ID already in this file or the system. Approved duplicates are registered with auto-generated unique IDs (for example, H-0001-R2). Unapproved duplicate rows are skipped.",
+                },
+                { count: duplicateRows.length },
+              )}
+              lowContrast
+              hideCloseButton
+              style={{ marginBottom: "1rem" }}
+            />
+          )}
+
+          {duplicateRows.length > 0 && (
+            <div style={{ marginBottom: "1rem" }}>
+              <Checkbox
+                id="allow-all-duplicates"
+                labelText={intl.formatMessage({
+                  id: "biorepository.manifest.duplicate.allowAll",
+                  defaultMessage:
+                    "Import duplicates as new samples (auto-assign unique IDs)",
+                })}
+                checked={allowAllDuplicates}
+                onChange={(_, { checked }) =>
+                  handleToggleAllowAllDuplicates(checked)
+                }
+              />
+            </div>
+          )}
+
+          {duplicateRows.length > 0 && importableSampleCount === 0 && (
+            <InlineNotification
+              kind="warning"
+              title={intl.formatMessage({
+                id: "biorepository.manifest.duplicate.approvalRequired.title",
+                defaultMessage: "Approval required to import duplicates",
+              })}
+              subtitle={intl.formatMessage({
+                id: "biorepository.manifest.duplicate.approvalRequired.subtitle",
+                defaultMessage:
+                  'Check "Import duplicates as new samples" above, or use Include on individual rows, then click Import.',
+              })}
+              lowContrast
+              hideCloseButton
+              style={{ marginBottom: "1rem" }}
+            />
+          )}
 
           {validationErrors.length > 0 && (
             <InlineNotification
@@ -1681,7 +1988,7 @@ function ManifestUploadModal({
             />
           )}
 
-          {validationErrors.length > 0 && validSampleCount > 0 && (
+          {validationErrors.length > 0 && importableSampleCount > 0 && (
             <InlineNotification
               kind="info"
               title={intl.formatMessage({
@@ -1694,7 +2001,7 @@ function ManifestUploadModal({
                   defaultMessage:
                     "{count} valid sample(s) can still be imported. Rows marked Error will be skipped.",
                 },
-                { count: validSampleCount },
+                { count: importableSampleCount },
               )}
               lowContrast
               hideCloseButton
@@ -1767,6 +2074,13 @@ function ManifestUploadModal({
                                         defaultMessage="Will Create Type"
                                       />
                                     </Tag>
+                                  ) : cell.value === "duplicate" ? (
+                                    <Tag type="purple" size="sm">
+                                      <FormattedMessage
+                                        id="biorepository.manifest.status.duplicate"
+                                        defaultMessage="Duplicate"
+                                      />
+                                    </Tag>
                                   ) : (
                                     <Tag type="red" size="sm">
                                       <FormattedMessage
@@ -1775,6 +2089,22 @@ function ManifestUploadModal({
                                       />
                                     </Tag>
                                   )
+                                ) : cell.info.key === "include" &&
+                                  cell.value === "checkbox" ? (
+                                  <Checkbox
+                                    id={`duplicate-include-${row.id}`}
+                                    labelText=""
+                                    hideLabel
+                                    checked={Boolean(
+                                      duplicateRowApprovals[rowNumber],
+                                    )}
+                                    onChange={(_, { checked }) =>
+                                      handleToggleDuplicateRow(
+                                        rowNumber,
+                                        checked,
+                                      )
+                                    }
+                                  />
                                 ) : (
                                   cell.value
                                 )}

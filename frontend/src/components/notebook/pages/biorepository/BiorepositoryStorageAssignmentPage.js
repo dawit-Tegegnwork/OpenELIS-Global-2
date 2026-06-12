@@ -11,6 +11,7 @@ import {
   TextInput,
   TextArea,
   Tag,
+  NumberInput,
 } from "@carbon/react";
 import {
   Archive,
@@ -145,6 +146,7 @@ function BiorepositoryStorageAssignmentPage({
     notes: "",
   });
   const [temperatureWarning, setTemperatureWarning] = useState(null);
+  const [retentionYears, setRetentionYears] = useState(5);
   const [bioSampleData, setBioSampleData] = useState({}); // Map of sampleItemId -> BioSample data
 
   // Reassignment confirmation modal state
@@ -533,6 +535,7 @@ function BiorepositoryStorageAssignmentPage({
     setError(null);
     setWellAssignments({});
     setTemperatureWarning(null);
+    setRetentionYears(5);
     setBulkAssignValues({
       storageCondition: "",
       assignedBy: "",
@@ -680,6 +683,12 @@ function BiorepositoryStorageAssignmentPage({
 
     let assignData;
 
+    const assignedDate = bulkAssignValues.assignedDateTime
+      ? new Date(bulkAssignValues.assignedDateTime)
+      : new Date();
+    const expiryDate = new Date(assignedDate);
+    expiryDate.setFullYear(expiryDate.getFullYear() + retentionYears);
+
     // Common data for both box and shelf assignments
     const commonData = {
       storageRoom: storageSelection.room?.label,
@@ -693,6 +702,9 @@ function BiorepositoryStorageAssignmentPage({
       assignedDateTime:
         bulkAssignValues.assignedDateTime || new Date().toISOString(),
       notes: bulkAssignValues.notes,
+      retentionYears,
+      retentionExpiry: expiryDate.toISOString().slice(0, 10),
+      dateStored: assignedDate.toISOString().slice(0, 10),
     };
 
     if (storageSelection.box) {
@@ -799,6 +811,7 @@ function BiorepositoryStorageAssignmentPage({
     storageSelection,
     wellAssignments,
     bulkAssignValues,
+    retentionYears,
     isReassignment,
     selectedSampleIds,
     intl,
@@ -1220,6 +1233,36 @@ function BiorepositoryStorageAssignmentPage({
                   style={{ marginTop: "0.5rem" }}
                 />
               )}
+            </div>
+
+            {/* Retention Period */}
+            <div style={{ marginTop: "1rem" }}>
+              <NumberInput
+                id="retention-years"
+                label={intl.formatMessage({
+                  id: "biorepository.storage.retentionYears",
+                  defaultMessage: "Retention Period (Years)",
+                })}
+                value={retentionYears}
+                min={1}
+                max={99}
+                step={1}
+                onChange={(e, { value }) =>
+                  setRetentionYears(parseInt(value, 10) || 5)
+                }
+                helperText={intl.formatMessage(
+                  {
+                    id: "biorepository.storage.retentionExpiry",
+                    defaultMessage:
+                      "Sample will be stored until {date} (from assignment date)",
+                  },
+                  {
+                    date: new Date(
+                      Date.now() + retentionYears * 365 * 24 * 60 * 60 * 1000,
+                    ).toLocaleDateString(),
+                  },
+                )}
+              />
             </div>
 
             {/* Assigned By */}

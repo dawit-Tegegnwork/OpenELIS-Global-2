@@ -50,6 +50,7 @@ public class ManifestValidationResponse {
     public static class RowValidationResult {
         private int rowIndex;
         private boolean valid = true;
+        private DuplicateIssue duplicateIssue = DuplicateIssue.NONE;
         private List<String> errors = new ArrayList<>();
         private List<String> warnings = new ArrayList<>();
 
@@ -95,6 +96,19 @@ public class ManifestValidationResponse {
         }
 
         public void addWarning(String warning) {
+            this.warnings.add(warning);
+        }
+
+        public DuplicateIssue getDuplicateIssue() {
+            return duplicateIssue;
+        }
+
+        public void setDuplicateIssue(DuplicateIssue duplicateIssue) {
+            this.duplicateIssue = duplicateIssue;
+        }
+
+        public void addDuplicateWarning(DuplicateIssue issue, String warning) {
+            this.duplicateIssue = issue;
             this.warnings.add(warning);
         }
     }

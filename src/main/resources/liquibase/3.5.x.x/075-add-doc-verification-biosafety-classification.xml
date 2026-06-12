@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+    xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+      http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-3.8.xsd">
+
+    <changeSet id="add-doc-verification-biosafety-classification" author="openelis-biorepository">
+        <preConditions onFail="MARK_RAN">
+            <tableExists tableName="documentation_verification" schemaName="clinlims"/>
+            <not>
+                <columnExists tableName="documentation_verification" schemaName="clinlims" columnName="biosafety_classification"/>
+            </not>
+        </preConditions>
+        <comment>Store verified biosafety classification level on documentation verification</comment>
+        <addColumn tableName="documentation_verification" schemaName="clinlims">
+            <column name="biosafety_classification" type="VARCHAR(10)"/>
+        </addColumn>
+        <rollback>
+            <dropColumn tableName="documentation_verification" schemaName="clinlims" columnName="biosafety_classification"/>
+        </rollback>
+    </changeSet>
+
+</databaseChangeLog>

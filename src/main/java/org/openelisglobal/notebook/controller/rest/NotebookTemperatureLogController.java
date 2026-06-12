@@ -20,6 +20,7 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.ResponseBody;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -138,6 +139,49 @@ public class NotebookTemperatureLogController extends BaseRestController {
         }
     }
 
+    /**
+     * Bulk import temperature readings from CSV-parsed rows. POST
+     * /rest/notebook-entry/{entryId}/temperature-logs/import
+     */
+    @PostMapping(value = "/{entryId}/temperature-logs/import", produces = MediaType.APPLICATION_JSON_VALUE)
+    @ResponseBody
+    public ResponseEntity<Map<String, Object>> importTemperatureLogs(@PathVariable("entryId") Integer entryId,
+            @RequestBody TemperatureLogImportRequest request,
+            @RequestParam(value = "deviceCode", required = false) String deviceCode,
+            HttpServletRequest httpRequest) {
+
+        String sysUserId = getSysUserId(httpRequest);
+        if (sysUserId == null) {
+            Map<String, Object> error = new HashMap<>();
+            error.put("error", "User session not found");
+            return ResponseEntity.status(401).body(error);
+        }
+
+        if (request.getRows() == null || request.getRows().isEmpty()) {
+            Map<String, Object> error = new HashMap<>();
+            error.put("error", "No rows provided for import");
+            return ResponseEntity.badRequest().body(error);
+        }
+
+        String scopeDeviceCode = deviceCode != null && !deviceCode.isBlank() ? deviceCode.trim()
+                : (request.getDeviceCode() != null && !request.getDeviceCode().isBlank() ? request.getDeviceCode().trim()
+                        : null);
+
+        Map<String, Object> result = temperatureLogService.importTemperatureLogs(entryId, request.getRows(),
+                scopeDeviceCode, sysUserId);
+
+        if (Boolean.FALSE.equals(result.get("success")) && result.get("importedCount") == null) {
+            return ResponseEntity.badRequest().body(result);
+        }
+
+        Integer importedCount = (Integer) result.get("importedCount");
+        if (importedCount != null && importedCount == 0) {
+            return ResponseEntity.badRequest().body(result);
+        }
+
+        return ResponseEntity.ok(result);
+    }
+
     @Override
     protected String getSysUserId(HttpServletRequest request) {
         UserSessionData usd = (UserSessionData) request.getSession().getAttribute(USER_SESSION_DATA);
@@ -223,6 +267,28 @@ public class NotebookTemperatureLogController extends BaseRestController {
 
         public void setDeviceType(String deviceType) {
             this.deviceType = deviceType;
+        }
+    }
+
+    @com.fasterxml.jackson.annotation.JsonIgnoreProperties(ignoreUnknown = true)
+    public static class TemperatureLogImportRequest {
+        private String deviceCode;
+        private List<Map<String, Object>> rows;
+
+        public String getDeviceCode() {
+            return deviceCode;
+        }
+
+        public void setDeviceCode(String deviceCode) {
+            this.deviceCode = deviceCode;
+        }
+
+        public List<Map<String, Object>> getRows() {
+            return rows;
+        }
+
+        public void setRows(List<Map<String, Object>> rows) {
+            this.rows = rows;
         }
     }
 

@@ -434,6 +434,22 @@ public class NotebookRoomEnvironmentLogControllerIntegrationTest extends BaseWeb
         assertEquals("O2 should match via API", expectedO2, foundLog.get("oxygenLevel").asDouble(), 0.01);
     }
 
+    @Test
+    public void testImportRoomEnvironmentLogs_ImportsValidRows() throws Exception {
+        String payload = "{" + "\"rows\": [" + "{" + "\"roomCode\": \"ROOM-IMPORT-001\","
+                + "\"roomName\": \"Import Room\"," + "\"checkedDateTime\": \"2026-06-11T08:00\","
+                + "\"oxygenLevel\": 20.5," + "\"humidity\": 45.0," + "\"checkedBy\": \"AB\"" + "}" + "]" + "}";
+
+        MvcResult result = mockMvc
+                .perform(post("/rest/notebook-entry/" + testEntry.getId() + "/room-environment-logs/import")
+                        .session(mockSession).contentType(MediaType.APPLICATION_JSON).content(payload))
+                .andExpect(status().isOk()).andReturn();
+
+        JsonNode responseJson = objectMapper.readTree(result.getResponse().getContentAsString());
+        assertEquals(1, responseJson.get("importedCount").asInt());
+        assertTrue(responseJson.get("success").asBoolean());
+    }
+
     // ========== HELPER METHODS ==========
 
     private NoteBook createTestNotebook(String title) {

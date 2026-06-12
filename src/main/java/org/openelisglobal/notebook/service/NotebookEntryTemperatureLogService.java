@@ -2,6 +2,7 @@ package org.openelisglobal.notebook.service;
 
 import java.sql.Timestamp;
 import java.util.List;
+import java.util.Map;
 import org.openelisglobal.common.service.BaseObjectService;
 import org.openelisglobal.notebook.valueholder.NotebookEntryTemperatureLog;
 
@@ -52,5 +53,17 @@ public interface NotebookEntryTemperatureLogService extends BaseObjectService<No
      */
     NotebookEntryTemperatureLog logTemperature(Integer entryId, String freezerId, String checkTime,
             Double temperatureValue, String temperatureUnit, String checkedBy, Timestamp checkedDateTime, String notes,
+            String sysUserId);
+
+    /**
+     * Bulk import temperature readings for a notebook entry.
+     *
+     * @param entryId        notebook entry ID
+     * @param rows           import rows (deviceCode, checkedDateTime, etc.)
+     * @param scopeDeviceCode when set, all rows apply to this device code
+     * @param sysUserId      current user
+     * @return map with importedCount, skippedCount, errors
+     */
+    Map<String, Object> importTemperatureLogs(Integer entryId, List<Map<String, Object>> rows, String scopeDeviceCode,
             String sysUserId);
 }

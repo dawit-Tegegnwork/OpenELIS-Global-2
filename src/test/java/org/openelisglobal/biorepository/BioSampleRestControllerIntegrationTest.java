@@ -382,9 +382,10 @@ public class BioSampleRestControllerIntegrationTest extends BaseWebContextSensit
         assertTrue("Should have at least one row", rows.size() > 0);
 
         JsonNode firstRow = rows.get(0);
-        assertTrue("Row should have 'errors' field", firstRow.has("errors"));
-        JsonNode errors = firstRow.get("errors");
-        assertTrue("Should have errors for duplicate barcode", errors.size() > 0);
+        assertTrue("Row should have 'warnings' field", firstRow.has("warnings"));
+        JsonNode warnings = firstRow.get("warnings");
+        assertTrue("Should have warnings for duplicate barcode", warnings.size() > 0);
+        assertEquals("IN_DATABASE", firstRow.get("duplicateIssue").asText());
     }
 
     @Test

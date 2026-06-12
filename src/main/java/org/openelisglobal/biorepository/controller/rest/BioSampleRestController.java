@@ -24,9 +24,11 @@ import org.openelisglobal.biorepository.dao.BioSampleRetrievalSearchCriteria;
 import org.openelisglobal.biorepository.controller.rest.dto.BioSampleLifecycleEventDTO;
 import org.openelisglobal.biorepository.controller.rest.dto.BioSampleListDTO;
 import org.openelisglobal.biorepository.controller.rest.dto.BulkRegistrationResponse;
+import org.openelisglobal.biorepository.controller.rest.dto.DuplicateIssue;
 import org.openelisglobal.biorepository.controller.rest.dto.ManifestImportRequest;
 import org.openelisglobal.biorepository.controller.rest.dto.ManifestValidationResponse;
 import org.openelisglobal.biorepository.controller.rest.dto.SampleRegistrationDTO;
+import org.openelisglobal.biorepository.service.ManifestDuplicateResolver;
 import org.openelisglobal.biorepository.service.BioSampleFulfillmentSearchService;
 import org.openelisglobal.biorepository.service.BioSampleLifecycleService;
 import org.openelisglobal.biorepository.service.BioSampleService;
@@ -1307,6 +1309,9 @@ public class BioSampleRestController extends BaseRestController {
             if (request.getBarcode() == null || request.getBarcode().trim().isEmpty()) {
                 return ResponseEntity.badRequest().body(Map.of("error", "Barcode is required"));
             }
+            if (request.getExternalId() == null || request.getExternalId().trim().isEmpty()) {
+                return ResponseEntity.badRequest().body(Map.of("error", "External/Donor ID is required"));
+            }
             if (request.getSampleTypeId() == null) {
                 return ResponseEntity.badRequest().body(Map.of("error", "Sample type is required"));
             }
@@ -1574,16 +1579,22 @@ public class BioSampleRestController extends BaseRestController {
                 rowResult.addError("Barcode is required");
             } else {
                 barcode = barcode.trim();
-                // Check for duplicates within the manifest
-                if (seenBarcodes.contains(barcode)) {
-                    rowResult.addError("Duplicate sample ID in manifest: " + barcode);
+                boolean duplicateInManifest = seenBarcodes.contains(barcode);
+                boolean duplicateInDatabase = existingBarcodes.contains(barcode);
+                if (duplicateInManifest) {
+                    rowResult.addDuplicateWarning(DuplicateIssue.IN_MANIFEST,
+                            "Duplicate sample ID in manifest: " + barcode);
+                } else if (duplicateInDatabase) {
+                    rowResult.addDuplicateWarning(DuplicateIssue.IN_DATABASE,
+                            "Sample ID already exists: " + barcode);
+                    seenBarcodes.add(barcode);
                 } else {
                     seenBarcodes.add(barcode);
                 }
-                // Check for existing barcode in database
-                if (existingBarcodes.contains(barcode)) {
-                    rowResult.addError("Sample ID already exists: " + barcode);
-                }
+            }
+
+            if (sample.getExternalId() == null || sample.getExternalId().trim().isEmpty()) {
+                rowResult.addError("External/Donor ID is required");
             }
 
             // Validate sample type
@@ -1700,8 +1711,49 @@ public class BioSampleRestController extends BaseRestController {
         TransactionTemplate rowTransaction = new TransactionTemplate(transactionManager);
         rowTransaction.setPropagationBehavior(TransactionDefinition.PROPAGATION_REQUIRES_NEW);
 
-        for (SampleRegistrationDTO dto : samples) {
+        Set<Integer> allowedDuplicateIndexes = new HashSet<>();
+        ManifestImportRequest.DuplicateResolution duplicateResolution = request.getDuplicateResolution();
+        if (duplicateResolution != null && duplicateResolution.getAllowedRowIndexes() != null) {
+            allowedDuplicateIndexes.addAll(duplicateResolution.getAllowedRowIndexes());
+        }
+
+        List<String> manifestBarcodes = new ArrayList<>();
+        for (SampleRegistrationDTO sample : samples) {
+            String barcode = firstNonBlank(sample.getBarcode(), sample.getExternalId());
+            if (barcode != null && !barcode.trim().isEmpty()) {
+                manifestBarcodes.add(barcode.trim());
+            }
+        }
+        Set<String> existingBarcodes = bioSampleService.findExistingBarcodes(manifestBarcodes);
+        Set<String> seenInBatch = new HashSet<>();
+
+        for (int rowIndex = 0; rowIndex < samples.size(); rowIndex++) {
+            SampleRegistrationDTO dto = samples.get(rowIndex);
             try {
+                String barcode = firstNonBlank(dto.getBarcode(), dto.getExternalId());
+                if (barcode != null && !barcode.isBlank()) {
+                    String normalizedBarcode = barcode.trim();
+                    boolean duplicateInManifest = seenInBatch.contains(normalizedBarcode);
+                    boolean duplicateInDatabase = existingBarcodes.contains(normalizedBarcode);
+                    boolean isDuplicate = duplicateInManifest || duplicateInDatabase;
+
+                    if (isDuplicate) {
+                        if (!allowedDuplicateIndexes.contains(rowIndex)) {
+                            response.addRowError(
+                                    "Duplicate Sample ID skipped (not approved): " + normalizedBarcode);
+                            continue;
+                        }
+                        String resolvedBarcode = ManifestDuplicateResolver.resolveUniqueBarcode(normalizedBarcode,
+                                seenInBatch, existingBarcodes);
+                        dto.setBarcode(resolvedBarcode);
+                        dto.setSpecialHandling(ManifestDuplicateResolver.appendOriginalSampleIdNote(
+                                dto.getSpecialHandling(), normalizedBarcode));
+                        seenInBatch.add(resolvedBarcode);
+                    } else {
+                        seenInBatch.add(normalizedBarcode);
+                    }
+                }
+
                 if (dto.getProjectId() != null && !dto.getProjectId().isBlank()
                         && !departmentIsolationService.isInventoryProjectConsistent(departmentResult.departmentId,
                                 dto.getProjectId())) {

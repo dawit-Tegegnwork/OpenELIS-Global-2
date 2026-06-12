@@ -37,6 +37,7 @@ import {
   Dashboard,
   Humidity,
   Building,
+  Upload,
 } from "@carbon/react/icons";
 import { FormattedMessage, useIntl } from "react-intl";
 import PropTypes from "prop-types";
@@ -45,6 +46,7 @@ import {
   postToOpenElisServer,
 } from "../../../utils/Utils";
 import { buildBiorepositoryStorageUrl } from "./biorepositoryStorageHelpers";
+import EnvironmentalCsvImportModal from "./EnvironmentalCsvImportModal";
 import "../../workflow/NotebookWorkflow.css";
 
 /**
@@ -144,6 +146,10 @@ function BiorepositoryEnvironmentalMonitoringPage({
     checkedDateTime: getLocalDateTimeString(),
     notes: "",
   });
+
+  const [importModalOpen, setImportModalOpen] = useState(false);
+  const [importType, setImportType] = useState("device");
+  const [importScopeUnit, setImportScopeUnit] = useState(null);
 
   // Load temperature logs
   const loadTemperatureLogs = useCallback(() => {
@@ -337,10 +343,62 @@ function BiorepositoryEnvironmentalMonitoringPage({
     }));
   };
 
+  const openImportModal = (type, scopeUnit = null) => {
+    setImportType(type);
+    setImportScopeUnit(scopeUnit);
+    setImportModalOpen(true);
+    setError(null);
+  };
+
+  const handleImportSuccess = (response) => {
+    const importedCount = response?.importedCount || 0;
+    const skippedCount = response?.skippedCount || 0;
+    const skippedSuffix =
+      skippedCount > 0
+        ? intl.formatMessage(
+            {
+              id: "biorepository.environmental.import.skippedSuffix",
+              defaultMessage: " ({skipped} skipped)",
+            },
+            { skipped: skippedCount },
+          )
+        : "";
+    setSuccessMessage(
+      intl.formatMessage(
+        {
+          id: "biorepository.environmental.import.success",
+          defaultMessage: "Imported {imported} reading(s){skippedSuffix}.",
+        },
+        { imported: importedCount, skippedSuffix },
+      ),
+    );
+    if (importType === "device") {
+      loadTemperatureLogs();
+      loadDevices();
+    } else {
+      loadRoomEnvLogs();
+      loadRooms();
+    }
+  };
+
   // Open room environment modal
-  const openRoomEnvModal = () => {
+  const openRoomEnvModal = (room = null) => {
     setRoomEnvModalOpen(true);
     setError(null);
+
+    if (room) {
+      setRoomEnvForm({
+        roomId: String(room.id || room.name || ""),
+        roomName: room.name || "",
+        oxygenLevel: "",
+        humidity: "",
+        checkedBy: "",
+        checkedDateTime: getLocalDateTimeString(),
+        notes: "",
+      });
+      return;
+    }
+
     setRoomEnvForm({
       roomId: "",
       roomName: "",
@@ -884,6 +942,18 @@ function BiorepositoryEnvironmentalMonitoringPage({
                   defaultMessage="Log Temperature"
                 />
               </Button>
+              <Button
+                kind="secondary"
+                size="sm"
+                renderIcon={Upload}
+                onClick={() => openImportModal("device")}
+                disabled={!entryId}
+              >
+                <FormattedMessage
+                  id="biorepository.environmental.importCsv"
+                  defaultMessage="Import CSV"
+                />
+              </Button>
 
               <div
                 style={{
@@ -965,18 +1035,18 @@ function BiorepositoryEnvironmentalMonitoringPage({
                       key={device.id}
                       style={{
                         padding: "0.75rem 1rem",
-                        cursor: "pointer",
                         border: "1px solid #da1e28",
                         backgroundColor: "#fff1f1",
                       }}
-                      onClick={() => openTempModal(device)}
                     >
                       <div
                         style={{
                           display: "flex",
                           alignItems: "center",
                           gap: "0.5rem",
+                          cursor: "pointer",
                         }}
+                        onClick={() => openTempModal(device)}
                       >
                         <Time size={16} style={{ color: "#da1e28" }} />
                         <strong>{device.name || device.code}</strong>
@@ -987,8 +1057,43 @@ function BiorepositoryEnvironmentalMonitoringPage({
                           />
                         </Tag>
                       </div>
-                      <div style={{ fontSize: "0.75rem", color: "#525252" }}>
+                      <div
+                        style={{
+                          fontSize: "0.75rem",
+                          color: "#525252",
+                          marginTop: "0.25rem",
+                        }}
+                      >
                         {device.deviceType || "Unknown Type"}
+                      </div>
+                      <div
+                        style={{
+                          display: "flex",
+                          gap: "0.5rem",
+                          marginTop: "0.5rem",
+                        }}
+                      >
+                        <Button
+                          kind="ghost"
+                          size="sm"
+                          onClick={() => openTempModal(device)}
+                        >
+                          <FormattedMessage
+                            id="biorepository.environmental.log"
+                            defaultMessage="Log"
+                          />
+                        </Button>
+                        <Button
+                          kind="ghost"
+                          size="sm"
+                          renderIcon={Upload}
+                          onClick={() => openImportModal("device", device)}
+                        >
+                          <FormattedMessage
+                            id="biorepository.environmental.importCsv"
+                            defaultMessage="Import CSV"
+                          />
+                        </Button>
                       </div>
                     </Tile>
                   ))}
@@ -1103,12 +1208,24 @@ function BiorepositoryEnvironmentalMonitoringPage({
                 kind="primary"
                 size="sm"
                 renderIcon={Add}
-                onClick={openRoomEnvModal}
+                onClick={() => openRoomEnvModal()}
                 disabled={!entryId}
               >
                 <FormattedMessage
                   id="biorepository.environmental.logRoomEnvironment"
                   defaultMessage="Log Room Environment"
+                />
+              </Button>
+              <Button
+                kind="secondary"
+                size="sm"
+                renderIcon={Upload}
+                onClick={() => openImportModal("room")}
+                disabled={!entryId}
+              >
+                <FormattedMessage
+                  id="biorepository.environmental.importCsv"
+                  defaultMessage="Import CSV"
                 />
               </Button>
 
@@ -1146,6 +1263,94 @@ function BiorepositoryEnvironmentalMonitoringPage({
               hideCloseButton
               style={{ marginTop: "1rem" }}
             />
+
+            {/* Storage Rooms */}
+            <div style={{ marginTop: "1.5rem" }}>
+              <h5 style={{ marginBottom: "0.5rem" }}>
+                <Building size={16} style={{ marginRight: "0.5rem" }} />
+                <FormattedMessage
+                  id="biorepository.environmental.storageRooms"
+                  defaultMessage="Storage Rooms"
+                />
+              </h5>
+              {loadingRooms ? (
+                <p>
+                  <FormattedMessage
+                    id="common.loading"
+                    defaultMessage="Loading..."
+                  />
+                </p>
+              ) : rooms.length === 0 ? (
+                <InlineNotification
+                  kind="info"
+                  title={intl.formatMessage({
+                    id: "biorepository.environmental.noRooms",
+                    defaultMessage: "No storage rooms configured.",
+                  })}
+                  lowContrast
+                  hideCloseButton
+                />
+              ) : (
+                <div
+                  style={{
+                    display: "flex",
+                    gap: "0.5rem",
+                    flexWrap: "wrap",
+                    marginTop: "0.5rem",
+                  }}
+                >
+                  {rooms.map((room) => (
+                    <Tile
+                      key={room.id}
+                      style={{
+                        padding: "0.75rem 1rem",
+                        minWidth: "220px",
+                      }}
+                    >
+                      <strong>{room.name || room.code}</strong>
+                      <div
+                        style={{
+                          fontSize: "0.75rem",
+                          color: "#525252",
+                          marginTop: "0.25rem",
+                        }}
+                      >
+                        {room.code || room.id}
+                      </div>
+                      <div
+                        style={{
+                          display: "flex",
+                          gap: "0.5rem",
+                          marginTop: "0.5rem",
+                        }}
+                      >
+                        <Button
+                          kind="ghost"
+                          size="sm"
+                          onClick={() => openRoomEnvModal(room)}
+                        >
+                          <FormattedMessage
+                            id="biorepository.environmental.log"
+                            defaultMessage="Log"
+                          />
+                        </Button>
+                        <Button
+                          kind="ghost"
+                          size="sm"
+                          renderIcon={Upload}
+                          onClick={() => openImportModal("room", room)}
+                        >
+                          <FormattedMessage
+                            id="biorepository.environmental.importCsv"
+                            defaultMessage="Import CSV"
+                          />
+                        </Button>
+                      </div>
+                    </Tile>
+                  ))}
+                </div>
+              )}
+            </div>
 
             {/* Recent Room Environment Logs */}
             <div style={{ marginTop: "1.5rem" }}>
@@ -1542,6 +1747,17 @@ function BiorepositoryEnvironmentalMonitoringPage({
           </Column>
         </Grid>
       </Modal>
+
+      <EnvironmentalCsvImportModal
+        open={importModalOpen}
+        onClose={() => setImportModalOpen(false)}
+        entryId={entryId ? Number(entryId) : null}
+        importType={importType}
+        scopeUnit={importScopeUnit}
+        devices={devices}
+        rooms={rooms}
+        onImportSuccess={handleImportSuccess}
+      />
     </div>
   );
 }

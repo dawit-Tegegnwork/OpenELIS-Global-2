@@ -23,9 +23,8 @@ import org.springframework.beans.factory.annotation.Autowired;
  * Integration tests for DocumentationVerificationService.
  *
  * DocumentationVerification is now at shipment level (one verification per
- * shipment). Tests verify the 7-point verification checklist workflow: - Points
- * 1-2: Auto-verified (system validates against shipment/project data) - Points
- * 3-5: Manual verification required - Points 6-7: Conditional (N/A allowed with
+ * shipment). Tests verify the 6-point verification checklist workflow: - Points
+ * 1-4: Manual verification required - Points 5-6: Conditional (N/A allowed with
  * justification)
  */
 public class DocumentationVerificationServiceIntegrationTest extends BaseWebContextSensitiveTest {
@@ -199,7 +198,6 @@ public class DocumentationVerificationServiceIntegrationTest extends BaseWebCont
 
         // Act - Verify all mandatory items
         verificationService.updateVerificationItem(verification.getId(), "sampleIdentifiers", true, false, null);
-        verificationService.updateVerificationItem(verification.getId(), "projectLinkage", true, false, null);
         verificationService.updateVerificationItem(verification.getId(), "ethicsApproval", true, false, null);
         verificationService.updateVerificationItem(verification.getId(), "biosafetyMatch", true, false, null);
         verificationService.updateVerificationItem(verification.getId(), "packagingIntegrity", true, false, null);
@@ -208,7 +206,7 @@ public class DocumentationVerificationServiceIntegrationTest extends BaseWebCont
                 "mtaDocumented", true, false, null);
 
         // Assert
-        assertEquals("Completed count should be 7", 7, updated.getCompletedCount());
+        assertEquals("Completed count should be 6", 6, updated.getCompletedCount());
         assertTrue("Verification should be complete", updated.isComplete());
     }
 
@@ -234,7 +232,6 @@ public class DocumentationVerificationServiceIntegrationTest extends BaseWebCont
 
         // Verify all items
         verificationService.updateVerificationItem(verification.getId(), "sampleIdentifiers", true, false, null);
-        verificationService.updateVerificationItem(verification.getId(), "projectLinkage", true, false, null);
         verificationService.updateVerificationItem(verification.getId(), "ethicsApproval", true, false, null);
         verificationService.updateVerificationItem(verification.getId(), "biosafetyMatch", true, false, null);
         verificationService.updateVerificationItem(verification.getId(), "packagingIntegrity", true, false, null);
@@ -266,7 +263,6 @@ public class DocumentationVerificationServiceIntegrationTest extends BaseWebCont
 
         // Only verify some items
         verificationService.updateVerificationItem(verification.getId(), "sampleIdentifiers", true, false, null);
-        verificationService.updateVerificationItem(verification.getId(), "projectLinkage", true, false, null);
 
         // Act - should throw because not all items verified
         verificationService.completeVerification(verification.getId(), Integer.valueOf(testUser.getId()));
@@ -353,18 +349,18 @@ public class DocumentationVerificationServiceIntegrationTest extends BaseWebCont
 
         // Assert initial state
         assertEquals("Initial completed count should be 0", 0, verification.getCompletedCount());
-        assertEquals("Total count should be 7", 7, verification.getTotalCount());
+        assertEquals("Total count should be 6", 6, verification.getTotalCount());
         assertFalse("Should not be complete initially", verification.isComplete());
 
         // Verify 3 items
         verificationService.updateVerificationItem(verification.getId(), "sampleIdentifiers", true, false, null);
-        verificationService.updateVerificationItem(verification.getId(), "projectLinkage", true, false, null);
+        verificationService.updateVerificationItem(verification.getId(), "ethicsApproval", true, false, null);
         DocumentationVerification updated = verificationService.updateVerificationItem(verification.getId(),
-                "ethicsApproval", true, false, null);
+                "biosafetyMatch", true, false, null);
 
         // Assert progress
         assertEquals("Completed count should be 3", 3, updated.getCompletedCount());
-        assertFalse("Should not be complete with 3/7", updated.isComplete());
+        assertFalse("Should not be complete with 3/6", updated.isComplete());
     }
 
     @Test
@@ -376,7 +372,6 @@ public class DocumentationVerificationServiceIntegrationTest extends BaseWebCont
 
         // Verify mandatory items
         verificationService.updateVerificationItem(verification.getId(), "sampleIdentifiers", true, false, null);
-        verificationService.updateVerificationItem(verification.getId(), "projectLinkage", true, false, null);
         verificationService.updateVerificationItem(verification.getId(), "ethicsApproval", true, false, null);
         verificationService.updateVerificationItem(verification.getId(), "biosafetyMatch", true, false, null);
         verificationService.updateVerificationItem(verification.getId(), "packagingIntegrity", true, false, null);
@@ -388,8 +383,25 @@ public class DocumentationVerificationServiceIntegrationTest extends BaseWebCont
                 "mtaDocumented", false, true, "Internal samples - no MTA needed");
 
         // Assert - N/A items with justification should count as complete
-        assertEquals("Completed count should be 7", 7, updated.getCompletedCount());
+        assertEquals("Completed count should be 6", 6, updated.getCompletedCount());
         assertTrue("Should be complete with all items verified or N/A", updated.isComplete());
+    }
+
+    @Test
+    public void testUpdateVerificationNotes_OptionalTextDoesNotAffectCompletion() {
+        // Arrange
+        Shipment shipment = createTestShipment("VERIFY-NOTES-" + System.currentTimeMillis());
+        DocumentationVerification verification = verificationService.createForShipment(shipment.getId(),
+                testUser.getId().toString());
+
+        // Act
+        DocumentationVerification updated = verificationService.updateVerificationNotes(verification.getId(),
+                "Optional shipment notes", testUser.getId().toString());
+
+        // Assert
+        assertEquals("Notes should be saved", "Optional shipment notes", updated.getVerificationNotes());
+        assertFalse("Notes alone should not complete verification", updated.isComplete());
+        assertEquals("Completed count should remain 0", 0, updated.getCompletedCount());
     }
 
     // ========== HELPER METHODS ==========

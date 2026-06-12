@@ -35,6 +35,39 @@ const withSampleContext = (sampleRef, detail, formatMessage) => {
   );
 };
 
+export const translateManifestDuplicateWarning = (
+  message,
+  formatMessage,
+  suggestedId,
+) => {
+  if (!message) {
+    return "";
+  }
+
+  const normalized = String(message).toLowerCase();
+  const sampleId = String(message).split(":").slice(1).join(":").trim();
+
+  if (normalized.startsWith("duplicate sample id in manifest:")) {
+    return renderMessage(
+      formatMessage,
+      "biorepository.manifest.duplicate.warning.inManifest",
+      'Sample ID "{sampleId}" appears more than once in this file. Approve to import as "{suggestedId}".',
+      { sampleId, suggestedId },
+    );
+  }
+
+  if (normalized.startsWith("sample id already exists:")) {
+    return renderMessage(
+      formatMessage,
+      "biorepository.manifest.duplicate.warning.inDatabase",
+      'Sample ID "{sampleId}" is already registered. Approve to import as "{suggestedId}".',
+      { sampleId, suggestedId },
+    );
+  }
+
+  return translateManifestImportMessage(message, formatMessage);
+};
+
 export const translateManifestImportMessage = (message, formatMessage) => {
   if (!message) {
     return "";

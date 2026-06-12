@@ -263,7 +263,7 @@ public class BioSampleRestControllerManifestImportTest extends BaseWebContextSen
     }
 
     @Test
-    public void testValidateManifestImport_DuplicateBarcodeInManifest_ReturnsError() throws Exception {
+    public void testValidateManifestImport_DuplicateBarcodeInManifest_ReturnsWarning() throws Exception {
         // Arrange
         ManifestImportRequest request = new ManifestImportRequest();
         List<SampleRegistrationDTO> samples = new ArrayList<>();
@@ -286,25 +286,28 @@ public class BioSampleRestControllerManifestImportTest extends BaseWebContextSen
         // Assert
         JsonNode response = objectMapper.readTree(result.getResponse().getContentAsString());
 
-        assertFalse("Validation should fail due to duplicate", response.get("valid").asBoolean());
-        assertEquals("Invalid count should be at least 1", 1, response.get("invalidCount").asInt());
+        assertTrue("Validation should remain valid for duplicate warnings", response.get("valid").asBoolean());
+        assertEquals("Invalid count should be 0", 0, response.get("invalidCount").asInt());
 
-        // Second row should have the duplicate error
+        JsonNode firstRow = response.get("rows").get(0);
         JsonNode secondRow = response.get("rows").get(1);
-        assertFalse("Second row should be invalid", secondRow.get("valid").asBoolean());
+        assertTrue("First duplicate row should remain valid", firstRow.get("valid").asBoolean());
+        assertTrue("Second duplicate row should remain valid", secondRow.get("valid").asBoolean());
+        assertEquals("Second row should be flagged in manifest", "IN_MANIFEST",
+                secondRow.get("duplicateIssue").asText());
 
-        boolean foundDuplicateError = false;
-        for (JsonNode error : secondRow.get("errors")) {
-            if (error.asText().toLowerCase().contains("duplicate")) {
-                foundDuplicateError = true;
+        boolean foundDuplicateWarning = false;
+        for (JsonNode warning : secondRow.get("warnings")) {
+            if (warning.asText().toLowerCase().contains("duplicate")) {
+                foundDuplicateWarning = true;
                 break;
             }
         }
-        assertTrue("Error should mention duplicate barcode", foundDuplicateError);
+        assertTrue("Warning should mention duplicate barcode", foundDuplicateWarning);
     }
 
     @Test
-    public void testValidateManifestImport_BarcodeExistsInDatabase_ReturnsError() throws Exception {
+    public void testValidateManifestImport_BarcodeExistsInDatabase_ReturnsWarning() throws Exception {
         // Arrange - Create an existing sample in the database
         String existingBarcode = "EXISTING-BC-" + System.currentTimeMillis();
         createExistingSampleItem(existingBarcode);
@@ -325,19 +328,20 @@ public class BioSampleRestControllerManifestImportTest extends BaseWebContextSen
         // Assert
         JsonNode response = objectMapper.readTree(result.getResponse().getContentAsString());
 
-        assertFalse("Validation should fail - barcode exists", response.get("valid").asBoolean());
+        assertTrue("Validation should remain valid for duplicate warnings", response.get("valid").asBoolean());
 
         JsonNode firstRow = response.get("rows").get(0);
-        assertFalse("Row should be invalid", firstRow.get("valid").asBoolean());
+        assertTrue("Row should remain valid", firstRow.get("valid").asBoolean());
+        assertEquals("Row should be flagged in database", "IN_DATABASE", firstRow.get("duplicateIssue").asText());
 
-        boolean foundExistsError = false;
-        for (JsonNode error : firstRow.get("errors")) {
-            if (error.asText().toLowerCase().contains("already exists")) {
-                foundExistsError = true;
+        boolean foundExistsWarning = false;
+        for (JsonNode warning : firstRow.get("warnings")) {
+            if (warning.asText().toLowerCase().contains("already exists")) {
+                foundExistsWarning = true;
                 break;
             }
         }
-        assertTrue("Error should mention barcode already exists", foundExistsError);
+        assertTrue("Warning should mention barcode already exists", foundExistsWarning);
     }
 
     @Test
@@ -593,8 +597,37 @@ public class BioSampleRestControllerManifestImportTest extends BaseWebContextSen
         assertEquals("Should register exactly one sample", 1, response.get("registeredCount").asInt());
         assertEquals("Should report one failed sample", 1, response.get("failedCount").asInt());
         assertEquals("Should include one row error", 1, response.get("rowErrors").size());
-        assertTrue("Row error should mention the duplicate barcode",
-                response.get("rowErrors").get(0).asText().contains(duplicateBarcode));
+        assertTrue("Row error should mention duplicate was not approved",
+                response.get("rowErrors").get(0).asText().toLowerCase().contains("not approved"));
+    }
+
+    @Test
+    public void testRegisterBulk_ApprovedManifestDuplicate_AssignsSuffix() throws Exception {
+        ManifestImportRequest request = new ManifestImportRequest();
+        List<SampleRegistrationDTO> samples = new ArrayList<>();
+
+        String duplicateBarcode = "APPROVED-DUP-" + System.currentTimeMillis();
+        samples.add(createValidSampleDTO(duplicateBarcode));
+        samples.add(createValidSampleDTO(duplicateBarcode));
+
+        ManifestImportRequest.DuplicateResolution duplicateResolution = new ManifestImportRequest.DuplicateResolution();
+        duplicateResolution.setMode("SUFFIX");
+        duplicateResolution.setAllowedRowIndexes(List.of(1));
+        request.setSamples(samples);
+        request.setDuplicateResolution(duplicateResolution);
+
+        MvcResult result = mockMvc
+                .perform(post("/rest/biorepository/sample/register-bulk").contentType(MediaType.APPLICATION_JSON)
+                        .sessionAttr("userSessionData", userSessionData)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isOk()).andReturn();
+
+        JsonNode response = objectMapper.readTree(result.getResponse().getContentAsString());
+
+        assertTrue("Registration should succeed", response.get("success").asBoolean());
+        assertEquals("Should register both samples", 2, response.get("registeredCount").asInt());
+        assertTrue("Second sample should use suffixed barcode",
+                response.get("samples").get(1).get("barcode").asText().endsWith("-R2"));
     }
 
     @Test
@@ -638,13 +671,14 @@ public class BioSampleRestControllerManifestImportTest extends BaseWebContextSen
 
         JsonNode response = objectMapper.readTree(result.getResponse().getContentAsString());
 
-        assertFalse("Validation should fail when barcode exists", response.get("valid").asBoolean());
-        assertEquals("Invalid count should be 1", 1, response.get("invalidCount").asInt());
+        assertTrue("Validation should remain valid for duplicate warnings", response.get("valid").asBoolean());
+        assertEquals("Invalid count should be 0", 0, response.get("invalidCount").asInt());
 
         JsonNode firstRow = response.get("rows").get(0);
-        assertFalse("Existing barcode row should be invalid", firstRow.get("valid").asBoolean());
+        assertTrue("Existing barcode row should remain valid", firstRow.get("valid").asBoolean());
+        assertEquals("IN_DATABASE", firstRow.get("duplicateIssue").asText());
         assertTrue("Row should mention existing sample ID",
-                firstRow.get("errors").get(0).asText().contains("already exists"));
+                firstRow.get("warnings").get(0).asText().contains("already exists"));
     }
 
     // ========== HELPER METHODS ==========
