@@ -1,0 +1,2 @@
+name,itemType,category,manufacturer,units,lowStockThreshold,concentration,storageRequirements
+Ethanol 70%,REAGENT,Solvent,Merck,mL,10,70%,Room temperature
