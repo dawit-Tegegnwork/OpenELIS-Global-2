@@ -13,6 +13,7 @@ import PageBreadCrumb from "../common/PageBreadCrumb";
 import InventoryDashboard from "./InventoryDashboard";
 import InventoryCatalog from "./InventoryCatalog";
 import InventoryReports from "./InventoryReports";
+import InventoryBulkImport from "./InventoryBulkImport";
 import UnifiedAuditHistory from "./UnifiedAuditHistory";
 import "./InventoryList.css";
 
@@ -55,6 +56,9 @@ const InventoryManagement = () => {
                 <Tab>
                   <FormattedMessage id="inventory.tab.auditHistory" />
                 </Tab>
+                <Tab>
+                  <FormattedMessage id="inventory.tab.bulkImport" />
+                </Tab>
               </TabList>
 
               <TabPanels>
@@ -76,6 +80,11 @@ const InventoryManagement = () => {
                 {/* Audit History Tab - Unified Audit Logs */}
                 <TabPanel>
                   <UnifiedAuditHistory />
+                </TabPanel>
+
+                {/* Bulk Import Tab - Catalog items and stock lots */}
+                <TabPanel>
+                  <InventoryBulkImport />
                 </TabPanel>
               </TabPanels>
             </Tabs>
