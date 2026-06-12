@@ -9,6 +9,7 @@ import {
   computeDuplicateImportPreviews,
   reclassifyLegacyDuplicateValidationRows,
   partitionDuplicateMessages,
+  buildSingleEntrySpecialHandling,
   DUPLICATE_ISSUE,
 } from "./manifestImportHelpers";
 
@@ -137,5 +138,30 @@ describe("manifestImportHelpers", () => {
 
     const previews = computeDuplicateImportPreviews(rows, { 2: true });
     expect(previews[2]).toBe("BIO-001-R2");
+  });
+
+  test("buildSingleEntrySpecialHandling composes custody and volume notes", () => {
+    const notes = buildSingleEntrySpecialHandling({
+      specialHandling: "Handle with care",
+      volume: "insufficient",
+      receiverName: "Abay A.",
+      approvalSign: "AAA",
+    });
+
+    expect(notes).toContain("Handle with care");
+    expect(notes).toContain("Received by: Abay A.");
+    expect(notes).toContain("Approval/Sign: AAA");
+    expect(notes).toContain("Volume: insufficient");
+  });
+
+  test("buildSingleEntrySpecialHandling omits sufficient volume note", () => {
+    const notes = buildSingleEntrySpecialHandling({
+      specialHandling: "",
+      volume: "sufficient",
+      receiverName: "Open ELIS",
+      approvalSign: "",
+    });
+
+    expect(notes).toBe("Received by: Open ELIS");
   });
 });

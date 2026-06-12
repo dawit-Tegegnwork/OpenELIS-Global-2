@@ -1347,6 +1347,10 @@ public class BioSampleRestController extends BaseRestController {
                             : BiosafetyLevel.BSL_1);
             bioSample.setEthicsApprovalRef(request.getEthicsApprovalRef());
             bioSample.setMtaReference(request.getMtaReference());
+            bioSample.setConsentId(request.getConsentId());
+            bioSample.setPrincipalInvestigator(request.getPrincipalInvestigator());
+            bioSample.setPreservationMedium(request.getPreservationMedium());
+            bioSample.setArrivalCondition(request.getArrivalCondition());
             bioSample.setSpecialHandling(mergeExternalIdIntoSpecialHandling(request.getSpecialHandling(),
                     request.getExternalId(), request.getBarcode()));
             bioSample.setOriginLab(request.getOriginLab());
@@ -1410,6 +1414,10 @@ public class BioSampleRestController extends BaseRestController {
         private String biosafetyLevel;
         private String ethicsApprovalRef;
         private String mtaReference;
+        private String principalInvestigator;
+        private String consentId;
+        private String preservationMedium;
+        private String arrivalCondition;
         private String specialHandling;
         private Integer shipmentId;
         private Integer departmentTestSectionId;
@@ -1508,6 +1516,38 @@ public class BioSampleRestController extends BaseRestController {
 
         public void setMtaReference(String mtaReference) {
             this.mtaReference = mtaReference;
+        }
+
+        public String getPrincipalInvestigator() {
+            return principalInvestigator;
+        }
+
+        public void setPrincipalInvestigator(String principalInvestigator) {
+            this.principalInvestigator = principalInvestigator;
+        }
+
+        public String getConsentId() {
+            return consentId;
+        }
+
+        public void setConsentId(String consentId) {
+            this.consentId = consentId;
+        }
+
+        public String getPreservationMedium() {
+            return preservationMedium;
+        }
+
+        public void setPreservationMedium(String preservationMedium) {
+            this.preservationMedium = preservationMedium;
+        }
+
+        public String getArrivalCondition() {
+            return arrivalCondition;
+        }
+
+        public void setArrivalCondition(String arrivalCondition) {
+            this.arrivalCondition = arrivalCondition;
         }
 
         public String getSpecialHandling() {
