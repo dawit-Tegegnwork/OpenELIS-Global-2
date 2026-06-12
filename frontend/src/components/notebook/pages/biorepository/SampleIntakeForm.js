@@ -31,6 +31,7 @@ import {
   filterOwningDepartments,
   loadNotebookDepartmentIds,
 } from "../../utils/notebookInventoryScope";
+import { buildSingleEntrySpecialHandling } from "./manifestImportHelpers";
 
 /**
  * SampleIntakeForm - Form for registering samples
@@ -98,15 +99,22 @@ function SampleIntakeForm({
     storageTemperature: "AMBIENT", // Storage temperature requirement
     requiredTempMin: null, // Min temp for custom range
     requiredTempMax: null, // Max temp for custom range
+    biosafetyLevel: "BSL_2", // Biosafety level (manifest field)
     receiverName: "", // Chain of custody: receiving personnel
 
     // Conditional/Optional fields
     externalId: "", // External/Donor ID (chain of custody)
+    approvalSign: "", // Approval/sign (chain of custody)
     projectName: "", // Project/study association (optional)
     ethicsApprovalRef: "", // Ethical approval reference
     mtaReference: "", // Material transfer agreement
     specialHandling: "", // Special handling instructions
     collectionDate: null, // Original collection date (optional)
+    arrivalCondition: "", // Sample condition at receipt
+    volume: "", // Volume assessment
+    preservationMedium: "", // Preservation medium
+    principalInvestigator: "", // Principal investigator
+    consentId: "", // Consent ID
   });
 
   const [loading, setLoading] = useState(false);
@@ -171,6 +179,37 @@ function SampleIntakeForm({
       text: intl.formatMessage({
         id: "biorepository.temp.custom",
         defaultMessage: "Custom Range",
+      }),
+    },
+  ];
+
+  const biosafetyLevels = [
+    {
+      id: "BSL_1",
+      text: intl.formatMessage({
+        id: "biorepository.bsl.1",
+        defaultMessage: "BSL-1",
+      }),
+    },
+    {
+      id: "BSL_2",
+      text: intl.formatMessage({
+        id: "biorepository.bsl.2",
+        defaultMessage: "BSL-2",
+      }),
+    },
+    {
+      id: "BSL_3",
+      text: intl.formatMessage({
+        id: "biorepository.bsl.3",
+        defaultMessage: "BSL-3",
+      }),
+    },
+    {
+      id: "BSL_4",
+      text: intl.formatMessage({
+        id: "biorepository.bsl.4",
+        defaultMessage: "BSL-4",
       }),
     },
   ];
@@ -384,6 +423,17 @@ function SampleIntakeForm({
       });
     }
 
+    if (
+      formData.biosafetyLevel &&
+      !["BSL_1", "BSL_2", "BSL_3", "BSL_4"].includes(formData.biosafetyLevel)
+    ) {
+      newErrors.biosafetyLevel = intl.formatMessage({
+        id: "biorepository.sample.error.biosafetyLevel.invalid",
+        defaultMessage:
+          "Invalid biosafety level. Must be BSL_1, BSL_2, BSL_3, or BSL_4",
+      });
+    }
+
     // Custom temperature range validation
     if (formData.storageTemperature === "CUSTOM") {
       if (
@@ -498,6 +548,13 @@ function SampleIntakeForm({
         collectionDateFormatted = `${format(parsedCollDate, "yyyy-MM-dd")} 00:00:00`;
       }
 
+      const composedSpecialHandling = buildSingleEntrySpecialHandling({
+        specialHandling: formData.specialHandling,
+        volume: formData.volume,
+        receiverName: formData.receiverName,
+        approvalSign: formData.approvalSign,
+      });
+
       const sampleData = {
         barcode: formData.barcode.trim(),
         externalId: formData.externalId.trim(),
@@ -507,10 +564,15 @@ function SampleIntakeForm({
         collectionDate: collectionDateFormatted,
         requiredTempMin: tempRange.min,
         requiredTempMax: tempRange.max,
+        biosafetyLevel: formData.biosafetyLevel,
         projectId: formData.projectName.trim() || null,
+        principalInvestigator: formData.principalInvestigator.trim() || null,
+        consentId: formData.consentId.trim() || null,
         ethicsApprovalRef: formData.ethicsApprovalRef.trim() || null,
         mtaReference: formData.mtaReference.trim() || null,
-        specialHandling: formData.specialHandling.trim() || null,
+        preservationMedium: formData.preservationMedium.trim() || null,
+        arrivalCondition: formData.arrivalCondition.trim() || null,
+        specialHandling: composedSpecialHandling || null,
         shipmentId: shipment?.id || null,
       };
 
@@ -539,8 +601,14 @@ function SampleIntakeForm({
               ...prev,
               barcode: "",
               externalId: "",
+              approvalSign: "",
               collectionDate: null,
               specialHandling: "",
+              arrivalCondition: "",
+              volume: "",
+              preservationMedium: "",
+              principalInvestigator: "",
+              consentId: "",
             }));
             // Generate new barcode for next sample
             generateNewBarcode();
@@ -854,6 +922,33 @@ function SampleIntakeForm({
               </>
             )}
 
+            {/* Biosafety Level */}
+            <Column lg={8} md={4} sm={4}>
+              <FormGroup legendText="">
+                <Dropdown
+                  id="biosafetyLevel"
+                  titleText={intl.formatMessage({
+                    id: "biorepository.sample.field.biosafetyLevel",
+                    defaultMessage: "Biosafety Level *",
+                  })}
+                  label={intl.formatMessage({
+                    id: "biorepository.sample.field.biosafetyLevel.placeholder",
+                    defaultMessage: "Select biosafety level",
+                  })}
+                  items={biosafetyLevels}
+                  itemToString={(item) => (item ? item.text : "")}
+                  selectedItem={biosafetyLevels.find(
+                    (level) => level.id === formData.biosafetyLevel,
+                  )}
+                  onChange={({ selectedItem }) =>
+                    handleInputChange("biosafetyLevel", selectedItem?.id)
+                  }
+                  invalid={!!errors.biosafetyLevel}
+                  invalidText={errors.biosafetyLevel}
+                />
+              </FormGroup>
+            </Column>
+
             {/* CHAIN OF CUSTODY SECTION */}
             <Column lg={16} md={8} sm={4}>
               <h4 style={{ marginBottom: "1rem", marginTop: "1.5rem" }}>
@@ -911,6 +1006,26 @@ function SampleIntakeForm({
 
             <Column lg={8} md={4} sm={4}>
               <FormGroup legendText="">
+                <TextInput
+                  id="approvalSign"
+                  labelText={intl.formatMessage({
+                    id: "biorepository.sample.field.approvalSign",
+                    defaultMessage: "Approval/Sign",
+                  })}
+                  placeholder={intl.formatMessage({
+                    id: "biorepository.sample.field.approvalSign.placeholder",
+                    defaultMessage: "Enter approval or signature reference",
+                  })}
+                  value={formData.approvalSign}
+                  onChange={(e) =>
+                    handleInputChange("approvalSign", e.target.value)
+                  }
+                />
+              </FormGroup>
+            </Column>
+
+            <Column lg={8} md={4} sm={4}>
+              <FormGroup legendText="">
                 <div
                   style={{
                     display: "flex",
@@ -949,6 +1064,75 @@ function SampleIntakeForm({
                     disabled={generatingBarcode}
                   />
                 </div>
+              </FormGroup>
+            </Column>
+
+            {/* SAMPLE DETAILS SECTION */}
+            <Column lg={16} md={8} sm={4}>
+              <h4 style={{ marginBottom: "1rem", marginTop: "1.5rem" }}>
+                <FormattedMessage
+                  id="biorepository.sample.section.sampleDetails"
+                  defaultMessage="Sample Details"
+                />
+              </h4>
+            </Column>
+
+            <Column lg={8} md={4} sm={4}>
+              <FormGroup legendText="">
+                <TextInput
+                  id="arrivalCondition"
+                  labelText={intl.formatMessage({
+                    id: "biorepository.sample.field.arrivalCondition",
+                    defaultMessage: "Sample Condition",
+                  })}
+                  placeholder={intl.formatMessage({
+                    id: "biorepository.sample.field.arrivalCondition.placeholder",
+                    defaultMessage:
+                      "e.g. thawed once, hemolyzed, good condition",
+                  })}
+                  value={formData.arrivalCondition}
+                  onChange={(e) =>
+                    handleInputChange("arrivalCondition", e.target.value)
+                  }
+                />
+              </FormGroup>
+            </Column>
+
+            <Column lg={8} md={4} sm={4}>
+              <FormGroup legendText="">
+                <TextInput
+                  id="volume"
+                  labelText={intl.formatMessage({
+                    id: "biorepository.sample.field.volume",
+                    defaultMessage: "Volume",
+                  })}
+                  placeholder={intl.formatMessage({
+                    id: "biorepository.sample.field.volume.placeholder",
+                    defaultMessage: "e.g. sufficient, insufficient volume",
+                  })}
+                  value={formData.volume}
+                  onChange={(e) => handleInputChange("volume", e.target.value)}
+                />
+              </FormGroup>
+            </Column>
+
+            <Column lg={8} md={4} sm={4}>
+              <FormGroup legendText="">
+                <TextInput
+                  id="preservationMedium"
+                  labelText={intl.formatMessage({
+                    id: "biorepository.sample.field.preservationMedium",
+                    defaultMessage: "Preservation Medium",
+                  })}
+                  placeholder={intl.formatMessage({
+                    id: "biorepository.sample.field.preservationMedium.placeholder",
+                    defaultMessage: "e.g. EDTA, Heparin, formalin",
+                  })}
+                  value={formData.preservationMedium}
+                  onChange={(e) =>
+                    handleInputChange("preservationMedium", e.target.value)
+                  }
+                />
               </FormGroup>
             </Column>
 
@@ -998,6 +1182,50 @@ function SampleIntakeForm({
                   }
                   disallowFutureDate={true}
                   updateStateValue={true}
+                />
+              </FormGroup>
+            </Column>
+
+            <Column lg={8} md={4} sm={4}>
+              <FormGroup legendText="">
+                <TextInput
+                  id="principalInvestigator"
+                  labelText={intl.formatMessage({
+                    id: "biorepository.sample.field.principalInvestigator",
+                    defaultMessage: "Principal Investigator",
+                  })}
+                  placeholder={intl.formatMessage({
+                    id: "biorepository.sample.field.principalInvestigator.placeholder",
+                    defaultMessage: "Enter principal investigator name",
+                  })}
+                  value={formData.principalInvestigator}
+                  onChange={(e) =>
+                    handleInputChange("principalInvestigator", e.target.value)
+                  }
+                />
+              </FormGroup>
+            </Column>
+
+            <Column lg={8} md={4} sm={4}>
+              <FormGroup legendText="">
+                <TextInput
+                  id="consentId"
+                  labelText={intl.formatMessage({
+                    id: "biorepository.sample.field.consentId",
+                    defaultMessage: "Consent ID",
+                  })}
+                  helperText={intl.formatMessage({
+                    id: "biorepository.sample.field.consentId.helper",
+                    defaultMessage: "Required for human samples",
+                  })}
+                  placeholder={intl.formatMessage({
+                    id: "biorepository.sample.field.consentId.placeholder",
+                    defaultMessage: "Enter consent identifier",
+                  })}
+                  value={formData.consentId}
+                  onChange={(e) =>
+                    handleInputChange("consentId", e.target.value)
+                  }
                 />
               </FormGroup>
             </Column>

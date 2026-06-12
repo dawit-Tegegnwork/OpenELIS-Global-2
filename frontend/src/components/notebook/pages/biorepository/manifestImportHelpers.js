@@ -260,6 +260,31 @@ export const buildSpecialHandlingNotes = (row) =>
     .filter(Boolean)
     .join(" | ");
 
+/** Compose special-handling notes for single-entry intake (matches bulk import). */
+export const buildSingleEntrySpecialHandling = ({
+  specialHandling,
+  volume,
+  receiverName,
+  approvalSign,
+}) => {
+  const custodyParts = [];
+  if (receiverName?.trim()) {
+    custodyParts.push(`Received by: ${receiverName.trim()}`);
+  }
+  if (approvalSign?.trim()) {
+    custodyParts.push(`Approval/Sign: ${approvalSign.trim()}`);
+  }
+
+  const baseHandling = [specialHandling?.trim(), custodyParts.join(" | ")]
+    .filter(Boolean)
+    .join(" | ");
+
+  return buildSpecialHandlingNotes({
+    specialHandling: baseHandling,
+    volume: volume?.trim() || "",
+  });
+};
+
 export const resolveStorageTemperaturePreset = (value) => {
   const normalized = normalizeCellValue(value).toUpperCase().replace(/\s/g, "");
   if (
