@@ -9,7 +9,12 @@ import {
   TabPanel,
   Tag,
 } from "@carbon/react";
-import { Inbox, InProgress, Time, DocumentPdf } from "@carbon/icons-react";
+import {
+  RequestQuote,
+  InProgress,
+  Time,
+  DocumentPdf,
+} from "@carbon/icons-react";
 import { FormattedMessage, useIntl } from "react-intl";
 import PropTypes from "prop-types";
 import { getFromOpenElisServer } from "../../../utils/Utils";
@@ -93,7 +98,7 @@ function BiorepositorySampleRequestPage({
             onChange={({ selectedIndex }) => setActiveTab(selectedIndex)}
           >
             <TabList aria-label="Retrieval workflow tabs">
-              <Tab renderIcon={Inbox}>
+              <Tab renderIcon={RequestQuote}>
                 <span
                   style={{
                     display: "flex",
