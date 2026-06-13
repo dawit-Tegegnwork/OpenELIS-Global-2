@@ -1,7 +1,9 @@
 /**
  * AHRI BR-F-02 sample path formatting from storage assignment data.
- * Example: Zn Room-A / FRZ Freezer-1 / SH S2 / RK R15 / Box BX078 / Pos B3
+ * Example: Zn Zone-A / FRZ Freezer-1 / SH S2 / RK R15 / Box BX078 / Pos B3
  */
+
+import { normalizeBiorepositoryHierarchyPath } from "./biorepositoryDisplayHelpers";
 
 const readText = (value) => {
   if (value === null || value === undefined) {
@@ -22,7 +24,7 @@ export const formatBrf02SamplePathFromHierarchical = (
   hierarchicalPath,
   positionCoordinate,
 ) => {
-  const path = readText(hierarchicalPath);
+  const path = normalizeBiorepositoryHierarchyPath(readText(hierarchicalPath));
   const position = readText(positionCoordinate);
 
   if (!path) {

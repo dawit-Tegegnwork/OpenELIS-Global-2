@@ -48,6 +48,12 @@ describe("biorepositorySamplePathHelpers", () => {
     ).toBe("Zn Room-A / FRZ Freezer-1");
   });
 
+  test("formatBrf02SamplePathFromHierarchical rewrites legacy Room segment", () => {
+    expect(
+      formatBrf02SamplePathFromHierarchical("Room > Freezer-1 > S2", "B3"),
+    ).toBe("Zn Zone / FRZ Freezer-1 / SH S2 / Pos B3");
+  });
+
   test("formatBrf02SamplePathFromHierarchical returns Pos-only path when needed", () => {
     expect(formatBrf02SamplePathFromHierarchical(null, "B3")).toBe("Pos B3");
   });

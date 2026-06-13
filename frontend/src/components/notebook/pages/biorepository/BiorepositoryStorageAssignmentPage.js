@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from "react";
+import React, { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import {
   Grid,
   Column,
@@ -37,12 +37,13 @@ import {
   hasStorageLocation,
   interpretStorageAssignmentResponse,
 } from "./biorepositoryStorageHelpers";
+import { formatBiorepositoryLocationLevel } from "./biorepositoryDisplayHelpers";
 import "../../workflow/NotebookWorkflow.css";
 
 /**
  * Storage temperature options for Biorepository samples
  * Based on biorepository requirements:
- * - Room Temperature (for certain sample types)
+ * - Ambient Temperature (for certain sample types)
  * - Refrigerated (2-8°C)
  * - Frozen (-20°C)
  * - Ultra-Low Frozen (-80°C)
@@ -50,48 +51,6 @@ import "../../workflow/NotebookWorkflow.css";
  *
  * min/max values are used for validation against sample requirements
  */
-const STORAGE_CONDITIONS = [
-  {
-    id: "ROOM_TEMP",
-    label: "Room Temperature (15-25°C)",
-    tempRange: "15-25°C",
-    min: 15,
-    max: 25,
-    description: "For stable samples at ambient temperature",
-  },
-  {
-    id: "REFRIGERATED",
-    label: "Refrigerator (2-8°C)",
-    tempRange: "2-8°C",
-    min: 2,
-    max: 8,
-    description: "Standard refrigerated storage",
-  },
-  {
-    id: "FROZEN_MINUS20",
-    label: "Freezer (-20°C)",
-    tempRange: "-20°C",
-    min: -25,
-    max: -15,
-    description: "Standard frozen storage",
-  },
-  {
-    id: "FROZEN_MINUS80",
-    label: "Ultra-Low Freezer (-80°C)",
-    tempRange: "-80°C",
-    min: -85,
-    max: -75,
-    description: "Long-term sample preservation",
-  },
-  {
-    id: "LIQUID_NITROGEN",
-    label: "Liquid Nitrogen (-196°C)",
-    tempRange: "-196°C",
-    min: -210,
-    max: -180,
-    description: "Cryopreservation",
-  },
-];
 
 /**
  * BiorepositoryStorageAssignmentPage - Storage Assignment workflow page
@@ -99,7 +58,7 @@ const STORAGE_CONDITIONS = [
  *
  * Receives samples advanced from Stage 1 (Intake) via notebook page samples.
  *
- * Storage Hierarchy: Room → Device/Freezer → Shelf → Rack → Box → Well
+ * Storage Hierarchy: Zone → Device/Freezer → Shelf → Rack → Box → Well
  * Location recording is critical: Anyone needing samples must know exact placement
  *
  * @param {Object} props
@@ -115,6 +74,82 @@ function BiorepositoryStorageAssignmentPage({
 }) {
   const intl = useIntl();
   const componentMounted = useRef(false);
+
+  const storageConditions = useMemo(
+    () => [
+      {
+        id: "ROOM_TEMP",
+        label: intl.formatMessage({
+          id: "biorepository.storage.condition.ambient",
+          defaultMessage: "Ambient Temperature (15-25°C)",
+        }),
+        tempRange: "15-25°C",
+        min: 15,
+        max: 25,
+        description: intl.formatMessage({
+          id: "biorepository.storage.condition.ambient.description",
+          defaultMessage: "For stable samples at ambient temperature",
+        }),
+      },
+      {
+        id: "REFRIGERATED",
+        label: intl.formatMessage({
+          id: "biorepository.storage.condition.refrigerated",
+          defaultMessage: "Refrigerator (2-8°C)",
+        }),
+        tempRange: "2-8°C",
+        min: 2,
+        max: 8,
+        description: intl.formatMessage({
+          id: "biorepository.storage.condition.refrigerated.description",
+          defaultMessage: "Standard refrigerated storage",
+        }),
+      },
+      {
+        id: "FROZEN_MINUS20",
+        label: intl.formatMessage({
+          id: "biorepository.storage.condition.frozen20",
+          defaultMessage: "Freezer (-20°C)",
+        }),
+        tempRange: "-20°C",
+        min: -25,
+        max: -15,
+        description: intl.formatMessage({
+          id: "biorepository.storage.condition.frozen20.description",
+          defaultMessage: "Standard frozen storage",
+        }),
+      },
+      {
+        id: "FROZEN_MINUS80",
+        label: intl.formatMessage({
+          id: "biorepository.storage.condition.frozen80",
+          defaultMessage: "Ultra-Low Freezer (-80°C)",
+        }),
+        tempRange: "-80°C",
+        min: -85,
+        max: -75,
+        description: intl.formatMessage({
+          id: "biorepository.storage.condition.frozen80.description",
+          defaultMessage: "Long-term sample preservation",
+        }),
+      },
+      {
+        id: "LIQUID_NITROGEN",
+        label: intl.formatMessage({
+          id: "biorepository.storage.condition.liquidNitrogen",
+          defaultMessage: "Liquid Nitrogen (-196°C)",
+        }),
+        tempRange: "-196°C",
+        min: -210,
+        max: -180,
+        description: intl.formatMessage({
+          id: "biorepository.storage.condition.liquidNitrogen.description",
+          defaultMessage: "Cryopreservation",
+        }),
+      },
+    ],
+    [intl],
+  );
 
   // State for samples
   const [samples, setSamples] = useState([]);
@@ -166,7 +201,7 @@ function BiorepositoryStorageAssignmentPage({
         return;
       }
 
-      const condition = STORAGE_CONDITIONS.find((c) => c.id === conditionId);
+      const condition = storageConditions.find((c) => c.id === conditionId);
       if (!condition) {
         setTemperatureWarning(null);
         return;
@@ -623,12 +658,12 @@ function BiorepositoryStorageAssignmentPage({
 
   // Handle bulk storage assignment
   const handleAssignStorage = useCallback(() => {
-    // Validate at least room selection
+    // Validate at least zone selection
     if (!storageSelection.room) {
       setError(
         intl.formatMessage({
-          id: "biorepository.storage.selectRoom",
-          defaultMessage: "Please select at least a storage room.",
+          id: "biorepository.storage.selectZone.validation",
+          defaultMessage: "Please select at least a storage zone.",
         }),
       );
       return;
@@ -741,7 +776,7 @@ function BiorepositoryStorageAssignmentPage({
           locationId: locationId,
           locationType: locationType,
           notes:
-            `${commonData.notes || ""} | Biorepository ${locationType}-level storage: ${storagePath}`.trim(),
+            `${commonData.notes || ""} | Biorepository ${formatBiorepositoryLocationLevel(locationType)}-level storage: ${storagePath}`.trim(),
         },
       };
     }
@@ -835,7 +870,7 @@ function BiorepositoryStorageAssignmentPage({
         <Tag
           type="green"
           renderIcon={Checkmark}
-          title={sample.storagePath || storageLocation}
+          title={storageLocation}
         >
           {storageLocation} (
           <FormattedMessage
@@ -851,7 +886,7 @@ function BiorepositoryStorageAssignmentPage({
         <Tag
           type="cyan"
           renderIcon={Archive}
-          title={sample.storagePath || storageLocation}
+          title={storageLocation}
         >
           {storageLocation} (
           <FormattedMessage
@@ -876,7 +911,7 @@ function BiorepositoryStorageAssignmentPage({
   const getConditionTag = (sample) => {
     if (!sample.storageCondition) return null;
 
-    const condition = STORAGE_CONDITIONS.find(
+    const condition = storageConditions.find(
       (c) => c.id === sample.storageCondition,
     );
     return (
@@ -919,7 +954,7 @@ function BiorepositoryStorageAssignmentPage({
         <p className="page-description">
           <FormattedMessage
             id="biorepository.storage.description"
-            defaultMessage="Assign samples to storage locations. Select storage hierarchy: Room → Device (Freezer/Refrigerator/Cabinet) → Rack → Box → Position. Record exact placement for retrieval."
+            defaultMessage="Assign samples to storage locations. Select storage hierarchy: Zone → Device (Freezer/Refrigerator/Cabinet) → Rack → Box → Position. Record exact placement for retrieval."
           />
         </p>
       </div>
@@ -1212,7 +1247,7 @@ function BiorepositoryStorageAssignmentPage({
                 }}
               >
                 <SelectItem value="" text="Select temperature condition..." />
-                {STORAGE_CONDITIONS.map((cond) => (
+                {storageConditions.map((cond) => (
                   <SelectItem
                     key={cond.id}
                     value={cond.id}

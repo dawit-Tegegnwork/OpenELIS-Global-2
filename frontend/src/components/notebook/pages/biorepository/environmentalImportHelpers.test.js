@@ -18,7 +18,7 @@ describe("environmentalImportHelpers", () => {
 
   test("buildRoomTemplateCsv includes required headers", () => {
     const csv = buildRoomTemplateCsv();
-    expect(csv).toContain("room_code");
+    expect(csv).toContain("zone_code");
     expect(csv).toContain("oxygen_level");
     expect(csv).toContain("humidity");
   });
@@ -47,6 +47,18 @@ describe("environmentalImportHelpers", () => {
     expect(result.validRows).toHaveLength(1);
     expect(result.validRows[0].roomCode).toBe("BR-ROOM-A");
     expect(result.validRows[0].oxygenLevel).toBe(20.5);
+  });
+
+  test("parseRoomImportCsv accepts zone_code header alias", () => {
+    const csv = [
+      "zone_code,checked_date_time,oxygen_level,humidity,checked_by",
+      "BR-ROOM-A,2026-06-11T08:00,20.5,45,AB",
+    ].join("\n");
+
+    const result = parseRoomImportCsv(csv, rooms, null);
+    expect(result.errors).toHaveLength(0);
+    expect(result.validRows).toHaveLength(1);
+    expect(result.validRows[0].roomCode).toBe("BR-ROOM-A");
   });
 
   test("parseDeviceImportCsv flags unknown device codes in bulk import", () => {

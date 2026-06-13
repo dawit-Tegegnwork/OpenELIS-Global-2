@@ -11,6 +11,10 @@ import {
   shouldShowWorkflowTransition,
 } from "./biorepositoryLifecycleHelpers";
 import { formatQuantityWithUnit } from "./biorepositoryQuantityHelpers";
+import {
+  formatBiorepositoryStorageDisplay,
+  formatBiorepositoryUserText,
+} from "./biorepositoryDisplayHelpers";
 
 const resolveStateTag = (currentState) => {
   if (!currentState) {
@@ -186,7 +190,7 @@ function BiorepositoryLifecycleModal({
               </strong>{" "}
               {retrievalContext.fulfilledSample || sampleLabel || "—"}
               {retrievalContext.storagePath &&
-                ` — ${retrievalContext.storagePath}`}
+                ` — ${formatBiorepositoryStorageDisplay(retrievalContext.storagePath)}`}
               {retrievalContext.quantityReleased != null &&
                 ` — released: ${formatQuantityWithUnit(
                   retrievalContext.quantityReleased,
@@ -205,7 +209,7 @@ function BiorepositoryLifecycleModal({
               />
               :
             </strong>{" "}
-            {currentState.lastKnownStorageLocation}
+            {formatBiorepositoryUserText(currentState.lastKnownStorageLocation)}
           </div>
         )}
 

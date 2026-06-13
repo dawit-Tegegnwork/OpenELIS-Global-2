@@ -2,6 +2,9 @@
  * Shared helpers for Stage 5 fulfillment workbench suggestion review.
  */
 
+import { formatBrf02SamplePath } from "./biorepositorySamplePathHelpers";
+import { formatBiorepositoryUserText } from "./biorepositoryDisplayHelpers";
+
 export const SUGGESTION_STATUS = {
   EXACT_MATCH: "EXACT_MATCH",
   EXACT_MATCH_TYPE_MISMATCH: "EXACT_MATCH_TYPE_MISMATCH",
@@ -384,10 +387,14 @@ export const formatSamplePath = (sample) => {
     return null;
   }
   if (sample.samplePath) {
-    return sample.samplePath;
+    return formatBiorepositoryUserText(sample.samplePath);
+  }
+  const formatted = formatBrf02SamplePath(sample);
+  if (formatted) {
+    return formatted;
   }
   if (sample.hierarchicalPath) {
-    return sample.hierarchicalPath;
+    return formatBiorepositoryUserText(sample.hierarchicalPath);
   }
   return null;
 };

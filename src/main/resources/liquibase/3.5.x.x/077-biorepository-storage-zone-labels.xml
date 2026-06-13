@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+    xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+      http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-3.8.xsd">
+
+    <!-- ======================================================== -->
+    <!-- BIOREPOSITORY: ROOM -> ZONE UI LABELS IN NOTEBOOK PAGES   -->
+    <!-- Biorepository uses one physical room partitioned into     -->
+    <!-- zones. Update stored page instructions/content only.      -->
+    <!-- Backend storage entities remain StorageRoom.              -->
+    <!-- ======================================================== -->
+
+    <changeSet id="077-biorepository-storage-zone-labels" author="ahri-biorepository">
+        <preConditions onFail="MARK_RAN">
+            <sqlCheck expectedResult="1">
+                SELECT CASE WHEN COUNT(*) &gt; 0 THEN 1 ELSE 0 END
+                FROM clinlims.notebook_page np
+                JOIN clinlims.notebook n ON n.id = np.notebook_id
+                WHERE (n.workflow_type = 'biorepository' OR n.title LIKE 'Biorepository%')
+                  AND (
+                    np.instructions LIKE '%Room > Device%'
+                    OR np.content LIKE '%Storage Room%'
+                  )
+            </sqlCheck>
+        </preConditions>
+        <comment>Relabel biorepository notebook page instructions/content from Room to Zone</comment>
+
+        <sql>
+            UPDATE clinlims.notebook_page np
+            SET instructions = REPLACE(
+                  REPLACE(np.instructions, 'Room > Device', 'Zone > Device'),
+                  'storage hierarchy: Room',
+                  'storage hierarchy: Zone'
+                ),
+                content = REPLACE(np.content, '"label": "Storage Room"', '"label": "Storage Zone"')
+            FROM clinlims.notebook n
+            WHERE n.id = np.notebook_id
+              AND (n.workflow_type = 'biorepository' OR n.title LIKE 'Biorepository%')
+              AND (
+                np.instructions LIKE '%Room > Device%'
+                OR np.content LIKE '%Storage Room%'
+              );
+        </sql>
+    </changeSet>
+
+</databaseChangeLog>

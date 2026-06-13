@@ -136,7 +136,7 @@ function SampleIntakeForm({
       id: "AMBIENT",
       text: intl.formatMessage({
         id: "biorepository.temp.ambient",
-        defaultMessage: "Room Temperature (15-25°C)",
+        defaultMessage: "Ambient Temperature (15-25°C)",
       }),
     },
     {

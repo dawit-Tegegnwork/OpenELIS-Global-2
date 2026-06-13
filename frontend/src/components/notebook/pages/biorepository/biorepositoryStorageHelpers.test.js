@@ -28,13 +28,23 @@ describe("biorepositoryStorageHelpers", () => {
     expect(deriveStoragePageStatus({ status: "COMPLETED" })).toBe("COMPLETED");
   });
 
-  test("getStorageLocationLabel prefers path and well together", () => {
+  test("getStorageLocationLabel prefers BRF-02 path from structured fields", () => {
+    expect(
+      getStorageLocationLabel({
+        storagePath: "Room > Freezer",
+        storageWell: "A1",
+        data: { storageRoom: "Zone A", storageFreezer: "Freezer-1" },
+      }),
+    ).toBe("Zn Zone A / FRZ Freezer-1 / Pos A1");
+  });
+
+  test("getStorageLocationLabel rewrites legacy Room hierarchy segment", () => {
     expect(
       getStorageLocationLabel({
         storagePath: "Room > Freezer",
         storageWell: "A1",
       }),
-    ).toBe("Room > Freezer (A1)");
+    ).toBe("Zn Zone / FRZ Freezer / Pos A1");
   });
 
   test("interpretStorageAssignmentResponse does not treat zero assignments as success", () => {

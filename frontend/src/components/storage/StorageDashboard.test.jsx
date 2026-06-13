@@ -9,6 +9,7 @@ import StorageDashboard from "./StorageDashboard";
 import { getFromOpenElisServer } from "../utils/Utils";
 import { NotificationContext } from "../layout/Layout";
 import messages from "../../languages/en.json";
+import UserSessionDetailsContext from "../../UserSessionDetailsContext";
 
 // Mock the API utilities
 jest.mock("../utils/Utils", () => ({
@@ -37,13 +38,15 @@ const mockNotificationContext = {
   addNotification: jest.fn(),
 };
 
-const renderWithIntl = (component) => {
+const renderWithIntl = (component, userSessionDetails = {}) => {
   return render(
     <BrowserRouter>
       <IntlProvider locale="en" messages={messages}>
-        <NotificationContext.Provider value={mockNotificationContext}>
-          {component}
-        </NotificationContext.Provider>
+        <UserSessionDetailsContext.Provider value={{ userSessionDetails }}>
+          <NotificationContext.Provider value={mockNotificationContext}>
+            {component}
+          </NotificationContext.Provider>
+        </UserSessionDetailsContext.Provider>
       </IntlProvider>
     </BrowserRouter>,
   );
@@ -141,10 +144,6 @@ describe("StorageDashboard Filter UI", () => {
     });
   });
 
-  /**
-   * T062i3: Test Samples tab shows single location dropdown and status filter
-   * Samples tab should have single LocationFilterDropdown (not separate room/device dropdowns)
-   */
   test("testSamplesTab_ShowsSingleLocationDropdownAndStatusFilter", async () => {
     jest
       .spyOn(require("react-router-dom"), "useLocation")
@@ -161,6 +160,16 @@ describe("StorageDashboard Filter UI", () => {
     // Verify status filter exists
     const statusFilters = screen.getAllByTestId("status-filter");
     expect(statusFilters.length).toBeGreaterThan(0);
+  });
+
+  test("shows Zones tab label for Biorepository lab unit users", async () => {
+    renderWithIntl(<StorageDashboard />, {
+      loginLabUnit: "Biorepository Laboratory",
+      roles: ["Biorepository Manager"],
+    });
+
+    await screen.findByText(/Storage Management Dashboard/i);
+    expect(screen.getByTestId("tab-rooms").textContent).toContain("Zones");
   });
 
   /**

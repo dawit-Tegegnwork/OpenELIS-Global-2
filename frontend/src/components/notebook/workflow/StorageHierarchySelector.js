@@ -1,14 +1,17 @@
-import React, { useState, useEffect, useCallback, useRef } from "react";
+import React, { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import {
   Grid,
   Column,
   Dropdown,
   Loading,
   InlineNotification,
+  TextInput,
 } from "@carbon/react";
 import { FormattedMessage, useIntl } from "react-intl";
 import { getFromOpenElisServer } from "../../utils/Utils";
 import { buildBiorepositoryStorageUrl } from "../pages/biorepository/biorepositoryStorageHelpers";
+import { usePermissions } from "../../../hooks/usePermissions";
+import { resolveBiorepositoryPhysicalRoomName } from "../pages/biorepository/biorepositoryDisplayHelpers";
 
 const normalizeResponseList = (response) => {
   if (Array.isArray(response)) {
@@ -148,10 +151,19 @@ function StorageHierarchySelector({
   notebookId,
   onBoxLayoutLoaded,
   biorepositoryOnly = false,
+  physicalRoomName,
 }) {
   const intl = useIntl();
+  const { loginLabUnit } = usePermissions();
   const componentMounted = useRef(false);
   const requestCountRef = useRef(0);
+
+  const biorepositoryPhysicalRoomName = useMemo(() => {
+    if (!biorepositoryOnly) {
+      return null;
+    }
+    return resolveBiorepositoryPhysicalRoomName(loginLabUnit, physicalRoomName);
+  }, [biorepositoryOnly, loginLabUnit, physicalRoomName]);
 
   // Hierarchical storage selection state
   const [rooms, setRooms] = useState([]);
@@ -243,19 +255,29 @@ function StorageHierarchySelector({
         setHierarchyNotice({
           kind: "warning",
           title: intl.formatMessage({
-            id: "notebook.storage.hierarchy.empty.rooms.title",
-            defaultMessage: "No active storage rooms found",
+            id: biorepositoryOnly
+              ? "biorepository.storage.hierarchy.empty.zones.title"
+              : "notebook.storage.hierarchy.empty.rooms.title",
+            defaultMessage: biorepositoryOnly
+              ? "No active storage zones found"
+              : "No active storage rooms found",
           }),
           subtitle: isNotebookScoped
             ? intl.formatMessage({
-                id: "notebook.storage.hierarchy.empty.rooms.scoped.subtitle",
-                defaultMessage:
-                  "Set up an active storage room for this notebook's department in Storage Management, confirm the notebook is linked to the correct department, and ensure your login lab unit matches that department.",
+                id: biorepositoryOnly
+                  ? "biorepository.storage.hierarchy.empty.zones.scoped.subtitle"
+                  : "notebook.storage.hierarchy.empty.rooms.scoped.subtitle",
+                defaultMessage: biorepositoryOnly
+                  ? "Set up an active storage zone for this notebook's department in Storage Management, confirm the notebook is linked to the correct department, and ensure your login lab unit matches that department."
+                  : "Set up an active storage room for this notebook's department in Storage Management, confirm the notebook is linked to the correct department, and ensure your login lab unit matches that department.",
               })
             : intl.formatMessage({
-                id: "notebook.storage.hierarchy.empty.rooms.subtitle",
-                defaultMessage:
-                  "Set up and activate at least one storage room and freezer/device in Storage Management before assigning samples.",
+                id: biorepositoryOnly
+                  ? "biorepository.storage.hierarchy.empty.zones.subtitle"
+                  : "notebook.storage.hierarchy.empty.rooms.subtitle",
+                defaultMessage: biorepositoryOnly
+                  ? "Set up and activate at least one storage zone and freezer/device in Storage Management before assigning samples."
+                  : "Set up and activate at least one storage room and freezer/device in Storage Management before assigning samples.",
               }),
         });
         return;
@@ -264,24 +286,42 @@ function StorageHierarchySelector({
       if (level === "devices") {
         setHierarchyNotice({
           kind: "warning",
-          title: intl.formatMessage(
-            {
-              id: "notebook.storage.hierarchy.empty.devices.title",
-              defaultMessage: "No active devices in {roomLabel}",
-            },
-            {
-              roomLabel:
-                context.roomLabel ||
-                intl.formatMessage({
-                  id: "notebook.storage.hierarchy.unknownRoom",
-                  defaultMessage: "the selected room",
-                }),
-            },
-          ),
+          title: biorepositoryOnly
+            ? intl.formatMessage(
+                {
+                  id: "biorepository.storage.hierarchy.empty.devices.zoneTitle",
+                  defaultMessage: "No active devices in {zoneLabel}",
+                },
+                {
+                  zoneLabel:
+                    context.roomLabel ||
+                    intl.formatMessage({
+                      id: "biorepository.storage.hierarchy.unknownZone",
+                      defaultMessage: "the selected zone",
+                    }),
+                },
+              )
+            : intl.formatMessage(
+                {
+                  id: "notebook.storage.hierarchy.empty.devices.title",
+                  defaultMessage: "No active devices in {roomLabel}",
+                },
+                {
+                  roomLabel:
+                    context.roomLabel ||
+                    intl.formatMessage({
+                      id: "notebook.storage.hierarchy.unknownRoom",
+                      defaultMessage: "the selected room",
+                    }),
+                },
+              ),
           subtitle: intl.formatMessage({
-            id: "notebook.storage.hierarchy.empty.devices.subtitle",
-            defaultMessage:
-              "Add or activate a freezer/device for this room in Storage Management.",
+            id: biorepositoryOnly
+              ? "biorepository.storage.hierarchy.empty.devices.zoneSubtitle"
+              : "notebook.storage.hierarchy.empty.devices.subtitle",
+            defaultMessage: biorepositoryOnly
+              ? "Add or activate a freezer/device for this zone in Storage Management."
+              : "Add or activate a freezer/device for this room in Storage Management.",
           }),
         });
         return;
@@ -305,9 +345,12 @@ function StorageHierarchySelector({
             },
           ),
           subtitle: intl.formatMessage({
-            id: "notebook.storage.hierarchy.empty.shelves.subtitle",
-            defaultMessage:
-              "You can assign at room/device level, or configure shelves for finer location tracking.",
+            id: biorepositoryOnly
+              ? "biorepository.storage.hierarchy.empty.shelves.zoneSubtitle"
+              : "notebook.storage.hierarchy.empty.shelves.subtitle",
+            defaultMessage: biorepositoryOnly
+              ? "You can assign at zone/device level, or configure shelves for finer location tracking."
+              : "You can assign at room/device level, or configure shelves for finer location tracking.",
           }),
         });
         return;
@@ -364,7 +407,7 @@ function StorageHierarchySelector({
         });
       }
     },
-    [intl, storageScopeNotebookId],
+    [intl, storageScopeNotebookId, biorepositoryOnly],
   );
 
   // Load rooms on mount
@@ -408,8 +451,10 @@ function StorageHierarchySelector({
         logHierarchyError("rooms", endpoint, error);
         setHierarchyErrorNotice(
           intl.formatMessage({
-            id: "notebook.storage.hierarchy.level.rooms",
-            defaultMessage: "rooms",
+            id: biorepositoryOnly
+              ? "biorepository.storage.hierarchy.level.zones"
+              : "notebook.storage.hierarchy.level.rooms",
+            defaultMessage: biorepositoryOnly ? "zones" : "rooms",
           }),
           error,
         );
@@ -742,6 +787,9 @@ function StorageHierarchySelector({
   // Build hierarchical path
   const getHierarchicalPath = () => {
     const parts = [];
+    if (biorepositoryOnly && biorepositoryPhysicalRoomName) {
+      parts.push(biorepositoryPhysicalRoomName);
+    }
     if (selectedRoom) parts.push(selectedRoom.label);
     if (selectedDevice) parts.push(selectedDevice.label);
     if (selectedShelf) parts.push(selectedShelf.label);
@@ -752,17 +800,36 @@ function StorageHierarchySelector({
 
   return (
     <div className="storage-hierarchy-selector">
-      <Grid fullWidth narrow>
+      {biorepositoryOnly && (
+        <Grid fullWidth narrow>
+          <Column lg={8} md={4} sm={4}>
+            <TextInput
+              id="biorepository-physical-room"
+              readOnly
+              labelText={intl.formatMessage({
+                id: "biorepository.storage.physicalRoom",
+                defaultMessage: "Room",
+              })}
+              value={biorepositoryPhysicalRoomName || ""}
+            />
+          </Column>
+        </Grid>
+      )}
+      <Grid fullWidth narrow style={biorepositoryOnly ? { marginTop: "0.5rem" } : undefined}>
         <Column lg={8} md={4} sm={4}>
           <Dropdown
             id="room-dropdown"
             titleText={intl.formatMessage({
-              id: "notebook.storage.room",
-              defaultMessage: "Room",
+              id: biorepositoryOnly
+                ? "biorepository.storage.zone"
+                : "notebook.storage.room",
+              defaultMessage: biorepositoryOnly ? "Zone" : "Room",
             })}
             label={intl.formatMessage({
-              id: "notebook.storage.selectRoom",
-              defaultMessage: "Select room...",
+              id: biorepositoryOnly
+                ? "biorepository.storage.selectZone"
+                : "notebook.storage.selectRoom",
+              defaultMessage: biorepositoryOnly ? "Select zone..." : "Select room...",
             })}
             items={rooms}
             itemToString={(item) => (item ? item.label : "")}
@@ -799,8 +866,12 @@ function StorageHierarchySelector({
             onChange={handleDeviceChange}
             disabled={!selectedRoom}
             helperText={intl.formatMessage({
-              id: "notebook.storage.device.optional",
-              defaultMessage: "Optional - can assign to room level",
+              id: biorepositoryOnly
+                ? "biorepository.storage.device.optionalZone"
+                : "notebook.storage.device.optional",
+              defaultMessage: biorepositoryOnly
+                ? "Optional - can assign to zone level"
+                : "Optional - can assign to room level",
             })}
           />
         </Column>

@@ -15,7 +15,7 @@ export const DEVICE_IMPORT_FIELDS = [
 ];
 
 export const ROOM_IMPORT_FIELDS = [
-  "room_code",
+  "zone_code",
   "checked_date_time",
   "oxygen_level",
   "humidity",
@@ -44,6 +44,10 @@ const ROOM_HEADER_ALIASES = {
   roomcode: "room_code",
   roomid: "room_code",
   room: "room_code",
+  zonecode: "room_code",
+  zoneid: "room_code",
+  zone: "room_code",
+  zone_code: "room_code",
   checkeddatetime: "checked_date_time",
   datetime: "checked_date_time",
   timestamp: "checked_date_time",
@@ -182,7 +186,7 @@ export const buildDeviceTemplateCsv = () => {
 
 export const buildRoomTemplateCsv = () => {
   const headers = ROOM_IMPORT_FIELDS.join(",");
-  const example = "BR-ROOM-A,2026-06-11T08:00,20.5,45,AB,Auto logger export";
+  const example = "BR-ZONE-A,2026-06-11T08:00,20.5,45,AB,Auto logger export";
   return `${headers}\n${example}`;
 };
 
@@ -297,9 +301,9 @@ export const parseRoomImportCsv = (text, rooms = [], scopeRoom = null) => {
 
     const rowErrors = [];
     if (!roomCode) {
-      rowErrors.push("room_code is required");
+      rowErrors.push("zone_code is required");
     } else if (knownCodes.size > 0 && !knownCodes.has(roomCode.toLowerCase())) {
-      rowErrors.push(`Unknown room_code: ${roomCode}`);
+      rowErrors.push(`Unknown zone_code: ${roomCode}`);
     }
     if (oxygenLevel == null && humidity == null) {
       rowErrors.push("At least one of oxygen_level or humidity is required");

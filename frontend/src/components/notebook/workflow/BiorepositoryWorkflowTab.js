@@ -18,6 +18,7 @@ import {
   getRegistryStages,
   resolvePageKey,
 } from "../../../constants/ahriWorkflowRegistry";
+import { formatBiorepositoryPageInstructions } from "../pages/biorepository/biorepositoryDisplayHelpers";
 import {
   BiorepositoryIntakePage,
   BiorepositoryStorageAssignmentPage,
@@ -555,7 +556,10 @@ function BiorepositoryWorkflowTab({ notebookId, entryId: propEntryId }) {
                 <div className="page-content">
                   {effectivePages[activePage].instructions && (
                     <div className="page-instructions">
-                      {effectivePages[activePage].instructions}
+                      {formatBiorepositoryPageInstructions(
+                        effectivePages[activePage].instructions,
+                        resolveBiorepositoryPageKey(effectivePages[activePage]),
+                      )}
                     </div>
                   )}
 
