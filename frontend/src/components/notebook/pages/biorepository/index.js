@@ -18,6 +18,6 @@ export { default as SampleTransferTab } from "./SampleTransferTab";
 export { default as RetentionPolicySection } from "./RetentionPolicySection";
 
 // Sample Request & Retrieval tab components
-export { default as RequestSubmissionTab } from "./RequestSubmissionTab";
-export { default as PendingApprovalsTab } from "./PendingApprovalsTab";
+export { default as IncomingRequestsTab } from "./IncomingRequestsTab";
 export { default as ActiveRetrievalsTab } from "./ActiveRetrievalsTab";
+export { default as RetrievalPrintTab } from "./RetrievalPrintTab";

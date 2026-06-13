@@ -163,6 +163,9 @@ function PathologyTestingMicroscopyPage({
     clinicalCorrelation: "",
     prognosticFactors: "",
     synopticReportComplete: false,
+    synopticPdfFileName: "",
+    synopticPdfFileType: "",
+    synopticPdfBase64: "",
     verifiedByPathologist: false,
     verifyingPathologistName: currentUserName,
     verificationDate: "",
@@ -449,6 +452,27 @@ function PathologyTestingMicroscopyPage({
       ...prev,
       [name]: type === "checkbox" ? checked : value,
     }));
+  };
+
+  const handleSynopticPdfUpload = (event, { addedFiles }) => {
+    const file = addedFiles?.[0];
+    if (!file || file.type !== "application/pdf") {
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => {
+      const dataUrl = reader.result;
+      const base64 =
+        typeof dataUrl === "string" ? dataUrl.split(",")[1] || "" : "";
+      setResultsData((prev) => ({
+        ...prev,
+        synopticPdfFileName: file.name,
+        synopticPdfFileType: file.type,
+        synopticPdfBase64: base64,
+        synopticReportComplete: true,
+      }));
+    };
+    reader.readAsDataURL(file);
   };
 
   const handleToggleChange = (fieldName, checked) => {
@@ -3424,6 +3448,43 @@ ACC-2024-002,BLK-002-A,"Negative for malignancy",,Benign fibrocystic changes,tru
                           style={{ marginTop: "1rem" }}
                           disabled={resultsViewMode}
                         />
+                      </Column>
+
+                      <Column lg={16} md={8} sm={4}>
+                        <div style={{ marginTop: "1rem" }}>
+                          <p style={{ marginBottom: "0.5rem", fontWeight: 600 }}>
+                            <FormattedMessage
+                              id="pathology.results.synopticPdfImport"
+                              defaultMessage="Import Synoptic Report (PDF)"
+                            />
+                          </p>
+                          {!resultsViewMode && (
+                            <FileUploaderDropContainer
+                              accept={["application/pdf"]}
+                              labelText={intl.formatMessage({
+                                id: "pathology.results.synopticPdfUpload",
+                                defaultMessage:
+                                  "Drag and drop a synoptic report PDF here or click to upload",
+                              })}
+                              multiple={false}
+                              onAddFiles={handleSynopticPdfUpload}
+                            />
+                          )}
+                          {resultsData.synopticPdfFileName && (
+                            <FileUploaderItem
+                              name={resultsData.synopticPdfFileName}
+                              status="complete"
+                              onDelete={() =>
+                                setResultsData((prev) => ({
+                                  ...prev,
+                                  synopticPdfFileName: "",
+                                  synopticPdfFileType: "",
+                                  synopticPdfBase64: "",
+                                }))
+                              }
+                            />
+                          )}
+                        </div>
                       </Column>
 
                       {/* Cellular Features */}

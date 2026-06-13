@@ -20,6 +20,7 @@ function BoxLayoutViewer({
   rows = 8,
   columns = 12,
   positionSchemaHint = "letter-number",
+  showSampleIdInWell = false,
   onWellClick,
 }) {
   const hint = positionSchemaHint || "letter-number";
@@ -136,7 +137,15 @@ function BoxLayoutViewer({
                       }
                     }}
                   >
-                    <div className="well-dot"></div>
+                    {showSampleIdInWell && occupied ? (
+                      <span className="well-sample-id">
+                        {getWellInfo(rowIdx, colIndex)?.externalId ||
+                          getWellInfo(rowIdx, colIndex)?.sampleItemId ||
+                          "•"}
+                      </span>
+                    ) : (
+                      <div className="well-dot"></div>
+                    )}
                   </div>
                 </Tooltip>
               );
@@ -175,6 +184,7 @@ BoxLayoutViewer.propTypes = {
   rows: PropTypes.number,
   columns: PropTypes.number,
   positionSchemaHint: PropTypes.string,
+  showSampleIdInWell: PropTypes.bool,
   onWellClick: PropTypes.func,
 };
 

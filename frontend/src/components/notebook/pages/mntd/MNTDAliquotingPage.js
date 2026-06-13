@@ -484,8 +484,11 @@ function MNTDAliquotingPage({
       );
       return;
     }
+    if (assayPlates.length > 0 && !selectedAssayPlateId) {
+      setSelectedAssayPlateId(assayPlates[0].id);
+    }
     setRouteModalOpen(true);
-  }, [selectedChildIds, intl]);
+  }, [selectedChildIds, intl, assayPlates, selectedAssayPlateId]);
 
   // Handle route to analyzer
   const handleRouteToAnalyzer = useCallback(() => {

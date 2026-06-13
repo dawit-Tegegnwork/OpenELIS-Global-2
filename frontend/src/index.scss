@@ -21,6 +21,13 @@
   background-color: #f5f6f8;
 }
 
+.cds--inline-notification,
+.cds--toast-notification,
+.cds--actionable-notification {
+  z-index: 10000;
+  position: relative;
+}
+
 .loginPageContent,
 .changePasswordPage {
   padding-top: 4.5rem;

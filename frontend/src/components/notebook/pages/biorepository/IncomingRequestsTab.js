@@ -21,47 +21,36 @@ import {
 } from "@carbon/react";
 import { Checkmark, Close, View, Renew } from "@carbon/icons-react";
 import { FormattedMessage, useIntl } from "react-intl";
+import PropTypes from "prop-types";
 import { formatQuantityWithUnit } from "./biorepositoryQuantityHelpers";
 import { formatRequestedReferenceSummary } from "../common/biorepoRequestReferenceHelpers";
 import {
   getRequestDisplayStatus,
   getRequestLineCount,
 } from "./biorepoRetrievalStatusHelpers";
-import PropTypes from "prop-types";
 import {
   getFromOpenElisServer,
   postToOpenElisServerJsonResponse,
 } from "../../../utils/Utils";
 
 /**
- * PendingApprovalsTab - Supervisor approval queue for retrieval requests
- *
- * Displays requests awaiting approval with ability to:
- * - View request details and samples
- * - Approve (generates work order)
- * - Reject with reason
+ * IncomingRequestsTab - Queue of incoming sample retrieval requests from other departments.
+ * Accept generates a work order; Reject requires a reason.
  */
-function PendingApprovalsTab({ onActionComplete, onApproved }) {
+function IncomingRequestsTab({ onActionComplete, onAccepted }) {
   const intl = useIntl();
 
-  // Data state
   const [requests, setRequests] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-
-  // Pagination state
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
-
-  // Search state
   const [searchTerm, setSearchTerm] = useState("");
-
-  // Modal state
   const [selectedRequest, setSelectedRequest] = useState(null);
   const [detailsModalOpen, setDetailsModalOpen] = useState(false);
-  const [approveModalOpen, setApproveModalOpen] = useState(false);
+  const [acceptModalOpen, setAcceptModalOpen] = useState(false);
   const [rejectModalOpen, setRejectModalOpen] = useState(false);
-  const [approvalNotes, setApprovalNotes] = useState("");
+  const [acceptNotes, setAcceptNotes] = useState("");
   const [rejectionReason, setRejectionReason] = useState("");
   const [actionLoading, setActionLoading] = useState(false);
   const [detailsLoading, setDetailsLoading] = useState(false);
@@ -83,7 +72,6 @@ function PendingApprovalsTab({ onActionComplete, onApproved }) {
     );
   }, []);
 
-  // Load pending requests
   const loadRequests = useCallback(() => {
     setLoading(true);
     setError(null);
@@ -109,7 +97,6 @@ function PendingApprovalsTab({ onActionComplete, onApproved }) {
     loadRequests();
   }, [loadRequests]);
 
-  // Filter requests by search term
   const filteredRequests = requests.filter((r) => {
     if (!searchTerm) return true;
     const term = searchTerm.toLowerCase();
@@ -122,41 +109,38 @@ function PendingApprovalsTab({ onActionComplete, onApproved }) {
     );
   });
 
-  // Paginated requests
   const paginatedRequests = filteredRequests.slice(
     (page - 1) * pageSize,
     page * pageSize,
   );
 
-  // Handle approve
-  const handleApprove = useCallback(() => {
+  const handleAccept = useCallback(() => {
     if (!selectedRequest) return;
 
     setActionLoading(true);
     postToOpenElisServerJsonResponse(
       `/rest/biorepository/retrieval/requests/${selectedRequest.id}/approve`,
-      JSON.stringify({ approvalNotes: approvalNotes || null }),
+      JSON.stringify({ approvalNotes: acceptNotes || null }),
       (data) => {
         setActionLoading(false);
         if (data && data.error) {
           setError(data.error);
           return;
         }
-        setApproveModalOpen(false);
+        setAcceptModalOpen(false);
         setSelectedRequest(null);
-        setApprovalNotes("");
+        setAcceptNotes("");
         loadRequests();
         if (onActionComplete) {
           onActionComplete();
         }
-        if (onApproved) {
-          onApproved();
+        if (onAccepted) {
+          onAccepted();
         }
       },
     );
-  }, [selectedRequest, approvalNotes, loadRequests, onActionComplete, onApproved]);
+  }, [selectedRequest, acceptNotes, loadRequests, onActionComplete, onAccepted]);
 
-  // Handle reject
   const handleReject = useCallback(() => {
     if (!selectedRequest || !rejectionReason.trim()) return;
 
@@ -181,7 +165,6 @@ function PendingApprovalsTab({ onActionComplete, onApproved }) {
     );
   }, [selectedRequest, rejectionReason, loadRequests, onActionComplete]);
 
-  // Get priority tag type
   const getPriorityTagType = (priority) => {
     switch (priority) {
       case "CRITICAL":
@@ -193,7 +176,6 @@ function PendingApprovalsTab({ onActionComplete, onApproved }) {
     }
   };
 
-  // Table headers
   const headers = [
     {
       key: "requestNumber",
@@ -255,7 +237,7 @@ function PendingApprovalsTab({ onActionComplete, onApproved }) {
   }
 
   return (
-    <div className="pending-approvals-tab" style={{ padding: "1rem 0" }}>
+    <div className="incoming-requests-tab" style={{ padding: "1rem 0" }}>
       {error && (
         <InlineNotification
           kind="error"
@@ -296,8 +278,9 @@ function PendingApprovalsTab({ onActionComplete, onApproved }) {
                     defaultMessage: "Search",
                   })}
                   placeholder={intl.formatMessage({
-                    id: "biorepository.retrieval.search.pending",
-                    defaultMessage: "Search by request number or requester...",
+                    id: "biorepository.retrieval.search.incoming",
+                    defaultMessage:
+                      "Search by request number, requester, or lab unit...",
                   })}
                   value={searchTerm}
                   onChange={(e) => {
@@ -343,8 +326,8 @@ function PendingApprovalsTab({ onActionComplete, onApproved }) {
                         }}
                       >
                         <FormattedMessage
-                          id="biorepository.retrieval.noPendingRequests"
-                          defaultMessage="No requests pending approval"
+                          id="biorepository.retrieval.noIncomingRequests"
+                          defaultMessage="No incoming sample requests from other departments"
                         />
                       </div>
                     </TableCell>
@@ -366,55 +349,61 @@ function PendingApprovalsTab({ onActionComplete, onApproved }) {
                                 {cell.value}
                               </Tag>
                             ) : cell.info.header === "actions" ? (
-                              <div style={{ display: "flex", gap: "0.25rem" }}>
+                              <div
+                                style={{
+                                  display: "flex",
+                                  gap: "0.5rem",
+                                  flexWrap: "wrap",
+                                }}
+                              >
                                 <Button
                                   kind="ghost"
                                   size="sm"
                                   renderIcon={View}
-                                  iconDescription={intl.formatMessage({
-                                    id: "label.viewDetails",
-                                    defaultMessage: "View Details",
-                                  })}
-                                  hasIconOnly
                                   onClick={() => {
                                     loadRequestDetails(rawData.id, (data) => {
                                       setSelectedRequest(data);
                                       setDetailsModalOpen(true);
                                     });
                                   }}
-                                />
+                                >
+                                  <FormattedMessage
+                                    id="label.viewDetails"
+                                    defaultMessage="View Details"
+                                  />
+                                </Button>
                                 <Button
                                   kind="primary"
                                   size="sm"
                                   renderIcon={Checkmark}
-                                  iconDescription={intl.formatMessage({
-                                    id: "label.approve",
-                                    defaultMessage: "Approve",
-                                  })}
-                                  hasIconOnly
                                   onClick={() => {
                                     loadRequestDetails(rawData.id, (data) => {
                                       setSelectedRequest(data);
-                                      setApproveModalOpen(true);
+                                      setAcceptModalOpen(true);
                                     });
                                   }}
-                                />
+                                >
+                                  <FormattedMessage
+                                    id="label.accept"
+                                    defaultMessage="Accept"
+                                  />
+                                </Button>
                                 <Button
-                                  kind="danger--ghost"
+                                  kind="danger--tertiary"
                                   size="sm"
                                   renderIcon={Close}
-                                  iconDescription={intl.formatMessage({
-                                    id: "label.reject",
-                                    defaultMessage: "Reject",
-                                  })}
-                                  hasIconOnly
                                   onClick={() => {
                                     loadRequestDetails(rawData.id, (data) => {
                                       setSelectedRequest(data);
                                       setRejectModalOpen(true);
                                     });
                                   }}
-                                />
+                                >
+                                  <FormattedMessage
+                                    id="label.reject"
+                                    defaultMessage="Reject"
+                                  />
+                                </Button>
                               </div>
                             ) : (
                               cell.value
@@ -444,7 +433,6 @@ function PendingApprovalsTab({ onActionComplete, onApproved }) {
         />
       )}
 
-      {/* Details Modal */}
       <Modal
         open={detailsModalOpen}
         modalHeading={intl.formatMessage({
@@ -544,16 +532,6 @@ function PendingApprovalsTab({ onActionComplete, onApproved }) {
                   {selectedRequest.priorityLevel || "NORMAL"}
                 </Tag>
               </div>
-              <div>
-                <strong>
-                  <FormattedMessage
-                    id="biorepository.retrieval.destinationType"
-                    defaultMessage="Destination Type"
-                  />
-                  :
-                </strong>{" "}
-                {selectedRequest.destinationType || "N/A"}
-              </div>
             </div>
 
             <div>
@@ -568,34 +546,6 @@ function PendingApprovalsTab({ onActionComplete, onApproved }) {
                 {selectedRequest.requestPurpose || "Not specified"}
               </p>
             </div>
-
-            {selectedRequest.destinationDetails && (
-              <div>
-                <strong>
-                  <FormattedMessage
-                    id="biorepository.retrieval.destinationDetails"
-                    defaultMessage="Destination Details"
-                  />
-                  :
-                </strong>
-                <p style={{ marginTop: "0.25rem", color: "#525252" }}>
-                  {selectedRequest.destinationDetails}
-                </p>
-              </div>
-            )}
-
-            {selectedRequest.ethicsApprovalRef && (
-              <div>
-                <strong>
-                  <FormattedMessage
-                    id="biorepository.retrieval.ethicsRef"
-                    defaultMessage="Ethics Approval"
-                  />
-                  :
-                </strong>{" "}
-                {selectedRequest.ethicsApprovalRef}
-              </div>
-            )}
 
             {selectedRequest.items && selectedRequest.items.length > 0 && (
               <div>
@@ -615,8 +565,6 @@ function PendingApprovalsTab({ onActionComplete, onApproved }) {
                           item.quantityRequested,
                           item.unitOfMeasure,
                         )}`}
-                      {item.status === "AWAITING_FULFILLMENT" &&
-                        " — sample to be matched at fulfillment"}
                       {item.remark && ` — ${item.remark}`}
                     </li>
                   ))}
@@ -627,12 +575,11 @@ function PendingApprovalsTab({ onActionComplete, onApproved }) {
         ) : null}
       </Modal>
 
-      {/* Approve Modal */}
       <Modal
-        open={approveModalOpen}
+        open={acceptModalOpen}
         modalHeading={intl.formatMessage({
-          id: "biorepository.retrieval.approveRequest",
-          defaultMessage: "Approve Request",
+          id: "biorepository.retrieval.acceptRequest",
+          defaultMessage: "Accept Request",
         })}
         primaryButtonText={
           actionLoading
@@ -641,8 +588,8 @@ function PendingApprovalsTab({ onActionComplete, onApproved }) {
                 defaultMessage: "Processing...",
               })
             : intl.formatMessage({
-                id: "label.approve",
-                defaultMessage: "Approve",
+                id: "label.accept",
+                defaultMessage: "Accept",
               })
         }
         secondaryButtonText={intl.formatMessage({
@@ -650,20 +597,19 @@ function PendingApprovalsTab({ onActionComplete, onApproved }) {
           defaultMessage: "Cancel",
         })}
         onRequestClose={() => {
-          setApproveModalOpen(false);
+          setAcceptModalOpen(false);
           setSelectedRequest(null);
-          setApprovalNotes("");
+          setAcceptNotes("");
         }}
-        onRequestSubmit={handleApprove}
+        onRequestSubmit={handleAccept}
         primaryButtonDisabled={actionLoading}
-        danger={false}
       >
         {selectedRequest && (
           <div>
             <p style={{ marginBottom: "1rem" }}>
               <FormattedMessage
-                id="biorepository.retrieval.approve.confirmation"
-                defaultMessage="Are you sure you want to approve request {requestNumber}? This will generate a work order for sample retrieval."
+                id="biorepository.retrieval.accept.confirmation"
+                defaultMessage="Accept request {requestNumber}? A work order will be generated for sample retrieval."
                 values={{
                   requestNumber:
                     selectedRequest.requestNumber ||
@@ -672,23 +618,18 @@ function PendingApprovalsTab({ onActionComplete, onApproved }) {
               />
             </p>
             <TextArea
-              id="approvalNotes"
+              id="acceptNotes"
               labelText={intl.formatMessage({
-                id: "biorepository.retrieval.approvalNotes",
-                defaultMessage: "Approval Notes (Optional)",
+                id: "biorepository.retrieval.acceptNotes",
+                defaultMessage: "Notes (Optional)",
               })}
-              placeholder={intl.formatMessage({
-                id: "biorepository.retrieval.approvalNotes.placeholder",
-                defaultMessage: "Add any notes for the requester...",
-              })}
-              value={approvalNotes}
-              onChange={(e) => setApprovalNotes(e.target.value)}
+              value={acceptNotes}
+              onChange={(e) => setAcceptNotes(e.target.value)}
             />
           </div>
         )}
       </Modal>
 
-      {/* Reject Modal */}
       <Modal
         open={rejectModalOpen}
         modalHeading={intl.formatMessage({
@@ -738,11 +679,6 @@ function PendingApprovalsTab({ onActionComplete, onApproved }) {
                 id: "biorepository.retrieval.rejectionReason",
                 defaultMessage: "Rejection Reason (Required)",
               })}
-              placeholder={intl.formatMessage({
-                id: "biorepository.retrieval.rejectionReason.placeholder",
-                defaultMessage:
-                  "Provide a reason for rejecting this request...",
-              })}
               value={rejectionReason}
               onChange={(e) => setRejectionReason(e.target.value)}
               required
@@ -754,8 +690,9 @@ function PendingApprovalsTab({ onActionComplete, onApproved }) {
   );
 }
 
-PendingApprovalsTab.propTypes = {
+IncomingRequestsTab.propTypes = {
   onActionComplete: PropTypes.func,
+  onAccepted: PropTypes.func,
 };
 
-export default PendingApprovalsTab;
+export default IncomingRequestsTab;

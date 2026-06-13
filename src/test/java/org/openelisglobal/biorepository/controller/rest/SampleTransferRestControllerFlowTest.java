@@ -5,11 +5,11 @@ import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import jakarta.servlet.http.HttpServletRequest;
-import java.util.List;
 import java.util.Map;
 import org.junit.Before;
 import org.junit.Test;
@@ -23,7 +23,6 @@ import org.openelisglobal.biorepository.valueholder.SampleTransferItem;
 import org.openelisglobal.login.valueholder.UserSessionData;
 import org.openelisglobal.notebook.service.NoteBookPageService;
 import org.openelisglobal.notebook.service.NotebookPageSampleService;
-import org.openelisglobal.notebook.valueholder.NoteBookPage;
 import org.openelisglobal.sampleitem.valueholder.SampleItem;
 import org.springframework.http.ResponseEntity;
 import org.springframework.mock.web.MockHttpServletRequest;
@@ -53,7 +52,7 @@ public class SampleTransferRestControllerFlowTest {
     }
 
     @Test
-    public void acceptItem_NonNumericSampleItemId_DoesNotFailAndLinksToStoragePage() {
+    public void acceptItem_DoesNotAutoLinkToStoragePage() {
         SampleTransferItem item = new SampleTransferItem();
         item.setId(1001);
         item.setStatus(SampleTransferItem.ItemStatus.ACCEPTED);
@@ -66,13 +65,7 @@ public class SampleTransferRestControllerFlowTest {
         bioSample.setId(501);
         item.setBioSample(bioSample);
 
-        NoteBookPage storagePage = new NoteBookPage();
-        storagePage.setId(22);
-        storagePage.setOrder(2);
-
         when(transferService.acceptItem(eq(1001), any(BioSample.class), eq("7"))).thenReturn(item);
-        when(noteBookPageService.getByNotebookId(117)).thenReturn(List.of(storagePage));
-        when(notebookPageSampleService.getBySampleItemIdAndPageId("ABC-100", 22)).thenReturn(null);
 
         SampleTransferRestController.BioSampleMetadata metadata = new SampleTransferRestController.BioSampleMetadata();
         metadata.setNotebookId(117);
@@ -85,15 +78,15 @@ public class SampleTransferRestControllerFlowTest {
         Map<String, Object> body = (Map<String, Object>) response.getBody();
         assertNotNull(body);
         assertEquals("ABC-100", body.get("sampleItemId"));
-        assertEquals(Boolean.TRUE, body.get("storagePageLinked"));
+        assertEquals(Boolean.FALSE, body.get("storagePageLinked"));
         assertFalse(body.containsKey("error"));
 
-        verify(notebookPageSampleService).createPageSampleForPageString(22, "ABC-100",
-                org.openelisglobal.notebook.valueholder.NotebookPageSample.Status.PENDING);
+        verify(notebookPageSampleService, never()).createPageSampleForPageString(org.mockito.ArgumentMatchers.any(),
+                org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any());
     }
 
     @Test
-    public void acceptItem_WhenPageOrderDiffers_FallsBackToStorageAssignPageId() {
+    public void acceptItem_WhenPageOrderDiffers_StillDoesNotAutoLink() {
         SampleTransferItem item = new SampleTransferItem();
         item.setId(1002);
         item.setStatus(SampleTransferItem.ItemStatus.ACCEPTED);
@@ -106,21 +99,7 @@ public class SampleTransferRestControllerFlowTest {
         bioSample.setId(502);
         item.setBioSample(bioSample);
 
-        NoteBookPage nonStoragePage = new NoteBookPage();
-        nonStoragePage.setId(30);
-        nonStoragePage.setOrder(2);
-        nonStoragePage.setPageId("shipment_reception");
-        nonStoragePage.setTitle("Shipment Reception");
-
-        NoteBookPage storagePage = new NoteBookPage();
-        storagePage.setId(31);
-        storagePage.setOrder(7);
-        storagePage.setPageId("storage_assign");
-        storagePage.setTitle("Storage Assignment");
-
         when(transferService.acceptItem(eq(1002), any(BioSample.class), eq("7"))).thenReturn(item);
-        when(noteBookPageService.getByNotebookId(118)).thenReturn(List.of(nonStoragePage, storagePage));
-        when(notebookPageSampleService.getBySampleItemIdAndPageId("ABC-200", 31)).thenReturn(null);
 
         SampleTransferRestController.BioSampleMetadata metadata = new SampleTransferRestController.BioSampleMetadata();
         metadata.setNotebookId(118);
@@ -132,10 +111,9 @@ public class SampleTransferRestControllerFlowTest {
         @SuppressWarnings("unchecked")
         Map<String, Object> body = (Map<String, Object>) response.getBody();
         assertNotNull(body);
-        assertEquals(Boolean.TRUE, body.get("storagePageLinked"));
-        assertEquals(31, body.get("storagePageId"));
+        assertEquals(Boolean.FALSE, body.get("storagePageLinked"));
 
-        verify(notebookPageSampleService).createPageSampleForPageString(31, "ABC-200",
-                org.openelisglobal.notebook.valueholder.NotebookPageSample.Status.PENDING);
+        verify(notebookPageSampleService, never()).createPageSampleForPageString(org.mockito.ArgumentMatchers.any(),
+                org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any());
     }
 }

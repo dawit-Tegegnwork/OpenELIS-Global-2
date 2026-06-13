@@ -158,3 +158,15 @@
     gap: 0.5rem;
   }
 }
+
+.well-sample-id {
+  display: block;
+  font-size: 0.5rem;
+  line-height: 1.1;
+  word-break: break-all;
+  text-align: center;
+  padding: 1px;
+  color: var(--cds-text-primary, #161616);
+  max-width: 100%;
+  overflow: hidden;
+}

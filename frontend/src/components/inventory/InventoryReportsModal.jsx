@@ -48,6 +48,17 @@ const InventoryReportsModal = ({ open, onClose }) => {
       }),
     },
     {
+      id: "MOST_EXPIRED",
+      text: intl.formatMessage({
+        id: "reports.type.mostExpired",
+        defaultMessage: "Most Expired Items",
+      }),
+      description: intl.formatMessage({
+        id: "reports.type.mostExpired.description",
+        defaultMessage: "Lots sorted by expiry date (most expired first)",
+      }),
+    },
+    {
       id: "LOW_STOCK",
       text: intl.formatMessage({ id: "reports.type.lowStock" }),
       description: intl.formatMessage({

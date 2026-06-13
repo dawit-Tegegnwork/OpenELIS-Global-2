@@ -137,6 +137,9 @@
     <!-- Who uses it: Lab technicians / Store managers -->
     <!-- ======================================================== -->
     <changeSet id="create-biorepository-page-2-storage-assignment" author="openelis-biorepository">
+        <!-- Room→Zone label edit changed checksum on already-applied DB rows -->
+        <validCheckSum>8:1554440fd271c3baa22844e17cadc18e</validCheckSum>
+        <validCheckSum>8:671379f085ca9ed260989ccce75709e4</validCheckSum>
         <preConditions onFail="MARK_RAN">
             <sqlCheck expectedResult="1">
                 SELECT COUNT(*) FROM clinlims.notebook WHERE title = 'Biorepository Laboratory' AND is_template = true

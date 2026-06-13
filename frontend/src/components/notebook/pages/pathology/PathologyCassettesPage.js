@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from "react";
+import React, { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import {
   Grid,
   Column,
@@ -186,6 +186,7 @@ function PathologyCassettesPage({
                   cassetteColor: cassetteData.cassetteColor || "",
                   technicianName: cassetteData.technicianName || "",
                   cassetteDate: cassetteData.cassetteDate || "",
+                  cassetteLabels: cassetteData.cassetteLabels || [],
                   // QC status from current page ONLY - show nothing until cassettes created
                   qcStatus: cassetteData.qcStatus || "",
                 };
@@ -447,6 +448,22 @@ function PathologyCassettesPage({
     (s) => s.status === "PENDING" || !s.cassettesCreated,
   ).length;
 
+  const childCassetteRows = useMemo(() => {
+    const rows = [];
+    samples.forEach((sample) => {
+      (sample.cassetteLabels || []).forEach((label, index) => {
+        rows.push({
+          id: `${sample.id}-${index}`,
+          parentSpecimen: sample.externalId || sample.accessionNumber || sample.id,
+          childCassette: label,
+          parentStatus: sample.status || "PENDING",
+          cassetteColor: sample.cassetteColor || "—",
+        });
+      });
+    });
+    return rows;
+  }, [samples]);
+
   return (
     <div className="pathology-page cassettes-page">
       {/* Header */}
@@ -480,6 +497,63 @@ function PathologyCassettesPage({
           </Button>
         </Column>
       </Grid>
+
+      {childCassetteRows.length > 0 && (
+        <Grid style={{ marginBottom: "1rem" }}>
+          <Column lg={16} md={8} sm={4}>
+            <Tile>
+              <h4 style={{ marginBottom: "0.75rem" }}>
+                <FormattedMessage
+                  id="pathology.cassettes.childTracking.title"
+                  defaultMessage="Child Cassette Tracking"
+                />
+              </h4>
+              <TableContainer>
+                <Table size="sm">
+                  <TableHead>
+                    <TableRow>
+                      <TableHeader>
+                        <FormattedMessage
+                          id="pathology.cassettes.childTracking.parent"
+                          defaultMessage="Parent Specimen"
+                        />
+                      </TableHeader>
+                      <TableHeader>
+                        <FormattedMessage
+                          id="pathology.cassettes.childTracking.child"
+                          defaultMessage="Child Cassette"
+                        />
+                      </TableHeader>
+                      <TableHeader>
+                        <FormattedMessage
+                          id="pathology.cassettes.childTracking.color"
+                          defaultMessage="Color"
+                        />
+                      </TableHeader>
+                      <TableHeader>
+                        <FormattedMessage
+                          id="pathology.cassettes.childTracking.status"
+                          defaultMessage="Status"
+                        />
+                      </TableHeader>
+                    </TableRow>
+                  </TableHead>
+                  <TableBody>
+                    {childCassetteRows.map((row) => (
+                      <TableRow key={row.id}>
+                        <TableCell>{row.parentSpecimen}</TableCell>
+                        <TableCell>{row.childCassette}</TableCell>
+                        <TableCell>{row.cassetteColor}</TableCell>
+                        <TableCell>{row.parentStatus}</TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </TableContainer>
+            </Tile>
+          </Column>
+        </Grid>
+      )}
 
       {/* Notifications */}
       {error && (

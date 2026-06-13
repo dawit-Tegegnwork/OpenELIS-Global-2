@@ -31,16 +31,20 @@ import { FormattedMessage, useIntl } from "react-intl";
 import PropTypes from "prop-types";
 import {
   getFromOpenElisServer,
-  postToOpenElisServerJsonResponse,
-  putToOpenElisServerJsonResponse,
 } from "../../../utils/Utils";
 import ShipmentReceptionForm from "./ShipmentReceptionForm";
 import ShipmentListTable from "./ShipmentListTable";
 import SampleIntakeForm from "./SampleIntakeForm";
+import SampleDuplicationSection from "./SampleDuplicationSection";
 import DocumentationVerificationModal from "./DocumentationVerificationModal";
 import ManifestUploadModal from "./ManifestUploadModal";
 import SampleTransferTab from "./SampleTransferTab";
 import RetentionPolicySection from "./RetentionPolicySection";
+import {
+  findStorageAssignmentPage,
+  getJson,
+  advanceSamplesToStorageBatched,
+} from "./biorepositoryStorageHelpers";
 
 const INVENTORY_SAMPLE_FETCH_LIMIT = 5000;
 const SHIPMENT_SAMPLE_FETCH_LIMIT = 5000;
@@ -316,9 +320,9 @@ function BiorepositoryIntakePage({
     }
   }, [currentShipment?.id, handleBulkImportComplete, loadAllBioSamples]);
 
-  // Advance selected samples to Storage Assignment page (page 2)
+  // Advance selected samples to Storage Assignment page
   const handleAdvanceToStorage = useCallback(
-    (selectedRows) => {
+    async (selectedRows) => {
       if (!selectedRows || selectedRows.length === 0) {
         setAdvanceNotification({
           kind: "warning",
@@ -334,7 +338,6 @@ function BiorepositoryIntakePage({
         return;
       }
 
-      // Get sampleItemIds from the selected BioSamples
       const sampleItemIds = selectedRows
         .map((row) => {
           const bioSample = allBioSamples.find(
@@ -360,13 +363,7 @@ function BiorepositoryIntakePage({
         return;
       }
 
-      setAdvancingToStorage(true);
-      setAdvanceNotification(null);
-
-      // Get notebook pages to find Storage Assignment page (order 2)
-      const nbId = notebookId || entryId;
-      if (!nbId) {
-        setAdvancingToStorage(false);
+      if (!notebookId) {
         setAdvanceNotification({
           kind: "error",
           title: intl.formatMessage({
@@ -374,138 +371,159 @@ function BiorepositoryIntakePage({
             defaultMessage: "Notebook Not Found",
           }),
           subtitle: intl.formatMessage({
-            id: "biorepository.inventory.advance.noNotebook.message",
-            defaultMessage: "Cannot determine notebook for advancing samples.",
+            id: "biorepository.inventory.advance.noNotebookTemplate.message",
+            defaultMessage:
+              "Cannot advance samples — notebook template ID is missing.",
           }),
         });
         return;
       }
 
-      getFromOpenElisServer(`/rest/notebook/view/${nbId}`, (nbResponse) => {
-        if (nbResponse && nbResponse.pages) {
-          // Find Storage Assignment page (order 2)
-          const storageAssignmentPage = nbResponse.pages.find(
-            (p) => (p.pageOrder || p.order) === 2,
-          );
+      setAdvancingToStorage(true);
+      setAdvanceNotification(null);
 
-          if (storageAssignmentPage && storageAssignmentPage.id) {
-            // Add samples to the Storage Assignment page
-            postToOpenElisServerJsonResponse(
-              `/rest/notebook/bulk/page/${storageAssignmentPage.id}/samples/add`,
-              JSON.stringify({ sampleIds: sampleItemIds }),
-              (addResponse) => {
-                if (addResponse && addResponse.success) {
-                  // Update workflow status to PENDING_STORAGE
-                  putToOpenElisServerJsonResponse(
-                    `/rest/biorepository/sample/workflow-status`,
-                    JSON.stringify({
-                      sampleItemIds: sampleItemIds,
-                      workflowStatus: "PENDING_STORAGE",
-                    }),
-                    () => {
-                      // Calculate retention expiry dates for the advanced samples
-                      postToOpenElisServerJsonResponse(
-                        `/rest/biorepository/sample/calculate-retention`,
-                        JSON.stringify({ sampleItemIds: sampleItemIds }),
-                        (retentionResponse) => {
-                          setAdvancingToStorage(false);
-                          const addedCount =
-                            addResponse.addedCount || sampleItemIds.length;
-                          const retentionUpdated =
-                            retentionResponse?.updatedCount || 0;
+      try {
+        const nbResponse = await getJson(`/rest/notebook/view/${notebookId}`);
+        const storageAssignmentPage = findStorageAssignmentPage(
+          nbResponse?.pages,
+        );
 
-                          let subtitle = intl.formatMessage(
-                            {
-                              id: "biorepository.inventory.advance.success.message",
-                              defaultMessage:
-                                "{count} sample(s) advanced to Storage Assignment. Navigate to Stage 2 to assign storage locations.",
-                            },
-                            { count: addedCount },
-                          );
-
-                          // Add retention info to notification if any were updated
-                          if (retentionUpdated > 0) {
-                            subtitle += ` ${intl.formatMessage(
-                              {
-                                id: "biorepository.inventory.advance.retentionCalculated",
-                                defaultMessage:
-                                  "Retention expiry calculated for {retentionCount} sample(s).",
-                              },
-                              { retentionCount: retentionUpdated },
-                            )}`;
-                          }
-
-                          setAdvanceNotification({
-                            kind: "success",
-                            title: intl.formatMessage({
-                              id: "biorepository.inventory.advance.success",
-                              defaultMessage: "Samples Advanced",
-                            }),
-                            subtitle: subtitle,
-                          });
-                          // Refresh samples list
-                          loadAllBioSamples();
-                          if (onProgressUpdate) {
-                            onProgressUpdate();
-                          }
-                        },
-                      );
-                    },
-                  );
-                } else {
-                  setAdvancingToStorage(false);
-                  setAdvanceNotification({
-                    kind: "error",
-                    title: intl.formatMessage({
-                      id: "biorepository.inventory.advance.error",
-                      defaultMessage: "Failed to Advance",
-                    }),
-                    subtitle:
-                      addResponse?.error ||
-                      intl.formatMessage({
-                        id: "biorepository.inventory.advance.error.message",
-                        defaultMessage:
-                          "Could not add samples to Storage Assignment page.",
-                      }),
-                  });
-                }
-              },
-            );
-          } else {
-            setAdvancingToStorage(false);
-            setAdvanceNotification({
-              kind: "error",
-              title: intl.formatMessage({
-                id: "biorepository.inventory.advance.noStoragePage",
-                defaultMessage: "Storage Page Not Found",
-              }),
-              subtitle: intl.formatMessage({
-                id: "biorepository.inventory.advance.noStoragePage.message",
-                defaultMessage:
-                  "Storage Assignment page (Stage 2) not found in notebook.",
-              }),
-            });
-          }
-        } else {
-          setAdvancingToStorage(false);
+        if (!storageAssignmentPage?.id) {
           setAdvanceNotification({
             kind: "error",
             title: intl.formatMessage({
-              id: "biorepository.inventory.advance.notebookError",
-              defaultMessage: "Notebook Error",
+              id: "biorepository.inventory.advance.noStoragePage",
+              defaultMessage: "Storage Page Not Found",
             }),
             subtitle: intl.formatMessage({
+              id: "biorepository.inventory.advance.noStoragePage.message",
+              defaultMessage:
+                "Storage Assignment page not found in notebook.",
+            }),
+          });
+          return;
+        }
+
+        const advanceResult = await advanceSamplesToStorageBatched(
+          storageAssignmentPage.id,
+          sampleItemIds,
+          {
+            onProgress: ({ processed, total }) => {
+              setAdvanceNotification({
+                kind: "info",
+                title: intl.formatMessage({
+                  id: "biorepository.inventory.advance.inProgress",
+                  defaultMessage: "Advancing Samples",
+                }),
+                subtitle: intl.formatMessage(
+                  {
+                    id: "biorepository.inventory.advance.inProgress.message",
+                    defaultMessage: "Processing {processed} of {total}...",
+                  },
+                  { processed, total },
+                ),
+              });
+            },
+          },
+        );
+
+        if (!advanceResult.success) {
+          setAdvanceNotification({
+            kind: advanceResult.updatedCount > 0 ? "warning" : "error",
+            title: intl.formatMessage({
+              id: "biorepository.inventory.advance.error",
+              defaultMessage: "Failed to Advance",
+            }),
+            subtitle:
+              advanceResult.errors.join("; ") ||
+              intl.formatMessage({
+                id: "biorepository.inventory.advance.error.message",
+                defaultMessage:
+                  "Could not add samples to Storage Assignment page.",
+              }),
+          });
+          if (advanceResult.updatedCount > 0) {
+            loadAllBioSamples();
+          }
+          return;
+        }
+
+        const {
+          addedCount,
+          updatedCount,
+          requestedCount,
+          retentionUpdated: retentionUpdated,
+        } = advanceResult;
+        const alreadyOnPage = Math.max(0, requestedCount - addedCount);
+
+        let subtitle = intl.formatMessage(
+          {
+            id: "biorepository.inventory.advance.success.message",
+            defaultMessage:
+              "{updatedCount} of {requestedCount} sample(s) advanced to Storage Assignment ({addedCount} newly added). Open Workflow page 2 to assign locations.",
+          },
+          {
+            updatedCount,
+            requestedCount,
+            addedCount,
+          },
+        );
+
+        if (alreadyOnPage > 0) {
+          subtitle += ` ${intl.formatMessage(
+            {
+              id: "biorepository.inventory.advance.alreadyOnPage",
+              defaultMessage: "{count} were already on the Storage Assignment page.",
+            },
+            { count: alreadyOnPage },
+          )}`;
+        }
+
+        if (retentionUpdated > 0) {
+          subtitle += ` ${intl.formatMessage(
+            {
+              id: "biorepository.inventory.advance.retentionCalculated",
+              defaultMessage:
+                "Retention expiry calculated for {retentionCount} sample(s).",
+            },
+            { retentionCount: retentionUpdated },
+          )}`;
+        }
+
+        setAdvanceNotification({
+          kind: "success",
+          title: intl.formatMessage({
+            id: "biorepository.inventory.advance.success",
+            defaultMessage: "Samples Advanced",
+          }),
+          subtitle,
+        });
+
+        loadAllBioSamples();
+        if (onProgressUpdate) {
+          onProgressUpdate();
+        }
+      } catch (advanceError) {
+        setAdvanceNotification({
+          kind: "error",
+          title: intl.formatMessage({
+            id: "biorepository.inventory.advance.notebookError",
+            defaultMessage: "Notebook Error",
+          }),
+          subtitle:
+            advanceError?.message ||
+            intl.formatMessage({
               id: "biorepository.inventory.advance.notebookError.message",
               defaultMessage: "Could not load notebook pages.",
             }),
-          });
-        }
-      });
+        });
+      } finally {
+        setAdvancingToStorage(false);
+      }
     },
     [
       allBioSamples,
       notebookId,
-      entryId,
       intl,
       loadAllBioSamples,
       onProgressUpdate,
@@ -786,6 +804,9 @@ function BiorepositoryIntakePage({
                         onBulkImport={() => setManifestModalOpen(true)}
                         onCancel={() => {}}
                       />
+                      <SampleDuplicationSection
+                        onSamplesCreated={handleSamplesRegistered}
+                      />
                     </>
                   )}
                 </div>
@@ -913,7 +934,7 @@ function BiorepositoryIntakePage({
                               )
                             : "-",
                           biosafetyLevel: sample.biosafetyLevel || "-",
-                          status: sample.status || "REGISTERED",
+                          status: sample.workflowStatus || sample.status || "REGISTERED",
                           documentationStatus:
                             sample.documentationStatus || "PENDING",
                           actions: "",

@@ -33,9 +33,11 @@ import {
   Information,
   Renew,
   WarningAlt,
+  DocumentPdf,
 } from "@carbon/react/icons";
 import { FormattedMessage, useIntl } from "react-intl";
 import PropTypes from "prop-types";
+import config from "../../../../config.json";
 import {
   getFromOpenElisServer,
   postToOpenElisServerJsonResponse,
@@ -1632,6 +1634,27 @@ function BiorepositoryQCInspectionPage({
           )}
           lowContrast
         />
+      )}
+
+      {roundInfo?.qcBatchId && (
+        <div style={{ marginTop: "0.75rem" }}>
+          <Button
+            kind="secondary"
+            size="sm"
+            renderIcon={DocumentPdf}
+            onClick={() => {
+              window.open(
+                `${config.serverBaseUrl}/rest/biorepository/qc/export/pdf?qcBatchId=${encodeURIComponent(roundInfo.qcBatchId)}`,
+                "_blank",
+              );
+            }}
+          >
+            <FormattedMessage
+              id="biorepository.qc.printInspection"
+              defaultMessage="Print QC Inspection PDF"
+            />
+          </Button>
+        </div>
       )}
 
       {/* Storage overview + scope filters (must be correct before random generation) */}
