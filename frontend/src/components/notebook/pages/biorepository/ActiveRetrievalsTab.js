@@ -1,5 +1,10 @@
 import React, { useState, useCallback, useEffect } from "react";
 import {
+  Tabs,
+  TabList,
+  Tab,
+  TabPanels,
+  TabPanel,
   DataTable,
   Table,
   TableHead,
@@ -101,6 +106,7 @@ function ActiveRetrievalsTab({ onActionComplete, refreshToken }) {
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
   const [searchTerm, setSearchTerm] = useState("");
+  const [queueFilter, setQueueFilter] = useState("all");
 
   // Modal state
   const [selectedItem, setSelectedItem] = useState(null);
@@ -178,8 +184,21 @@ function ActiveRetrievalsTab({ onActionComplete, refreshToken }) {
     );
   });
 
+  const queueFilteredRequests = filteredRequests.filter((r) => {
+    if (queueFilter === "willReturn") {
+      return (
+        Boolean(r.estimatedReturnDate) ||
+        r.items?.some((item) => item.returnExpected === true)
+      );
+    }
+    if (queueFilter === "toReject") {
+      return r.samplesWillBeDestroyed === true;
+    }
+    return true;
+  });
+
   // Paginate
-  const paginatedData = filteredRequests.slice(
+  const paginatedData = queueFilteredRequests.slice(
     (page - 1) * pageSize,
     page * pageSize,
   );
@@ -1051,6 +1070,48 @@ function ActiveRetrievalsTab({ onActionComplete, refreshToken }) {
         />
       )}
 
+      <Tabs
+        selectedIndex={
+          queueFilter === "all" ? 0 : queueFilter === "willReturn" ? 1 : 2
+        }
+        onChange={({ selectedIndex }) => {
+          setQueueFilter(
+            selectedIndex === 0
+              ? "all"
+              : selectedIndex === 1
+                ? "willReturn"
+                : "toReject",
+          );
+          setPage(1);
+        }}
+      >
+        <TabList aria-label="Active retrieval queues">
+          <Tab>
+            <FormattedMessage
+              id="biorepository.retrieval.tab.active"
+              defaultMessage="Active Retrievals"
+            />
+          </Tab>
+          <Tab>
+            <FormattedMessage
+              id="biorepository.retrieval.tab.willReturn"
+              defaultMessage="Will Return"
+            />
+          </Tab>
+          <Tab>
+            <FormattedMessage
+              id="biorepository.retrieval.tab.toBeRejected"
+              defaultMessage="To Be Rejected"
+            />
+          </Tab>
+        </TabList>
+        <TabPanels>
+          <TabPanel />
+          <TabPanel />
+          <TabPanel />
+        </TabPanels>
+      </Tabs>
+
       {/* Data Table */}
       <DataTable
         rows={paginatedData.map((r) => {
@@ -1241,12 +1302,12 @@ function ActiveRetrievalsTab({ onActionComplete, refreshToken }) {
         }}
       </DataTable>
 
-      {filteredRequests.length > pageSize && (
+      {queueFilteredRequests.length > pageSize && (
         <Pagination
           page={page}
           pageSize={pageSize}
           pageSizes={[10, 20, 50]}
-          totalItems={filteredRequests.length}
+          totalItems={queueFilteredRequests.length}
           onChange={({ page: newPage, pageSize: newPageSize }) => {
             setPage(newPage);
             setPageSize(newPageSize);

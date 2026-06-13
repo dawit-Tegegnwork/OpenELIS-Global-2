@@ -37,6 +37,7 @@ import {
 import ShipmentReceptionForm from "./ShipmentReceptionForm";
 import ShipmentListTable from "./ShipmentListTable";
 import SampleIntakeForm from "./SampleIntakeForm";
+import SampleDuplicationSection from "./SampleDuplicationSection";
 import DocumentationVerificationModal from "./DocumentationVerificationModal";
 import ManifestUploadModal from "./ManifestUploadModal";
 import SampleTransferTab from "./SampleTransferTab";
@@ -785,6 +786,9 @@ function BiorepositoryIntakePage({
                         onSamplesRegistered={handleSamplesRegistered}
                         onBulkImport={() => setManifestModalOpen(true)}
                         onCancel={() => {}}
+                      />
+                      <SampleDuplicationSection
+                        onSamplesCreated={handleSamplesRegistered}
                       />
                     </>
                   )}

@@ -20,6 +20,7 @@ import {
   Location,
   Automatic,
   Renew,
+  Printer,
 } from "@carbon/react/icons";
 import { FormattedMessage, useIntl } from "react-intl";
 import PropTypes from "prop-types";
@@ -1371,16 +1372,32 @@ function BiorepositoryStorageAssignmentPage({
                       defaultMessage="Auto-Populate"
                     />
                   </Button>
+                  <Button
+                    kind="ghost"
+                    size="sm"
+                    renderIcon={Printer}
+                    onClick={() => window.print()}
+                  >
+                    <FormattedMessage
+                      id="biorepository.storage.printLayout"
+                      defaultMessage="Print Layout"
+                    />
+                  </Button>
                 </div>
 
+                <div id="storage-box-print-area">
                 <BoxLayoutViewer
                   boxId={storageSelection.box.id}
                   layout={getCombinedLayout()}
-                  rows={storageSelection.box.rows || 8}
-                  columns={storageSelection.box.columns || 12}
-                  positionSchemaHint={storageSelection.box.positionSchemaHint}
+                  rows={storageSelection.box.rows || 9}
+                  columns={storageSelection.box.columns || 9}
+                  positionSchemaHint={
+                    storageSelection.box.positionSchemaHint || "number-number"
+                  }
+                  showSampleIdInWell
                   onWellClick={handleWellClick}
                 />
+                </div>
 
                 <div
                   style={{

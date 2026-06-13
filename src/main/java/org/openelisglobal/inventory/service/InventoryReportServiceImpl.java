@@ -122,6 +122,8 @@ public class InventoryReportServiceImpl implements InventoryReportService {
             return buildUsageTrendsTable(includeInactive, startDate, endDate, groupByType, groupByLocation, request);
         case "LOT_TRACEABILITY":
             return buildLotTraceabilityTable(includeInactive, includeExpired, groupByType, groupByLocation, request);
+        case "MOST_EXPIRED":
+            return buildMostExpiredTable(includeInactive, includeExpired, groupByType, groupByLocation, request);
         default:
             throw new IllegalArgumentException("Unsupported report type: " + reportType);
         }
@@ -194,6 +196,28 @@ public class InventoryReportServiceImpl implements InventoryReportService {
         return new ReportTable(
                 "Expiration Forecast Report", List.of("Item Name", "Item Type", "Lot Number", "Current Quantity",
                         "Units", "Effective Expiry", "Days Remaining", "QC Status", "Lot Status", "Storage Location"),
+                rows);
+    }
+
+    private ReportTable buildMostExpiredTable(boolean includeInactive, boolean includeExpired, boolean groupByType,
+            boolean groupByLocation, HttpServletRequest request) {
+        List<List<String>> rows = filterLots(loadLots(), includeInactive, includeExpired, request).stream()
+                .filter(lot -> lot.getEffectiveExpirationDate() != null)
+                .sorted(Comparator.comparing(InventoryLot::getEffectiveExpirationDate))
+                .map(lot -> {
+                    LocalDate expirationDate = toLocalDate(lot.getEffectiveExpirationDate());
+                    long daysRemaining = ChronoUnit.DAYS.between(LocalDate.now(), expirationDate);
+                    return List.of(safe(itemName(lot)), safe(String.valueOf(lot.getInventoryItem().getItemType())),
+                            safe(lot.getLotNumber()), formatQuantity(lot.getCurrentQuantity()),
+                            safe(lot.getInventoryItem().getUnits()), safe(expirationDate.format(DISPLAY_DATE_FORMAT)),
+                            String.valueOf(daysRemaining), safe(String.valueOf(lot.getQcStatus())),
+                            safe(String.valueOf(lot.getStatus())), displayLocation(lot));
+                }).collect(Collectors.toCollection(ArrayList::new));
+
+        sortRows(rows, groupByType ? 1 : null, groupByLocation ? 9 : null, 5);
+        return new ReportTable("Most Expired Items Report",
+                List.of("Item Name", "Item Type", "Lot Number", "Current Quantity", "Units", "Effective Expiry",
+                        "Days Remaining", "QC Status", "Lot Status", "Storage Location"),
                 rows);
     }
 

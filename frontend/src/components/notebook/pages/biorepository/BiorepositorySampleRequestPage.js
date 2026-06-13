@@ -8,26 +8,25 @@ import {
   TabPanels,
   TabPanel,
   Tag,
-  InlineNotification,
 } from "@carbon/react";
-import { Add, CheckmarkOutline, InProgress, Time } from "@carbon/icons-react";
+import { Inbox, InProgress, Time, DocumentPdf } from "@carbon/icons-react";
 import { FormattedMessage, useIntl } from "react-intl";
 import PropTypes from "prop-types";
 import { getFromOpenElisServer } from "../../../utils/Utils";
-import RequestSubmissionTab from "./RequestSubmissionTab";
-import PendingApprovalsTab from "./PendingApprovalsTab";
+import IncomingRequestsTab from "./IncomingRequestsTab";
 import ActiveRetrievalsTab from "./ActiveRetrievalsTab";
 import RetrievalHistoryTab from "./RetrievalHistoryTab";
+import RetrievalPrintTab from "./RetrievalPrintTab";
 
 /**
  * BiorepositorySampleRequestPage - Sample Request & Retrieval workflow page
  * Stage 4 of the Biorepository workflow
  *
  * Tabs:
- * 1. Request Submission - Create new retrieval requests
- * 2. Pending Approvals - Supervisor approval queue
- * 3. Active Retrievals - Track checked-out samples
- * 4. History - Past requests (future implementation)
+ * 1. New Request - Incoming department requests (Accept/Reject)
+ * 2. Active Retrievals - Track checked-out samples
+ * 3. History - Past requests
+ * 4. Print - Export retrieval transactions to PDF
  */
 function BiorepositorySampleRequestPage({
   entryId,
@@ -48,7 +47,6 @@ function BiorepositorySampleRequestPage({
     overdueCount: 0,
   });
 
-  // Load stats for badge counts
   const loadStats = useCallback(() => {
     getFromOpenElisServer("/rest/biorepository/retrieval/stats", (data) => {
       if (data && !data.error) {
@@ -85,7 +83,7 @@ function BiorepositorySampleRequestPage({
             <p style={{ color: "#525252", marginTop: "0.5rem" }}>
               <FormattedMessage
                 id="biorepository.retrieval.description"
-                defaultMessage="Request samples from the biorepository, track approvals, and manage sample checkouts."
+                defaultMessage="Review incoming sample requests from other departments and accept or reject them."
               />
             </p>
           </div>
@@ -95,13 +93,7 @@ function BiorepositorySampleRequestPage({
             onChange={({ selectedIndex }) => setActiveTab(selectedIndex)}
           >
             <TabList aria-label="Retrieval workflow tabs">
-              <Tab renderIcon={Add}>
-                <FormattedMessage
-                  id="biorepository.retrieval.tab.request"
-                  defaultMessage="New Request"
-                />
-              </Tab>
-              <Tab renderIcon={CheckmarkOutline}>
+              <Tab renderIcon={Inbox}>
                 <span
                   style={{
                     display: "flex",
@@ -110,8 +102,8 @@ function BiorepositorySampleRequestPage({
                   }}
                 >
                   <FormattedMessage
-                    id="biorepository.retrieval.tab.pending"
-                    defaultMessage="Pending Approvals"
+                    id="biorepository.retrieval.tab.request"
+                    defaultMessage="New Request"
                   />
                   {stats.pending > 0 && (
                     <Tag type="blue" size="sm">
@@ -154,28 +146,22 @@ function BiorepositorySampleRequestPage({
                   defaultMessage="History"
                 />
               </Tab>
+              <Tab renderIcon={DocumentPdf}>
+                <FormattedMessage
+                  id="biorepository.retrieval.tab.print"
+                  defaultMessage="Print"
+                />
+              </Tab>
             </TabList>
 
             <TabPanels>
-              {/* Tab 1: Request Submission */}
               <TabPanel>
-                <RequestSubmissionTab
-                  onRequestCreated={() => {
-                    handleRefresh();
-                    setActiveTab(1); // Go to pending approvals
-                  }}
-                />
-              </TabPanel>
-
-              {/* Tab 2: Pending Approvals */}
-              <TabPanel>
-                <PendingApprovalsTab
+                <IncomingRequestsTab
                   onActionComplete={handleRefresh}
-                  onApproved={() => setActiveTab(2)}
+                  onAccepted={() => setActiveTab(1)}
                 />
               </TabPanel>
 
-              {/* Tab 3: Active Retrievals */}
               <TabPanel>
                 <ActiveRetrievalsTab
                   onActionComplete={handleRefresh}
@@ -183,12 +169,15 @@ function BiorepositorySampleRequestPage({
                 />
               </TabPanel>
 
-              {/* Tab 4: History */}
               <TabPanel>
                 <RetrievalHistoryTab
                   onActionComplete={handleRefresh}
                   refreshToken={refreshToken}
                 />
+              </TabPanel>
+
+              <TabPanel>
+                <RetrievalPrintTab refreshToken={refreshToken} />
               </TabPanel>
             </TabPanels>
           </Tabs>
