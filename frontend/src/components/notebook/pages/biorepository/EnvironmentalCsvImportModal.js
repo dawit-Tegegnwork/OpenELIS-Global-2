@@ -69,7 +69,7 @@ function EnvironmentalCsvImportModal({
       return;
     }
     downloadCsvTemplate(
-      "biorepository_room_environment_template.csv",
+      "biorepository_zone_environment_template.csv",
       buildRoomTemplateCsv(),
     );
   };
@@ -120,7 +120,7 @@ function EnvironmentalCsvImportModal({
     }
     return [
       { key: "rowNumber", header: "Row" },
-      { key: "room_code", header: "Room" },
+      { key: "room_code", header: "Zone" },
       { key: "checked_date_time", header: "Date/Time" },
       { key: "oxygen_level", header: "O2 %" },
       { key: "humidity", header: "Humidity %" },
@@ -242,7 +242,7 @@ function EnvironmentalCsvImportModal({
             }
           : {
               id: "biorepository.environmental.import.room.title",
-              defaultMessage: "Import Room Environment CSV",
+              defaultMessage: "Import Zone Environment CSV",
             },
       )}
       primaryButtonText={

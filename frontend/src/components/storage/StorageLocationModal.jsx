@@ -22,6 +22,8 @@ import UserSessionDetailsContext from "../../UserSessionDetailsContext";
 import PermissionGate from "../security/PermissionGate";
 import { storageMutationRoles } from "../../security/rbacActions";
 import { filterOwningDepartments } from "../notebook/utils/notebookInventoryScope";
+import { isBiorepositoryLabUnit } from "../notebook/pages/common/biorepoRequesterLabUnitHelpers";
+import { getStorageManagementLabels } from "../notebook/pages/biorepository/biorepositoryDisplayHelpers";
 
 /**
  * Shared modal for creating and editing storage location entities (Room, Device, Shelf, Rack)
@@ -52,6 +54,10 @@ const StorageLocationModal = ({
 }) => {
   const intl = useIntl();
   const { userSessionDetails } = useContext(UserSessionDetailsContext);
+  const isBiorepoLabUser = isBiorepositoryLabUnit(
+    userSessionDetails?.loginLabUnit,
+  );
+  const storageLabels = getStorageManagementLabels(intl, isBiorepoLabUser);
   const [formData, setFormData] = useState({
     name: "",
     code: "",
@@ -605,6 +611,12 @@ const StorageLocationModal = ({
       );
     }
 
+    if (locationType === "room" && isBiorepoLabUser) {
+      return mode === "create"
+        ? storageLabels.addRoom
+        : storageLabels.editRoom;
+    }
+
     const typeKey = `storage.${action}.${locationType}`;
     return intl.formatMessage(
       {
@@ -644,10 +656,14 @@ const StorageLocationModal = ({
             <>
               <TextInput
                 id="room-name"
-                labelText={intl.formatMessage({
-                  id: "storage.location.name",
-                  defaultMessage: "Name",
-                })}
+                labelText={
+                  locationType === "room"
+                    ? storageLabels.locationName
+                    : intl.formatMessage({
+                        id: "storage.location.name",
+                        defaultMessage: "Name",
+                      })
+                }
                 value={formData.name || ""}
                 onChange={(e) => handleFieldChange("name", e.target.value)}
                 invalid={!!errors.name}
@@ -693,6 +709,11 @@ const StorageLocationModal = ({
                 toggled={formData.active === true}
                 onToggle={(checked) => handleFieldChange("active", checked)}
               />
+              {mode === "create" && isBiorepoLabUser && storageLabels.createZoneHelper && (
+                <p className="storage-zone-create-helper">
+                  {storageLabels.createZoneHelper}
+                </p>
+              )}
               {mode === "create" && (
                 <>
                   {roomDepartmentSelectLoading ? (

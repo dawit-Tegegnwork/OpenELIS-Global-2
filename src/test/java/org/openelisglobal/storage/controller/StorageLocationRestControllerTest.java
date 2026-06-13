@@ -190,9 +190,14 @@ public class StorageLocationRestControllerTest extends BaseWebContextSensitiveTe
     }
 
     @Test
-    public void testGetRooms_WithBiorepositoryOnly_ReturnsOnlyBiorepositoryRooms() throws Exception {
-        // Mark one room as biorepository-enabled by flagging one of its devices
+    public void testGetRooms_WithBiorepositoryOnly_ReturnsAllDepartmentRooms() throws Exception {
         jdbcTemplate.execute("UPDATE clinlims.storage_device SET biorepository_storage = true WHERE id = 20001");
+
+        MvcResult allRoomsResult = this.mockMvc
+                .perform(get("/rest/storage/rooms").contentType(MediaType.APPLICATION_JSON)
+                        .sessionAttr("userSessionData", usd))
+                .andExpect(status().isOk()).andReturn();
+        List<Map<String, Object>> allRooms = readMapList(allRoomsResult.getResponse().getContentAsString());
 
         MvcResult mvcResult = this.mockMvc
                 .perform(get("/rest/storage/rooms?biorepositoryOnly=true").contentType(MediaType.APPLICATION_JSON)
@@ -200,9 +205,10 @@ public class StorageLocationRestControllerTest extends BaseWebContextSensitiveTe
                 .andExpect(status().isOk()).andReturn();
 
         List<Map<String, Object>> rooms = readMapList(mvcResult.getResponse().getContentAsString());
-        assertFalse("Expected at least one biorepository room", rooms.isEmpty());
-        assertTrue("All returned rooms must have biorepository devices",
-                rooms.stream().allMatch(room -> Boolean.TRUE.equals(room.get("hasBiorepositoryDevices"))));
+        assertFalse("Expected at least one room", rooms.isEmpty());
+        assertEquals("Biorepository room list should include all department rooms", allRooms.size(), rooms.size());
+        assertTrue("Rooms without biorepository devices should still appear",
+                rooms.stream().anyMatch(room -> "20000".equals(String.valueOf(room.get("id")))));
     }
 
     @Test

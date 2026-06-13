@@ -2,6 +2,12 @@
  * Shared helpers for Biorepository storage assignment display and API response handling.
  */
 
+import { formatBrf02SamplePath } from "./biorepositorySamplePathHelpers";
+import {
+  formatBiorepositoryUserText,
+  normalizeBiorepositoryHierarchyPath,
+} from "./biorepositoryDisplayHelpers";
+
 const STORAGE_LOCATION_KEYS = [
   "storageWell",
   "storagePath",
@@ -32,8 +38,15 @@ export const deriveStoragePageStatus = (sample) => {
 };
 
 export const getStorageLocationLabel = (sample) => {
+  const formattedPath = formatBrf02SamplePath(sample);
+  if (formattedPath) {
+    return formattedPath;
+  }
+
   const well = readField(sample, "storageWell");
-  const path = readField(sample, "storagePath");
+  const path = formatBiorepositoryUserText(
+    normalizeBiorepositoryHierarchyPath(readField(sample, "storagePath")),
+  );
 
   if (well && path) {
     return `${path} (${well})`;

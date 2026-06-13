@@ -152,12 +152,12 @@
         <insert tableName="notebook_page" schemaName="clinlims">
             <column name="id" valueSequenceNext="notebook_page_seq"/>
             <column name="title" value="Storage Assignment"/>
-            <column name="instructions" value="Assign samples to hierarchical storage locations. Select storage hierarchy: Room &gt; Device (Freezer/Refrigerator/Cabinet) &gt; Rack &gt; Box &gt; Position. System validates biosafety zone compatibility. Scan barcode for verification. Record storage timestamp and assigned by. Confirm placement with barcode scan."/>
+            <column name="instructions" value="Assign samples to hierarchical storage locations. Select storage hierarchy: Zone &gt; Device (Freezer/Refrigerator/Cabinet) &gt; Rack &gt; Box &gt; Position. System validates biosafety zone compatibility. Scan barcode for verification. Record storage timestamp and assigned by. Confirm placement with barcode scan."/>
             <column name="content" value="{
   &quot;pageDescription&quot;: &quot;Storage Assignment&quot;,
   &quot;dataPoints&quot;: {
     &quot;locationSelection&quot;: {
-      &quot;storageRoom&quot;: {&quot;type&quot;: &quot;reference&quot;, &quot;label&quot;: &quot;Storage Room&quot;, &quot;source&quot;: &quot;storage_room&quot;, &quot;required&quot;: true},
+      &quot;storageRoom&quot;: {&quot;type&quot;: &quot;reference&quot;, &quot;label&quot;: &quot;Storage Zone&quot;, &quot;source&quot;: &quot;storage_room&quot;, &quot;required&quot;: true},
       &quot;storageDevice&quot;: {&quot;type&quot;: &quot;reference&quot;, &quot;label&quot;: &quot;Storage Device&quot;, &quot;source&quot;: &quot;storage_device&quot;, &quot;required&quot;: true, &quot;filteredBy&quot;: &quot;storageRoom&quot;},
       &quot;rack&quot;: {&quot;type&quot;: &quot;reference&quot;, &quot;label&quot;: &quot;Rack&quot;, &quot;source&quot;: &quot;storage_rack&quot;, &quot;filteredBy&quot;: &quot;storageDevice&quot;},
       &quot;box&quot;: {&quot;type&quot;: &quot;reference&quot;, &quot;label&quot;: &quot;Box&quot;, &quot;source&quot;: &quot;storage_box&quot;, &quot;filteredBy&quot;: &quot;rack&quot;},

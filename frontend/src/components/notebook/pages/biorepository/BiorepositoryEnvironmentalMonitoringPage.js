@@ -417,7 +417,7 @@ function BiorepositoryEnvironmentalMonitoringPage({
       setError(
         intl.formatMessage({
           id: "biorepository.environmental.roomRequired",
-          defaultMessage: "Please select a room.",
+          defaultMessage: "Please select a zone.",
         }),
       );
       return;
@@ -468,7 +468,7 @@ function BiorepositoryEnvironmentalMonitoringPage({
           setSuccessMessage(
             intl.formatMessage({
               id: "biorepository.environmental.roomEnvLogSuccess",
-              defaultMessage: "Room environment logged successfully.",
+              defaultMessage: "Zone environment logged successfully.",
             }),
           );
           setRoomEnvModalOpen(false);
@@ -478,7 +478,7 @@ function BiorepositoryEnvironmentalMonitoringPage({
             intl.formatMessage({
               id: "biorepository.environmental.roomEnvLogError",
               defaultMessage:
-                "Failed to log room environment. Please try again.",
+                "Failed to log zone environment. Please try again.",
             }),
           );
         }
@@ -722,7 +722,7 @@ function BiorepositoryEnvironmentalMonitoringPage({
       key: "roomName",
       header: intl.formatMessage({
         id: "biorepository.environmental.roomName",
-        defaultMessage: "Room",
+        defaultMessage: "Zone",
       }),
     },
     {
@@ -864,7 +864,7 @@ function BiorepositoryEnvironmentalMonitoringPage({
             <Building size={16} style={{ marginRight: "0.5rem" }} />
             <FormattedMessage
               id="biorepository.environmental.tab.roomEnvironment"
-              defaultMessage="Room Environment"
+              defaultMessage="Zone Environment"
             />
           </Tab>
         </TabList>
@@ -1184,7 +1184,7 @@ function BiorepositoryEnvironmentalMonitoringPage({
                     <span className="progress-label">
                       <FormattedMessage
                         id="biorepository.environmental.totalRooms"
-                        defaultMessage="Storage Rooms"
+                        defaultMessage="Storage Zones"
                       />
                     </span>
                     <span className="progress-value">{rooms.length}</span>
@@ -1213,7 +1213,7 @@ function BiorepositoryEnvironmentalMonitoringPage({
               >
                 <FormattedMessage
                   id="biorepository.environmental.logRoomEnvironment"
-                  defaultMessage="Log Room Environment"
+                  defaultMessage="Log Zone Environment"
                 />
               </Button>
               <Button
@@ -1252,12 +1252,12 @@ function BiorepositoryEnvironmentalMonitoringPage({
               kind="info"
               title={intl.formatMessage({
                 id: "biorepository.environmental.roomEnvInfo",
-                defaultMessage: "Room environment monitoring",
+                defaultMessage: "Zone environment monitoring",
               })}
               subtitle={intl.formatMessage({
                 id: "biorepository.environmental.roomEnvInfoSubtitle",
                 defaultMessage:
-                  "O₂ levels should be ≥19.5% (safety threshold for rooms with cryogenic equipment). Humidity should be 30-60% for optimal storage conditions.",
+                  "O₂ levels should be ≥19.5% (safety threshold for areas with cryogenic equipment). Humidity should be 30-60% for optimal storage conditions.",
               })}
               lowContrast
               hideCloseButton
@@ -1270,7 +1270,7 @@ function BiorepositoryEnvironmentalMonitoringPage({
                 <Building size={16} style={{ marginRight: "0.5rem" }} />
                 <FormattedMessage
                   id="biorepository.environmental.storageRooms"
-                  defaultMessage="Storage Rooms"
+                  defaultMessage="Storage Zones"
                 />
               </h5>
               {loadingRooms ? (
@@ -1285,7 +1285,7 @@ function BiorepositoryEnvironmentalMonitoringPage({
                   kind="info"
                   title={intl.formatMessage({
                     id: "biorepository.environmental.noRooms",
-                    defaultMessage: "No storage rooms configured.",
+                    defaultMessage: "No storage zones configured.",
                   })}
                   lowContrast
                   hideCloseButton
@@ -1358,7 +1358,7 @@ function BiorepositoryEnvironmentalMonitoringPage({
                 <Humidity size={16} style={{ marginRight: "0.5rem" }} />
                 <FormattedMessage
                   id="biorepository.environmental.recentRoomEnvLogs"
-                  defaultMessage="Recent Room Environment Logs"
+                  defaultMessage="Recent Zone Environment Logs"
                 />
               </h5>
 
@@ -1374,7 +1374,7 @@ function BiorepositoryEnvironmentalMonitoringPage({
                   kind="info"
                   title={intl.formatMessage({
                     id: "biorepository.environmental.noRoomEnvLogs",
-                    defaultMessage: "No room environment logs recorded yet.",
+                    defaultMessage: "No zone environment logs recorded yet.",
                   })}
                   lowContrast
                   hideCloseButton
@@ -1605,7 +1605,7 @@ function BiorepositoryEnvironmentalMonitoringPage({
         onRequestClose={() => setRoomEnvModalOpen(false)}
         modalHeading={intl.formatMessage({
           id: "biorepository.environmental.logRoomEnvTitle",
-          defaultMessage: "Log Room Environment",
+          defaultMessage: "Log Zone Environment",
         })}
         primaryButtonText={
           isLoggingRoomEnv
@@ -1630,7 +1630,7 @@ function BiorepositoryEnvironmentalMonitoringPage({
         <p className="modal-description">
           <FormattedMessage
             id="biorepository.environmental.roomEnvLogDescription"
-            defaultMessage="Record room-level environmental parameters. O₂ monitoring is critical for rooms with cryogenic equipment (liquid nitrogen). Humidity monitoring ensures optimal storage conditions."
+            defaultMessage="Record zone-level environmental parameters. O₂ monitoring is critical for areas with cryogenic equipment (liquid nitrogen). Humidity monitoring ensures optimal storage conditions."
           />
         </p>
 
@@ -1640,17 +1640,17 @@ function BiorepositoryEnvironmentalMonitoringPage({
               id="roomId"
               labelText={intl.formatMessage({
                 id: "biorepository.environmental.roomLabel",
-                defaultMessage: "Room / Storage Area *",
+                defaultMessage: "Zone / Storage Area *",
               })}
               value={roomEnvForm.roomId}
               onChange={(e) => handleRoomSelect(e.target.value)}
             >
-              <SelectItem value="" text="Select room..." />
+              <SelectItem value="" text="Select zone..." />
               {rooms.map((room) => (
                 <SelectItem
                   key={room.id}
                   value={String(room.id)}
-                  text={room.name || room.code || `Room ${room.id}`}
+                  text={room.name || room.code || `Zone ${room.id}`}
                 />
               ))}
             </Select>

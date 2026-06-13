@@ -454,8 +454,8 @@ public class StorageLocationRestController extends BaseRestController {
             }
             filterLocationMapsByDepartment(response, request);
             filterLocationMapsByNotebookDepartment(response, notebookId, biorepositoryOnly);
-            applyBiorepositoryOnlyMapFilter(response, biorepositoryOnly, notebookId,
-                    room -> Boolean.TRUE.equals(room.get("hasBiorepositoryDevices")));
+            // Biorepository zones are StorageRoom records; list all department-scoped rooms
+            // so zones without biorepo-flagged devices still appear in the Zone dropdown.
             return ResponseEntity.ok(response);
         } catch (Exception e) {
             logger.error("Error getting rooms", e);

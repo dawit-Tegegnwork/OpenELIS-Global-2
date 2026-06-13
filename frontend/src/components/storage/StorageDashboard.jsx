@@ -4,6 +4,7 @@ import React, {
   useRef,
   useContext,
   useCallback,
+  useMemo,
 } from "react";
 import {
   Tile,
@@ -71,6 +72,8 @@ import LocationManagementModal from "./SampleStorage/LocationManagementModal";
 import DisposeSampleModal from "./SampleStorage/DisposeSampleModal";
 import { useSampleStorage } from "./hooks/useSampleStorage";
 import "./StorageDashboard.css";
+import { isBiorepositoryLabUnit } from "../notebook/pages/common/biorepoRequesterLabUnitHelpers";
+import { getStorageManagementLabels } from "../notebook/pages/biorepository/biorepositoryDisplayHelpers";
 
 const TAB_ROUTES = ["samples", "rooms", "devices", "shelves", "racks", "boxes"];
 
@@ -91,6 +94,13 @@ const StorageDashboard = () => {
     isSubmitting: isMovingSample,
   } = useSampleStorage();
   const { userSessionDetails, isGlobalAdmin } = usePermissions();
+  const isBiorepoLabUser = isBiorepositoryLabUnit(
+    userSessionDetails?.loginLabUnit,
+  );
+  const storageLabels = useMemo(
+    () => getStorageManagementLabels(intl, isBiorepoLabUser),
+    [intl, isBiorepoLabUser],
+  );
 
   // Metric cards state
   const [metrics, setMetrics] = useState({
@@ -2179,7 +2189,10 @@ const StorageDashboard = () => {
 
   // Rooms table headers
   const roomsHeaders = [
-    { key: "name", header: intl.formatMessage({ id: "storage.room.name" }) },
+    {
+      key: "name",
+      header: storageLabels.roomNameHeader,
+    },
     { key: "code", header: intl.formatMessage({ id: "storage.room.code" }) },
     {
       key: "department",
@@ -2204,7 +2217,7 @@ const StorageDashboard = () => {
   const devicesHeaders = [
     { key: "name", header: intl.formatMessage({ id: "storage.device.name" }) },
     { key: "code", header: intl.formatMessage({ id: "storage.device.code" }) },
-    { key: "room", header: intl.formatMessage({ id: "storage.device.room" }) },
+    { key: "room", header: storageLabels.roomColumn },
     { key: "type", header: intl.formatMessage({ id: "storage.device.type" }) },
     {
       key: "occupancy",
@@ -2221,7 +2234,7 @@ const StorageDashboard = () => {
       key: "device",
       header: intl.formatMessage({ id: "storage.shelf.device" }),
     },
-    { key: "room", header: intl.formatMessage({ id: "storage.shelf.room" }) },
+    { key: "room", header: storageLabels.roomColumn },
     {
       key: "occupancy",
       header: intl.formatMessage({ id: "storage.occupancy" }),
@@ -2233,7 +2246,7 @@ const StorageDashboard = () => {
   // Racks table headers
   const racksHeaders = [
     { key: "label", header: intl.formatMessage({ id: "storage.rack.label" }) },
-    { key: "room", header: intl.formatMessage({ id: "storage.rack.room" }) }, // Per FR-065a
+    { key: "room", header: storageLabels.roomColumn }, // Per FR-065a
     { key: "shelf", header: intl.formatMessage({ id: "storage.rack.shelf" }) },
     {
       key: "device",
@@ -3396,7 +3409,7 @@ const StorageDashboard = () => {
                 <FormattedMessage id="storage.tab.samples" />
               </Tab>
               <Tab className="tab-rooms" data-testid="tab-rooms">
-                <FormattedMessage id="storage.tab.rooms" />
+                {storageLabels.roomsTab}
               </Tab>
               <Tab className="tab-devices" data-testid="tab-devices">
                 <FormattedMessage id="storage.tab.devices" />
@@ -3500,9 +3513,7 @@ const StorageDashboard = () => {
                               data-testid="sample-room-filter"
                               label=""
                               hideLabel
-                              titleText={intl.formatMessage({
-                                id: "storage.filter.room",
-                              })}
+                              titleText={storageLabels.filterRoom}
                               items={[
                                 {
                                   id: "",
@@ -3527,15 +3538,11 @@ const StorageDashboard = () => {
                                       label:
                                         rooms.find((r) => r.id === filterRoom)
                                           ?.name ||
-                                        intl.formatMessage({
-                                          id: "storage.filter.room",
-                                        }),
+                                        storageLabels.filterRoom,
                                     }
                                   : {
                                       id: "",
-                                      label: intl.formatMessage({
-                                        id: "storage.filter.room",
-                                      }),
+                                      label: storageLabels.filterRoom,
                                     }
                               }
                               onChange={(e) => {
@@ -3619,9 +3626,7 @@ const StorageDashboard = () => {
                               data-testid="room-filter"
                               label=""
                               hideLabel
-                              titleText={intl.formatMessage({
-                                id: "storage.filter.room",
-                              })}
+                              titleText={storageLabels.filterRoom}
                               items={[
                                 {
                                   id: "",
@@ -3641,15 +3646,11 @@ const StorageDashboard = () => {
                                       label:
                                         rooms.find((r) => r.id === filterRoom)
                                           ?.name ||
-                                        intl.formatMessage({
-                                          id: "storage.filter.room",
-                                        }),
+                                        storageLabels.filterRoom,
                                     }
                                   : {
                                       id: "",
-                                      label: intl.formatMessage({
-                                        id: "storage.filter.room",
-                                      }),
+                                      label: storageLabels.filterRoom,
                                     }
                               }
                               onChange={(e) =>
@@ -3898,14 +3899,8 @@ const StorageDashboard = () => {
                   <Column lg={16} md={8} sm={4} className="search-section">
                     <Search
                       data-testid="room-search-input"
-                      labelText={intl.formatMessage({
-                        id: "storage.search.rooms.placeholder",
-                        defaultMessage: "Search by room name or code...",
-                      })}
-                      placeholder={intl.formatMessage({
-                        id: "storage.search.rooms.placeholder",
-                        defaultMessage: "Search by room name or code...",
-                      })}
+                      labelText={storageLabels.searchRoomsPlaceholder}
+                      placeholder={storageLabels.searchRoomsPlaceholder}
                       value={searchTerm}
                       onChange={(e) => setSearchTerm(e.target.value)}
                       size="lg"
@@ -3994,17 +3989,14 @@ const StorageDashboard = () => {
                       }}
                     >
                       <h3 className="table-title" style={{ margin: 0 }}>
-                        <FormattedMessage id="storage.tab.rooms" />
+                        {storageLabels.roomsTab}
                       </h3>
                       <Button
                         kind="primary"
                         onClick={() => handleCreateLocation()}
                         data-testid="add-room-button"
                       >
-                        <FormattedMessage
-                          id="storage.add.room"
-                          defaultMessage="Add Room"
-                        />
+                        {storageLabels.addRoom}
                       </Button>
                     </div>
                     <DataTable
@@ -4125,9 +4117,7 @@ const StorageDashboard = () => {
                               data-testid="room-filter"
                               label=""
                               hideLabel
-                              titleText={intl.formatMessage({
-                                id: "storage.filter.room",
-                              })}
+                              titleText={storageLabels.filterRoom}
                               items={[
                                 {
                                   id: "",
@@ -4147,15 +4137,11 @@ const StorageDashboard = () => {
                                       label:
                                         rooms.find((r) => r.id === filterRoom)
                                           ?.name ||
-                                        intl.formatMessage({
-                                          id: "storage.filter.room",
-                                        }),
+                                        storageLabels.filterRoom,
                                     }
                                   : {
                                       id: "",
-                                      label: intl.formatMessage({
-                                        id: "storage.filter.room",
-                                      }),
+                                      label: storageLabels.filterRoom,
                                     }
                               }
                               onChange={(e) =>
@@ -4396,9 +4382,7 @@ const StorageDashboard = () => {
                               data-testid="room-filter"
                               label=""
                               hideLabel
-                              titleText={intl.formatMessage({
-                                id: "storage.filter.room",
-                              })}
+                              titleText={storageLabels.filterRoom}
                               items={[
                                 {
                                   id: "",
@@ -4418,15 +4402,11 @@ const StorageDashboard = () => {
                                       label:
                                         rooms.find((r) => r.id === filterRoom)
                                           ?.name ||
-                                        intl.formatMessage({
-                                          id: "storage.filter.room",
-                                        }),
+                                        storageLabels.filterRoom,
                                     }
                                   : {
                                       id: "",
-                                      label: intl.formatMessage({
-                                        id: "storage.filter.room",
-                                      }),
+                                      label: storageLabels.filterRoom,
                                     }
                               }
                               onChange={(e) =>
@@ -4718,9 +4698,7 @@ const StorageDashboard = () => {
                               data-testid="room-filter"
                               label=""
                               hideLabel
-                              titleText={intl.formatMessage({
-                                id: "storage.filter.room",
-                              })}
+                              titleText={storageLabels.filterRoom}
                               items={[
                                 {
                                   id: "",
@@ -4740,15 +4718,11 @@ const StorageDashboard = () => {
                                       label:
                                         rooms.find((r) => r.id === filterRoom)
                                           ?.name ||
-                                        intl.formatMessage({
-                                          id: "storage.filter.room",
-                                        }),
+                                        storageLabels.filterRoom,
                                     }
                                   : {
                                       id: "",
-                                      label: intl.formatMessage({
-                                        id: "storage.filter.room",
-                                      }),
+                                      label: storageLabels.filterRoom,
                                     }
                               }
                               onChange={(e) =>
