@@ -4,6 +4,7 @@ import {
   hasStorageLocation,
   interpretStorageAssignmentResponse,
   buildBiorepositoryStorageUrl,
+  findStorageAssignmentPage,
 } from "./biorepositoryStorageHelpers";
 
 describe("biorepositoryStorageHelpers", () => {
@@ -69,6 +70,19 @@ describe("biorepositoryStorageHelpers", () => {
     expect(outcome.errorMessage).toBeNull();
   });
 
+  test("findStorageAssignmentPage prefers storage_assign pageKey over order", () => {
+    const pages = [
+      { id: 30, order: 2, pageKey: "shipment_reception", title: "Shipment" },
+      { id: 31, order: 7, pageKey: "storage_assign", title: "Storage Assignment" },
+    ];
+    expect(findStorageAssignmentPage(pages)?.id).toBe(31);
+  });
+
+  test("findStorageAssignmentPage falls back to order 2", () => {
+    const pages = [{ id: 22, order: 2, title: "Storage Assignment" }];
+    expect(findStorageAssignmentPage(pages)?.id).toBe(22);
+  });
+
   test("buildBiorepositoryStorageUrl adds notebook scope and biorepository flag", () => {
     expect(
       buildBiorepositoryStorageUrl("/rest/storage/rooms?status=active", 23),
@@ -76,5 +90,25 @@ describe("biorepositoryStorageHelpers", () => {
     expect(buildBiorepositoryStorageUrl("/rest/storage/devices", null)).toBe(
       "/rest/storage/devices",
     );
+  });
+
+  test("normalizePageSampleResponse accepts paginated API shape", async () => {
+    const { normalizePageSampleResponse } = await import(
+      "./biorepositoryStorageHelpers"
+    );
+
+    expect(
+      normalizePageSampleResponse({
+        samples: [{ id: "1" }],
+        totalCount: 6841,
+        offset: 0,
+        limit: 500,
+      }),
+    ).toEqual({
+      samples: [{ id: "1" }],
+      totalCount: 6841,
+      offset: 0,
+      limit: 500,
+    });
   });
 });

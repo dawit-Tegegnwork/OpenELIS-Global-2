@@ -102,7 +102,7 @@ function SampleTransferTab({ notebookId, entryId, onTransferAccepted }) {
     { id: "BSL_3", text: "BSL-3" },
     { id: "BSL_4", text: "BSL-4" },
   ];
-  const resolvedNotebookId = notebookId || entryId;
+  const resolvedNotebookId = notebookId;
 
   const statusFilters = [
     {
@@ -451,19 +451,33 @@ function SampleTransferTab({ notebookId, entryId, onTransferAccepted }) {
    * Execute acceptance with form data from modal
    */
   const executeAccept = useCallback(async () => {
+    if (!resolvedNotebookId) {
+      notify({
+        kind: NotificationKinds.error,
+        title: intl.formatMessage({
+          id: "biorepository.transfer.error",
+          defaultMessage: "Error",
+        }),
+        subtitle: intl.formatMessage({
+          id: "biorepository.transfer.noNotebookTemplate",
+          defaultMessage:
+            "Cannot accept samples — notebook template ID is missing.",
+        }),
+      });
+      return;
+    }
+
     setLoading(true);
     setAcceptModalOpen(false);
 
     let successCount = 0;
     let errorCount = 0;
     const acceptErrors = [];
-    let storageLinkedCount = 0;
-    let storageLinkError = null;
 
     const metadata = {
       biosafetyLevel: acceptBsl,
       ethicsApprovalRef: acceptEthics.trim() || null,
-      notebookId: resolvedNotebookId ? Number(resolvedNotebookId) : null,
+      notebookId: Number(resolvedNotebookId),
     };
 
     // Process accepts with Promise wrapper for async/await support
@@ -490,13 +504,6 @@ function SampleTransferTab({ notebookId, entryId, onTransferAccepted }) {
     for (const result of results) {
       if (result.success) {
         successCount++;
-        if (result.response?.storagePageLinked) {
-          storageLinkedCount++;
-        } else {
-          storageLinkError =
-            result.response?.storagePageError ||
-            "Accepted sample was not moved to Storage Assignment.";
-        }
       } else {
         errorCount++;
         if (result.response?.error) {
@@ -525,20 +532,19 @@ function SampleTransferTab({ notebookId, entryId, onTransferAccepted }) {
 
     if (successCount > 0) {
       notify({
-        kind: storageLinkError ? NotificationKinds.warning : NotificationKinds.success,
+        kind: NotificationKinds.success,
         title: intl.formatMessage({
           id: "biorepository.transfer.success",
           defaultMessage: "Success",
         }),
         subtitle: intl.formatMessage(
           {
-            id: "biorepository.transfer.acceptBulkSuccess",
+            id: "biorepository.transfer.acceptBulkSuccessReceived",
             defaultMessage:
-              "{count} item(s) accepted successfully. {linkedCount} moved to Storage Assignment.",
+              "{count} item(s) accepted. View them in Received Samples, then use Advance to Storage.",
           },
-          { count: successCount, linkedCount: storageLinkedCount },
+          { count: successCount },
         ),
-        message: storageLinkError || null,
       });
 
       if (onTransferAccepted) {

@@ -186,8 +186,8 @@ public class NotebookPageSampleServiceImpl extends AuditableBaseObjectServiceImp
                     if (currentPage != null) {
                         LogEvent.logInfo(this.getClass().getName(), "bulkUpdateStatus",
                                 "T150: Current page details - id=" + currentPage.getId() + " title='"
-                                        + currentPage.getTitle() + "' order=" + currentPage.getOrder()
-                                        + " pageType='" + currentPage.getPageType() + "'");
+                                        + currentPage.getTitle() + "' order=" + currentPage.getOrder() + " pageType='"
+                                        + currentPage.getPageType() + "'");
                     }
 
                     nextPage = noteBookService.getNextPage(pageId);
@@ -209,13 +209,11 @@ public class NotebookPageSampleServiceImpl extends AuditableBaseObjectServiceImp
                                     + " as linear progression even if legacy routing logic says otherwise");
                 }
                 boolean isStoragePage = noteBookService.isStoragePage(pageId);
-                boolean shouldSkipStoragePageToArchiving = isStoragePage
-                        && nextPage != null
-                        && nextPage.getTitle() != null
-                        && nextPage.getTitle().toLowerCase().contains("report");
-                LogEvent.logInfo(this.getClass().getName(), "bulkUpdateStatus", "T150: pageId=" + pageId
-                        + " isRoutingPage=" + isRoutingPage + " isStoragePage=" + isStoragePage
-                        + " shouldSkipStoragePageToArchiving=" + shouldSkipStoragePageToArchiving);
+                boolean shouldSkipStoragePageToArchiving = isStoragePage && nextPage != null
+                        && nextPage.getTitle() != null && nextPage.getTitle().toLowerCase().contains("report");
+                LogEvent.logInfo(this.getClass().getName(), "bulkUpdateStatus",
+                        "T150: pageId=" + pageId + " isRoutingPage=" + isRoutingPage + " isStoragePage=" + isStoragePage
+                                + " shouldSkipStoragePageToArchiving=" + shouldSkipStoragePageToArchiving);
                 NoteBookPage archivingPage = null;
                 Integer notebookId = null;
 
@@ -348,7 +346,8 @@ public class NotebookPageSampleServiceImpl extends AuditableBaseObjectServiceImp
         if (currentPage == null) {
             return false;
         }
-        return StringUtils.equalsIgnoreCase(StringUtils.trimToEmpty(currentPage.getPageType()), "CHILD_SAMPLE_CREATION");
+        return StringUtils.equalsIgnoreCase(StringUtils.trimToEmpty(currentPage.getPageType()),
+                "CHILD_SAMPLE_CREATION");
     }
 
     private void updateCompletionInfo(Integer pageId, List<Integer> sampleIds, SystemUser user) {
@@ -466,8 +465,7 @@ public class NotebookPageSampleServiceImpl extends AuditableBaseObjectServiceImp
                 boolean isRoutingPage = noteBookService.isRoutingPage(pageId);
                 boolean isStoragePage = noteBookService.isStoragePage(pageId);
                 boolean shouldSkipStoragePageToArchiving = isStoragePage && nextPage != null
-                        && nextPage.getTitle() != null
-                        && nextPage.getTitle().toLowerCase().contains("report");
+                        && nextPage.getTitle() != null && nextPage.getTitle().toLowerCase().contains("report");
                 NoteBookPage archivingPage = null;
                 Integer notebookId = null;
 
@@ -756,6 +754,12 @@ public class NotebookPageSampleServiceImpl extends AuditableBaseObjectServiceImp
 
     @Override
     @Transactional(readOnly = true)
+    public List<NotebookPageSample> getByPageIdOffset(Integer pageId, Status status, int offset, int limit) {
+        return baseObjectDAO.getByPageIdPaginated(pageId, status, offset, limit);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
     public long getCountByPageId(Integer pageId, Status status) {
         return baseObjectDAO.getCountByPageId(pageId, status);
     }
@@ -810,14 +814,14 @@ public class NotebookPageSampleServiceImpl extends AuditableBaseObjectServiceImp
                 "Notebook has " + pages.size() + " pages");
 
         // Create the first applicable stage for the selected workflow type.
-        // Non-applicable pathology stages are skipped implicitly by not creating records.
+        // Non-applicable pathology stages are skipped implicitly by not creating
+        // records.
         String workflowType = getEffectiveWorkflowType(notebook);
         NoteBookPage firstPage = pages.stream()
                 .filter(p -> PathologyWorkflowTypeConfig.canonicalStageOrder(p.getTitle(), p.getOrder()) != null)
                 .filter(p -> !PathologyWorkflowTypeConfig.isPathologyWorkflowType(workflowType)
                         || PathologyWorkflowTypeConfig.isStageEnabledForPage(workflowType, p.getTitle(), p.getOrder()))
-                .min((p1, p2) -> PathologyWorkflowTypeConfig
-                        .canonicalStageOrder(p1.getTitle(), p1.getOrder())
+                .min((p1, p2) -> PathologyWorkflowTypeConfig.canonicalStageOrder(p1.getTitle(), p1.getOrder())
                         .compareTo(PathologyWorkflowTypeConfig.canonicalStageOrder(p2.getTitle(), p2.getOrder())))
                 .orElse(pages.get(0));
 
@@ -882,8 +886,7 @@ public class NotebookPageSampleServiceImpl extends AuditableBaseObjectServiceImp
                 .filter(p -> PathologyWorkflowTypeConfig.canonicalStageOrder(p.getTitle(), p.getOrder()) != null)
                 .filter(p -> !PathologyWorkflowTypeConfig.isPathologyWorkflowType(workflowType)
                         || PathologyWorkflowTypeConfig.isStageEnabledForPage(workflowType, p.getTitle(), p.getOrder()))
-                .min((p1, p2) -> PathologyWorkflowTypeConfig
-                        .canonicalStageOrder(p1.getTitle(), p1.getOrder())
+                .min((p1, p2) -> PathologyWorkflowTypeConfig.canonicalStageOrder(p1.getTitle(), p1.getOrder())
                         .compareTo(PathologyWorkflowTypeConfig.canonicalStageOrder(p2.getTitle(), p2.getOrder())))
                 .orElse(pages.get(0));
 

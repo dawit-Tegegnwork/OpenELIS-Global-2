@@ -17,8 +17,8 @@ import org.openelisglobal.notebook.dao.NotebookPageSampleDAO;
 import org.openelisglobal.notebook.service.NoteBookPageService;
 import org.openelisglobal.notebook.service.NoteBookService;
 import org.openelisglobal.notebook.service.NotebookPageSampleService;
-import org.openelisglobal.notebook.service.NotebookSecurityService;
 import org.openelisglobal.notebook.service.NotebookSampleEntryService;
+import org.openelisglobal.notebook.service.NotebookSecurityService;
 import org.openelisglobal.notebook.service.SampleRoutingService;
 import org.openelisglobal.notebook.valueholder.NoteBook;
 import org.openelisglobal.notebook.valueholder.NoteBookPage;
@@ -251,8 +251,9 @@ public class NotebookSampleEntryController extends BaseRestController {
     @GetMapping(value = "/page/{pageId}/samples", produces = MediaType.APPLICATION_JSON_VALUE)
     @ResponseBody
     @org.springframework.transaction.annotation.Transactional(readOnly = true)
-    public ResponseEntity<List<Map<String, Object>>> getPageSamples(@PathVariable("pageId") Integer pageId,
-            @RequestParam(required = false) String status, HttpServletRequest httpRequest) {
+    public ResponseEntity<?> getPageSamples(@PathVariable("pageId") Integer pageId,
+            @RequestParam(required = false) String status, @RequestParam(required = false) Integer offset,
+            @RequestParam(required = false) Integer limit, HttpServletRequest httpRequest) {
         String sysUserId = getSysUserId(httpRequest);
         if (sysUserId == null) {
             return ResponseEntity.status(401).body(new java.util.ArrayList<>());
@@ -263,6 +264,59 @@ public class NotebookSampleEntryController extends BaseRestController {
             LogEvent.logWarn(this.getClass().getName(), "getPageSamples",
                     "Access denied for user=" + sysUserId + " on pageId=" + pageId);
             return ResponseEntity.status(403).body(new java.util.ArrayList<>());
+        }
+
+        org.openelisglobal.notebook.valueholder.NoteBookPage page = noteBookService.getPage(pageId);
+        boolean biorepositoryContext = isBiorepositoryContext(page);
+
+        if (limit != null && limit > 0) {
+            int safeOffset = offset != null && offset > 0 ? offset : 0;
+            int safeLimit = Math.min(limit, 500);
+            try {
+                Map<String, Object> paginatedResult = buildPaginatedPageSamplesResponse(pageId, status, safeOffset,
+                        safeLimit, biorepositoryContext);
+                return ResponseEntity.ok(paginatedResult);
+            } catch (Exception e) {
+                LogEvent.logError(this.getClass().getName(), "getPageSamples",
+                        "Error loading paginated page samples for page " + pageId + ": " + e.getMessage());
+                Map<String, Object> error = new HashMap<>();
+                error.put("error", "Failed to load page samples");
+                error.put("samples", new java.util.ArrayList<>());
+                error.put("totalCount", 0);
+                error.put("offset", safeOffset);
+                error.put("limit", safeLimit);
+                return ResponseEntity.status(500).body(error);
+            }
+        }
+
+        org.openelisglobal.notebook.valueholder.NotebookPageSample.Status countStatusEnum = null;
+        if (status != null && !status.isBlank()) {
+            try {
+                countStatusEnum = org.openelisglobal.notebook.valueholder.NotebookPageSample.Status
+                        .valueOf(status.trim().toUpperCase());
+            } catch (IllegalArgumentException ignored) {
+                countStatusEnum = null;
+            }
+        }
+        long pageSampleCount = notebookPageSampleService.getCountByPageId(pageId, countStatusEnum);
+        if (pageSampleCount > 500) {
+            LogEvent.logWarn(this.getClass().getName(), "getPageSamples", "Page " + pageId + " has " + pageSampleCount
+                    + " samples; returning paginated batch (use offset/limit for full list)");
+            try {
+                Map<String, Object> paginatedResult = buildPaginatedPageSamplesResponse(pageId, status, 0, 500,
+                        biorepositoryContext);
+                return ResponseEntity.ok(paginatedResult);
+            } catch (Exception e) {
+                LogEvent.logError(this.getClass().getName(), "getPageSamples",
+                        "Error loading large page samples for page " + pageId + ": " + e.getMessage());
+                Map<String, Object> error = new HashMap<>();
+                error.put("error", "Failed to load page samples");
+                error.put("samples", new java.util.ArrayList<>());
+                error.put("totalCount", pageSampleCount);
+                error.put("offset", 0);
+                error.put("limit", 500);
+                return ResponseEntity.status(500).body(error);
+            }
         }
 
         List<org.openelisglobal.notebook.valueholder.NotebookPageSample> pageSamples;
@@ -290,11 +344,9 @@ public class NotebookSampleEntryController extends BaseRestController {
 
         // Get the notebook ID from the page for routing lookups
         Integer notebookId = null;
-        org.openelisglobal.notebook.valueholder.NoteBookPage page = noteBookService.getPage(pageId);
         if (page != null && page.getNotebook() != null) {
             notebookId = page.getNotebook().getId();
         }
-        boolean biorepositoryContext = isBiorepositoryContext(page);
 
         // Track which sample IDs are already in the list
         java.util.Set<String> includedSampleIds = new java.util.HashSet<>();
@@ -501,7 +553,8 @@ public class NotebookSampleEntryController extends BaseRestController {
         }
 
         // Sixth pass: overlay authoritative storage assignment data from the storage
-        // subsystem. This keeps UI status filters aligned with real assignment state even
+        // subsystem. This keeps UI status filters aligned with real assignment state
+        // even
         // when page-sample data is stale or incomplete.
         enrichSampleMapsWithStorageAssignments(sampleMaps, biorepositoryContext);
 
@@ -548,7 +601,8 @@ public class NotebookSampleEntryController extends BaseRestController {
             return;
         }
 
-        Map<String, Map<String, Object>> locationsBySampleId = sampleStorageService.getSampleItemLocations(sampleItemIds);
+        Map<String, Map<String, Object>> locationsBySampleId = sampleStorageService
+                .getSampleItemLocations(sampleItemIds);
         if (locationsBySampleId == null || locationsBySampleId.isEmpty()) {
             return;
         }
@@ -631,6 +685,119 @@ public class NotebookSampleEntryController extends BaseRestController {
 
     private String asTrimmedString(Object value) {
         return value == null ? "" : String.valueOf(value).trim();
+    }
+
+    private Map<String, Object> buildPaginatedPageSamplesResponse(Integer pageId, String status, int offset, int limit,
+            boolean biorepositoryContext) {
+        org.openelisglobal.notebook.valueholder.NotebookPageSample.Status statusEnum = null;
+        if (status != null && !status.isBlank()) {
+            try {
+                statusEnum = org.openelisglobal.notebook.valueholder.NotebookPageSample.Status
+                        .valueOf(status.trim().toUpperCase());
+            } catch (IllegalArgumentException e) {
+                LogEvent.logWarn(this.getClass().getName(), "buildPaginatedPageSamplesResponse",
+                        "Invalid status filter: " + status + " - returning all samples");
+            }
+        }
+
+        long totalCount = notebookPageSampleService.getCountByPageId(pageId, statusEnum);
+        List<org.openelisglobal.notebook.valueholder.NotebookPageSample> pageSamples = notebookPageSampleService
+                .getByPageIdOffset(pageId, statusEnum, offset, limit);
+
+        org.openelisglobal.sampleitem.service.SampleItemService sampleItemService = org.openelisglobal.spring.util.SpringContext
+                .getBean(org.openelisglobal.sampleitem.service.SampleItemService.class);
+
+        List<Map<String, Object>> sampleMaps = new java.util.ArrayList<>();
+        for (org.openelisglobal.notebook.valueholder.NotebookPageSample nps : pageSamples) {
+            String sampleItemId = nps.getSampleItemId();
+            if (sampleItemId != null && !sampleItemId.matches("\\d+")) {
+                sampleMaps.add(buildVirtualSampleMap(sampleItemId, nps));
+                continue;
+            }
+
+            org.openelisglobal.sampleitem.valueholder.SampleItem sampleItem = sampleItemService.get(sampleItemId);
+            if (sampleItem != null) {
+                if (biorepositoryContext) {
+                    sampleMaps.add(buildLightweightBiorepositorySampleMap(sampleItem, nps));
+                } else {
+                    sampleMaps.add(buildSampleMap(sampleItem, nps));
+                }
+            } else {
+                sampleMaps.add(buildVirtualSampleMap(sampleItemId, nps));
+            }
+        }
+
+        enrichSampleMapsWithStorageAssignments(sampleMaps, biorepositoryContext);
+
+        sampleMaps.sort((a, b) -> {
+            String aExt = String.valueOf(a.getOrDefault("externalId", ""));
+            String bExt = String.valueOf(b.getOrDefault("externalId", ""));
+            return aExt.compareTo(bExt);
+        });
+
+        Map<String, Object> result = new HashMap<>();
+        result.put("samples", sampleMaps);
+        result.put("totalCount", totalCount);
+        result.put("offset", offset);
+        result.put("limit", limit);
+        return result;
+    }
+
+    /**
+     * Lightweight sample map for biorepository paginated loads. Skips patient/order
+     * lookups and parent-chain walks that cause N+1 query timeouts on large pages.
+     */
+    private Map<String, Object> buildLightweightBiorepositorySampleMap(SampleItem sampleItem,
+            org.openelisglobal.notebook.valueholder.NotebookPageSample nps) {
+        Map<String, Object> sampleMap = new HashMap<>();
+        sampleMap.put("id", sampleItem.getId());
+        sampleMap.put("sampleItemId", sampleItem.getId());
+        sampleMap.put("externalId", sampleItem.getExternalId());
+        sampleMap.put("sortOrder", sampleItem.getSortOrder());
+
+        if (nps != null) {
+            String status = nps.getStatus() != null ? nps.getStatus().name() : "PENDING";
+            sampleMap.put("pageStatus", status);
+            sampleMap.put("status", status);
+            sampleMap.put("pageSampleId", nps.getId());
+            Map<String, Object> npsData = nps.getData();
+            sampleMap.put("data", npsData);
+            if (npsData != null) {
+                copyBiorepositoryDataFields(npsData, sampleMap);
+            }
+        } else {
+            sampleMap.put("pageStatus", "PENDING");
+            sampleMap.put("status", "PENDING");
+            sampleMap.put("pageSampleId", null);
+            sampleMap.put("data", null);
+        }
+
+        if (sampleItem.getTypeOfSample() != null) {
+            sampleMap.put("sampleType", sampleItem.getTypeOfSample().getDescription());
+            sampleMap.put("sampleTypeId", sampleItem.getTypeOfSample().getId());
+        }
+        if (sampleItem.getSample() != null) {
+            sampleMap.put("accessionNumber", sampleItem.getSample().getAccessionNumber());
+        }
+        if (sampleItem.getCollectionDate() != null) {
+            sampleMap.put("collectionDate", org.openelisglobal.common.util.DateUtil
+                    .convertTimestampToStringDate(sampleItem.getCollectionDate()));
+        } else {
+            sampleMap.put("collectionDate", null);
+        }
+
+        return sampleMap;
+    }
+
+    private void copyBiorepositoryDataFields(Map<String, Object> npsData, Map<String, Object> sampleMap) {
+        String[] keys = { "biosafetyLevel", "projectName", "originLab", "storageRoom", "storageFreezer", "storageShelf",
+                "storageRack", "storageBox", "storageWell", "storagePath", "storageCondition", "assignedBy",
+                "assignedDateTime", "retentionPolicyName", "retentionExpiryDate" };
+        for (String key : keys) {
+            if (npsData.containsKey(key)) {
+                sampleMap.put(key, npsData.get(key));
+            }
+        }
     }
 
     private boolean isBiorepositoryContext(NoteBookPage page) {

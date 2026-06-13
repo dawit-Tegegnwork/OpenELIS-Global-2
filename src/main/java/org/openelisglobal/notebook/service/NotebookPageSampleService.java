@@ -142,6 +142,12 @@ public interface NotebookPageSampleService extends BaseObjectService<NotebookPag
     List<NotebookPageSample> getByPageIdPaginated(Integer pageId, Status status, int page, int size);
 
     /**
+     * Get page samples using direct row offset (for REST offset/limit query
+     * params).
+     */
+    List<NotebookPageSample> getByPageIdOffset(Integer pageId, Status status, int offset, int limit);
+
+    /**
      * Get total count of samples for a page with optional status filter.
      *
      * @param pageId the notebook page ID

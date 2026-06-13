@@ -1,5 +1,6 @@
 package org.openelisglobal.biorepository.controller.rest;
 
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import jakarta.servlet.http.HttpServletRequest;
 import java.math.BigDecimal;
 import java.util.ArrayList;
@@ -15,7 +16,6 @@ import org.openelisglobal.biorepository.valueholder.BioSample.BiosafetyLevel;
 import org.openelisglobal.biorepository.valueholder.SampleTransferItem;
 import org.openelisglobal.biorepository.valueholder.SampleTransferRequest;
 import org.openelisglobal.biorepository.valueholder.SampleTransferRequest.TransferStatus;
-import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import org.openelisglobal.common.rest.BaseRestController;
 import org.openelisglobal.notebook.service.NoteBookPageService;
 import org.openelisglobal.notebook.service.NotebookPageSampleService;
@@ -457,10 +457,11 @@ public class SampleTransferRestController extends BaseRestController {
         String sampleItemId = item.getSampleItem() != null ? item.getSampleItem().getId() : null;
         response.put("sampleItemId", sampleItemId);
 
-        StoragePageLinkResult linkResult = linkAcceptedSampleToStoragePage(metadata, sampleItemId, sysUserId);
-        response.put("storagePageLinked", linkResult.linked);
-        response.put("storagePageId", linkResult.pageId);
-        response.put("storagePageError", linkResult.error);
+        // Samples stay in Received Samples (REGISTERED) until user advances via Intake
+        // tab.
+        response.put("storagePageLinked", false);
+        response.put("storagePageId", null);
+        response.put("storagePageError", null);
         return response;
     }
 
@@ -470,7 +471,8 @@ public class SampleTransferRestController extends BaseRestController {
             return StoragePageLinkResult.error("Accepted item has no sample item ID");
         }
         if (metadata == null || metadata.getNotebookId() == null) {
-            return StoragePageLinkResult.error("Notebook ID was not provided; sample was accepted but not moved to Storage Assignment");
+            return StoragePageLinkResult
+                    .error("Notebook ID was not provided; sample was accepted but not moved to Storage Assignment");
         }
 
         try {

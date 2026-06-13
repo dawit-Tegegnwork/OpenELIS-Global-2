@@ -164,11 +164,13 @@ public class SampleTransferServiceImpl extends AuditableBaseObjectServiceImpl<Sa
             item.setSourceNotebookId(metadata.getSourceNotebookId());
             item.setSourceNotebookEntryId(metadata.getSourceNotebookEntryId());
             // Source storage is optional: samples may be routed from the lab bench without
-            // a prior storage assignment. When present, snapshot fields support chain of custody.
+            // a prior storage assignment. When present, snapshot fields support chain of
+            // custody.
             applySourceStorageSnapshot(item, sampleItem);
             if (metadata.getUnitOfMeasure() != null && !metadata.getUnitOfMeasure().trim().isEmpty()) {
                 item.setUnitOfMeasure(metadata.getUnitOfMeasure().trim());
-            } else if (sampleItem.getUnitOfMeasureName() != null && !sampleItem.getUnitOfMeasureName().trim().isEmpty()) {
+            } else if (sampleItem.getUnitOfMeasureName() != null
+                    && !sampleItem.getUnitOfMeasureName().trim().isEmpty()) {
                 item.setUnitOfMeasure(sampleItem.getUnitOfMeasureName().trim());
             }
             item.setSysUserId(sysUserId);
@@ -181,8 +183,8 @@ public class SampleTransferServiceImpl extends AuditableBaseObjectServiceImpl<Sa
                     ? sourceLab.trim() + " storage: " + item.getSourceStoragePath().trim()
                     : sourceLab.trim();
             chainOfCustodyService.logCustodyAction(item.getSampleItem(), CustodyAction.TRANSFER_INITIATED,
-                    createdRequest, null, null, requestingUser, fromLocation, createdRequest.getDestinationLab(),
-                    null, structuredNotes, sysUserId, "SampleTransferItem", item.getId(), null, null);
+                    createdRequest, null, null, requestingUser, fromLocation, createdRequest.getDestinationLab(), null,
+                    structuredNotes, sysUserId, "SampleTransferItem", item.getId(), null, null);
         }
 
         return createdRequest;
@@ -195,22 +197,19 @@ public class SampleTransferServiceImpl extends AuditableBaseObjectServiceImpl<Sa
                 && !sampleItem.getSample().getAccessionNumber().trim().isEmpty();
         boolean hasInternalId = sampleItem.getId() != null && !sampleItem.getId().trim().isEmpty();
         if (!hasExternalId && !hasAccession && !hasInternalId) {
-            throw new IllegalArgumentException(
-                    "Sample item " + sampleItemId
-                            + " is missing a sample identifier (external ID, accession number, or internal sample item ID)");
+            throw new IllegalArgumentException("Sample item " + sampleItemId
+                    + " is missing a sample identifier (external ID, accession number, or internal sample item ID)");
         }
         if (sampleItem.getTypeOfSample() == null) {
             throw new IllegalArgumentException("Sample item " + sampleItemId + " is missing sample type");
         }
-        boolean hasCollectionDate = sampleItem.getCollectionDate() != null
-                || (metadata != null && metadata.getCollectionDate() != null
-                        && !metadata.getCollectionDate().trim().isEmpty());
+        boolean hasCollectionDate = sampleItem.getCollectionDate() != null || (metadata != null
+                && metadata.getCollectionDate() != null && !metadata.getCollectionDate().trim().isEmpty());
         if (!hasCollectionDate) {
             throw new IllegalArgumentException("Sample item " + sampleItemId + " is missing collection date");
         }
-        boolean hasQuantity = (sampleItem.getQuantity() != null && sampleItem.getQuantity() > 0)
-                || (metadata != null && metadata.getQuantity() != null
-                        && metadata.getQuantity().compareTo(BigDecimal.ZERO) > 0);
+        boolean hasQuantity = (sampleItem.getQuantity() != null && sampleItem.getQuantity() > 0) || (metadata != null
+                && metadata.getQuantity() != null && metadata.getQuantity().compareTo(BigDecimal.ZERO) > 0);
         if (!hasQuantity) {
             throw new IllegalArgumentException("Sample item " + sampleItemId + " is missing volume (quantity)");
         }
@@ -220,8 +219,7 @@ public class SampleTransferServiceImpl extends AuditableBaseObjectServiceImpl<Sa
         try {
             return Timestamp.valueOf(LocalDate.parse(collectionDate.trim()).atStartOfDay());
         } catch (DateTimeParseException | NullPointerException e) {
-            throw new IllegalArgumentException(
-                    "Collection date must use YYYY-MM-DD for sample item: " + sampleItemId);
+            throw new IllegalArgumentException("Collection date must use YYYY-MM-DD for sample item: " + sampleItemId);
         }
     }
 
@@ -277,9 +275,8 @@ public class SampleTransferServiceImpl extends AuditableBaseObjectServiceImpl<Sa
 
         chainOfCustodyService.logCustodyAction(item.getSampleItem(), CustodyAction.TRANSFER_RECEIVED, request, null,
                 null, systemUserService.get(sysUserId), sourceLocationForLifecycle(request, item),
-                "Biorepository Intake", null,
-                request.getRequestNotes(), sysUserId, "SampleTransferItem", item.getId(), null,
-                WorkflowStatus.PENDING_STORAGE.name());
+                "Biorepository Intake", null, request.getRequestNotes(), sysUserId, "SampleTransferItem", item.getId(),
+                null, WorkflowStatus.REGISTERED.name());
 
         return item;
     }
@@ -307,8 +304,9 @@ public class SampleTransferServiceImpl extends AuditableBaseObjectServiceImpl<Sa
         update(request);
 
         chainOfCustodyService.logCustodyAction(item.getSampleItem(), CustodyAction.TRANSFER_REJECTED, request, null,
-                null, systemUserService.get(sysUserId), request.getDestinationLab(), sourceLocationForLifecycle(request, item),
-                null, rejectionReason, sysUserId, "SampleTransferItem", item.getId(), null, null);
+                null, systemUserService.get(sysUserId), request.getDestinationLab(),
+                sourceLocationForLifecycle(request, item), null, rejectionReason, sysUserId, "SampleTransferItem",
+                item.getId(), null, null);
 
         return item;
     }
@@ -336,11 +334,10 @@ public class SampleTransferServiceImpl extends AuditableBaseObjectServiceImpl<Sa
             item.setStatus(ItemStatus.ACCEPTED);
             item.setBioSample(createdBioSample);
 
-            chainOfCustodyService.logCustodyAction(item.getSampleItem(), CustodyAction.TRANSFER_RECEIVED, request,
-                    null, null, systemUserService.get(sysUserId), sourceLocationForLifecycle(request, item),
-                    "Biorepository Intake",
-                    null, request.getRequestNotes(), sysUserId, "SampleTransferItem", item.getId(), null,
-                    WorkflowStatus.PENDING_STORAGE.name());
+            chainOfCustodyService.logCustodyAction(item.getSampleItem(), CustodyAction.TRANSFER_RECEIVED, request, null,
+                    null, systemUserService.get(sysUserId), sourceLocationForLifecycle(request, item),
+                    "Biorepository Intake", null, request.getRequestNotes(), sysUserId, "SampleTransferItem",
+                    item.getId(), null, WorkflowStatus.REGISTERED.name());
         }
 
         updateRequestStatus(request, sysUserId);
@@ -366,8 +363,8 @@ public class SampleTransferServiceImpl extends AuditableBaseObjectServiceImpl<Sa
         for (SampleTransferItem item : pendingItems) {
             item.setStatus(ItemStatus.REJECTED);
             item.setRejectionReason(rejectionReason);
-            chainOfCustodyService.logCustodyAction(item.getSampleItem(), CustodyAction.TRANSFER_REJECTED, request,
-                    null, null, systemUserService.get(sysUserId), request.getDestinationLab(),
+            chainOfCustodyService.logCustodyAction(item.getSampleItem(), CustodyAction.TRANSFER_REJECTED, request, null,
+                    null, systemUserService.get(sysUserId), request.getDestinationLab(),
                     sourceLocationForLifecycle(request, item), null, rejectionReason, sysUserId, "SampleTransferItem",
                     item.getId(), null, null);
         }
@@ -574,7 +571,7 @@ public class SampleTransferServiceImpl extends AuditableBaseObjectServiceImpl<Sa
                 : null;
         BioSample bioSample = sampleItemId != null ? bioSampleService.getBySampleItemId(sampleItemId) : null;
         if (bioSample == null) {
-            incomingBioSample.setWorkflowStatus(WorkflowStatus.PENDING_STORAGE);
+            incomingBioSample.setWorkflowStatus(WorkflowStatus.REGISTERED);
             incomingBioSample.setSysUserId(sysUserId);
             return bioSampleService.createForSampleItem(item.getSampleItem(), incomingBioSample);
         }
@@ -600,7 +597,7 @@ public class SampleTransferServiceImpl extends AuditableBaseObjectServiceImpl<Sa
         if (incomingBioSample.getRequiredTempMax() != null) {
             bioSample.setRequiredTempMax(incomingBioSample.getRequiredTempMax());
         }
-        bioSample.setWorkflowStatus(WorkflowStatus.PENDING_STORAGE);
+        bioSample.setWorkflowStatus(WorkflowStatus.REGISTERED);
         bioSample.setSysUserId(sysUserId);
         return bioSampleService.update(bioSample);
     }
