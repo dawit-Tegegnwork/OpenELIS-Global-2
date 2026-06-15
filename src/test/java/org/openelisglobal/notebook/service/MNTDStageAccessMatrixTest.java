@@ -19,6 +19,7 @@ import org.openelisglobal.common.constants.Constants;
 import org.openelisglobal.department.service.DepartmentIsolationService;
 import org.openelisglobal.notebook.valueholder.NoteBook;
 import org.openelisglobal.notebook.valueholder.NoteBookPage;
+import org.openelisglobal.notebook.valueholder.NotebookEntry;
 import org.openelisglobal.notebook.valueholder.NotebookStageAction;
 import org.openelisglobal.role.service.RoleService;
 import org.openelisglobal.role.valueholder.Role;
@@ -118,6 +119,46 @@ public class MNTDStageAccessMatrixTest {
 
         assertThrows(ResponseStatusException.class,
                 () -> service.assertStageAccess(request, notebook, intakePage, NotebookStageAction.EDIT));
+    }
+
+    @Test
+    public void assertMntdManifestIntakeEdit_childInstanceInheritsTemplateIntakePage() {
+        when(departmentIsolationService.hasUnrestrictedDepartmentAccess(request)).thenReturn(true);
+
+        NoteBook template = new NoteBook();
+        template.setId(8801);
+        template.setWorkflowType("mntd");
+        template.setIsTemplate(true);
+        template.getPages().add(page(1, "intake"));
+
+        NoteBook child = new NoteBook();
+        child.setId(8802);
+        child.setWorkflowType("mntd");
+        child.setIsTemplate(false);
+        child.setParentNotebook(template);
+
+        NotebookEntry entry = new NotebookEntry();
+        entry.setId(8801);
+        entry.setNotebook(child);
+
+        when(noteBookPageService.get(1)).thenReturn(template.getPages().get(0));
+        doNothing().when(departmentIsolationService).assertNotebookDepartmentAccess(any(), any());
+
+        service.assertMntdManifestIntakeEdit(request, entry);
+    }
+
+    @Test
+    public void assertMntdManifestIntakeEdit_missingIntakePage_returnsBadRequest() {
+        NoteBook notebook = new NoteBook();
+        notebook.setId(8803);
+        notebook.setWorkflowType("mntd");
+        notebook.setIsTemplate(false);
+
+        NotebookEntry entry = new NotebookEntry();
+        entry.setNotebook(notebook);
+
+        assertThrows(ResponseStatusException.class,
+                () -> service.assertMntdManifestIntakeEdit(request, entry));
     }
 
     @Test
