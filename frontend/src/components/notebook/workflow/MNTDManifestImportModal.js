@@ -392,105 +392,129 @@ function MNTDManifestImportModal({ open, onClose, entryId, onImportSuccess }) {
     );
   }, [columnMapping]);
 
+  // Build multipart form data for preview/import requests
+  const buildFormData = useCallback(() => {
+    const formData = new FormData();
+    formData.append("file", file);
+    formData.append(
+      "mapping",
+      new Blob([JSON.stringify(columnMapping)], { type: "application/json" }),
+    );
+    formData.append("manifestDescription", manifestDescription);
+    return formData;
+  }, [file, columnMapping, manifestDescription]);
+
   // Preview import
-  const handlePreview = useCallback(() => {
-    if (!file || !entryId) return;
+  const handlePreview = useCallback(async () => {
+    if (!file) {
+      setPreviewErrors([
+        {
+          rowNumber: 0,
+          column: "file",
+          message: "Please upload a CSV file before previewing.",
+        },
+      ]);
+      return;
+    }
+    if (!entryId) {
+      setPreviewErrors([
+        {
+          rowNumber: 0,
+          column: "entry",
+          message: "Notebook entry is not ready. Please refresh and try again.",
+        },
+      ]);
+      return;
+    }
 
     setIsPreviewLoading(true);
     setPreviewErrors([]);
 
-    const formData = new FormData();
-    formData.append("file", file);
-    formData.append(
-      "mapping",
-      new Blob([JSON.stringify(columnMapping)], { type: "application/json" }),
-    );
-    formData.append("manifestDescription", manifestDescription);
-
-    fetch(
-      `${config.serverBaseUrl}/rest/notebook/mntd/entry/${entryId}/samples/preview-manifest`,
-      {
-        method: "POST",
-        credentials: "include",
-        headers: {
-          "X-CSRF-Token": localStorage.getItem("CSRF"),
+    try {
+      const response = await fetch(
+        `${config.serverBaseUrl}/rest/notebook/mntd/entry/${entryId}/samples/preview-manifest`,
+        {
+          method: "POST",
+          credentials: "include",
+          headers: {
+            "X-CSRF-Token": localStorage.getItem("CSRF"),
+          },
+          body: buildFormData(),
         },
-        body: formData,
-      },
-    )
-      .then((response) => response.json())
-      .then((data) => {
-        setIsPreviewLoading(false);
-        if (data && data.rows) {
-          setPreviewData(data);
-          if (data.errors && data.errors.length > 0) {
-            setPreviewErrors(data.errors);
-          }
-          setStep(3);
-        } else if (data && data.error) {
-          setPreviewErrors([
-            { rowNumber: 0, column: "system", message: data.error },
-          ]);
-        }
-      })
-      .catch((error) => {
-        setIsPreviewLoading(false);
-        setPreviewErrors([
-          { rowNumber: 0, column: "system", message: error.message },
-        ]);
-      });
-  }, [file, entryId, columnMapping, manifestDescription]);
+      );
+
+      const data = await response.json();
+      if (response.ok) {
+        setPreviewData(data);
+        setPreviewErrors(data.errors || []);
+        setStep(3);
+      } else {
+        setPreviewErrors(
+          data.errors || [
+            {
+              rowNumber: 0,
+              column: "file",
+              message:
+                data.message || data.error || `Preview failed (${response.status})`,
+            },
+          ],
+        );
+      }
+    } catch (error) {
+      setPreviewErrors([
+        { rowNumber: 0, column: "file", message: error.message },
+      ]);
+    } finally {
+      setIsPreviewLoading(false);
+    }
+  }, [file, entryId, buildFormData]);
 
   // Execute import
-  const handleImport = useCallback(() => {
+  const handleImport = useCallback(async () => {
     if (!file || !entryId) return;
 
     setIsImporting(true);
+    setPreviewErrors([]);
 
-    const formData = new FormData();
-    formData.append("file", file);
-    formData.append(
-      "mapping",
-      new Blob([JSON.stringify(columnMapping)], { type: "application/json" }),
-    );
-    formData.append("manifestDescription", manifestDescription);
-
-    fetch(
-      `${config.serverBaseUrl}/rest/notebook/mntd/entry/${entryId}/samples/create-from-manifest`,
-      {
-        method: "POST",
-        credentials: "include",
-        headers: {
-          "X-CSRF-Token": localStorage.getItem("CSRF"),
+    try {
+      const response = await fetch(
+        `${config.serverBaseUrl}/rest/notebook/mntd/entry/${entryId}/samples/create-from-manifest`,
+        {
+          method: "POST",
+          credentials: "include",
+          headers: {
+            "X-CSRF-Token": localStorage.getItem("CSRF"),
+          },
+          body: buildFormData(),
         },
-        body: formData,
-      },
-    )
-      .then((response) => response.json())
-      .then((data) => {
-        setIsImporting(false);
-        if (data && data.success) {
-          setStep(4);
-          if (onImportSuccess) {
-            onImportSuccess(data);
-          }
-        } else {
-          setPreviewErrors([
+      );
+
+      const data = await response.json();
+      if (response.ok && data.success) {
+        setStep(4);
+        if (onImportSuccess) {
+          onImportSuccess(data);
+        }
+      } else {
+        setPreviewErrors(
+          data.errors || [
             {
               rowNumber: 0,
-              column: "system",
-              message: data?.error || "Import failed",
+              column: "import",
+              message:
+                data.message || data.error || `Import failed (${response.status})`,
             },
-          ]);
-        }
-      })
-      .catch((error) => {
-        setIsImporting(false);
-        setPreviewErrors([
-          { rowNumber: 0, column: "system", message: error.message },
-        ]);
-      });
-  }, [file, entryId, columnMapping, manifestDescription, onImportSuccess]);
+          ],
+        );
+      }
+    } catch (error) {
+      setPreviewErrors([
+        { rowNumber: 0, column: "import", message: error.message },
+      ]);
+    } finally {
+      setIsImporting(false);
+    }
+  }, [file, entryId, buildFormData, onImportSuccess]);
 
   // Close modal and reset
   const handleClose = useCallback(() => {
@@ -1232,6 +1256,28 @@ function MNTDManifestImportModal({ open, onClose, entryId, onImportSuccess }) {
                   defaultMessage:
                     "Please map all required fields before proceeding.",
                 })}
+                lowContrast
+                hideCloseButton
+              />
+            )}
+
+            {previewErrors.length > 0 && (
+              <InlineNotification
+                kind="error"
+                title={intl.formatMessage({
+                  id: "notebook.mntd.manifest.validationErrors",
+                  defaultMessage: "Validation Errors",
+                })}
+                subtitle={
+                  <ul className="error-list">
+                    {previewErrors.map((error, idx) => (
+                      <li key={idx}>
+                        {error.rowNumber > 0 ? `Row ${error.rowNumber}: ` : ""}
+                        {error.message}
+                      </li>
+                    ))}
+                  </ul>
+                }
                 lowContrast
                 hideCloseButton
               />
