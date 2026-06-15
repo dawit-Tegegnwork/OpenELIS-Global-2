@@ -38,13 +38,12 @@ import { NotificationContext } from "../layout/Layout";
 import {
   getFromOpenElisServer,
   postToOpenElisServerFullResponse,
+  postToOpenElisServerJsonResponse,
   toBase64,
 } from "../utils/Utils";
 import NotebookAuditLogViewer from "./NotebookAuditLogViewer";
 import { resolveWorkflowTabComponent } from "./workflow/workflowRouting";
-import {
-  buildLinkedEquipmentInstrumentsUrl,
-} from "./notebookLinkedEquipment";
+import { buildLinkedEquipmentInstrumentsUrl } from "./notebookLinkedEquipment";
 import {
   loadNotebookEquipmentOptions,
   mergeInventoryOptionsWithLinkedSelections,
@@ -420,26 +419,30 @@ const NoteBookInstanceEntryForm = () => {
     setNewComment("");
   };
 
-  const applyInstrumentList = useCallback((response) => {
-    const departmentInstruments = mergeInventoryOptionsWithLinkedSelections(
-      response,
-      noteBookData.analyzers || [],
-      intl.formatMessage({
-        id: "notebook.equipment.picker.missingSelection",
-        defaultMessage: "Linked instrument is not currently available in department inventory.",
-      }),
-    );
-    setAnalyzerList(departmentInstruments);
-    setNoteBookData((previous) => ({
-      ...previous,
-      analyzers: (previous.analyzers || []).map((instrument) => {
-        const resolvedMatch = departmentInstruments.find(
-          (option) => String(option.id) === String(instrument.id),
-        );
-        return resolvedMatch || instrument;
-      }),
-    }));
-  }, [intl, noteBookData.analyzers]);
+  const applyInstrumentList = useCallback(
+    (response) => {
+      const departmentInstruments = mergeInventoryOptionsWithLinkedSelections(
+        response,
+        noteBookData.analyzers || [],
+        intl.formatMessage({
+          id: "notebook.equipment.picker.missingSelection",
+          defaultMessage:
+            "Linked instrument is not currently available in department inventory.",
+        }),
+      );
+      setAnalyzerList(departmentInstruments);
+      setNoteBookData((previous) => ({
+        ...previous,
+        analyzers: (previous.analyzers || []).map((instrument) => {
+          const resolvedMatch = departmentInstruments.find(
+            (option) => String(option.id) === String(instrument.id),
+          );
+          return resolvedMatch || instrument;
+        }),
+      }));
+    },
+    [intl, noteBookData.analyzers],
+  );
 
   const loadNotebookInstruments = useCallback(
     (notebookId) => {
@@ -481,6 +484,17 @@ const NoteBookInstanceEntryForm = () => {
   }, []);
 
   useEffect(() => {
+    const tabParam = urlParams.get("tab");
+    if (tabParam === "workflow") {
+      setSelectedTab(TABS.WORKFLOW);
+    } else if (tabParam === "attachments") {
+      setSelectedTab(TABS.ATTACHMENTS);
+    } else if (tabParam === "comments") {
+      setSelectedTab(TABS.COMMENTS);
+    }
+  }, []);
+
+  useEffect(() => {
     if (!notebookentryid) {
       setMode(MODES.CREATE);
     } else {
@@ -499,14 +513,81 @@ const NoteBookInstanceEntryForm = () => {
   }, [notebookentryid, viewModeParam]);
 
   useEffect(() => {
-    if (notebookid) {
-      setLoading(true);
-      getFromOpenElisServer(
-        "/rest/notebook/view/" + notebookid,
-        loadInitialProjectData,
-      );
+    if (!notebookid || notebookentryid) {
+      return;
     }
-  }, []);
+
+    const redirectToPersistedProject = (projectId, tab) => {
+      const tabQuery = tab ? `&tab=${tab}` : "&tab=workflow";
+      window.location.href = `/NoteBookInstanceEditForm/${projectId}?mode=edit${tabQuery}`;
+    };
+
+    const bootstrapProjectFromTemplate = (templateId, templateData) => {
+      const childCount = templateData?.entriesCount ?? 0;
+      const suggestedTitle = `${templateData?.title || "Project"} - Lab ${childCount + 1}`;
+      postToOpenElisServerJsonResponse(
+        `/rest/notebook/${templateId}/instances`,
+        JSON.stringify({ title: suggestedTitle }),
+        (response) => {
+          if (!componentMounted.current) {
+            return;
+          }
+          if (response?.id) {
+            redirectToPersistedProject(response.id, "workflow");
+            return;
+          }
+          setLoading(false);
+          showAlertMessage(
+            response?.error || intl.formatMessage({ id: "error.save.msg" }),
+            NotificationKinds.error,
+          );
+        },
+        (errorResponse) => {
+          if (!componentMounted.current) {
+            return;
+          }
+          setLoading(false);
+          showAlertMessage(
+            errorResponse?.error ||
+              intl.formatMessage({ id: "error.save.msg" }),
+            NotificationKinds.error,
+          );
+        },
+      );
+    };
+
+    setLoading(true);
+    getFromOpenElisServer(`/rest/notebook/view/${notebookid}`, (data) => {
+      if (!componentMounted.current) {
+        return;
+      }
+      if (!data?.id) {
+        setLoading(false);
+        return;
+      }
+
+      if (data.isTemplate === true) {
+        const allowedRoles = data.allowedRoles
+          ? Array.isArray(data.allowedRoles)
+            ? data.allowedRoles
+            : Array.from(data.allowedRoles)
+          : [];
+        if (!checkAuthorization(allowedRoles)) {
+          setLoading(false);
+          return;
+        }
+        bootstrapProjectFromTemplate(notebookid, data);
+        return;
+      }
+
+      if (data.id) {
+        redirectToPersistedProject(data.id, urlParams.get("tab") || "workflow");
+        return;
+      }
+
+      loadInitialProjectData(data);
+    });
+  }, [notebookid, notebookentryid]);
 
   // Check if user is authorized to create entries for this notebook
   // Uses role-based permission checking: Global Roles → AllLabUnits → Specific Lab Unit
@@ -1358,9 +1439,8 @@ const NoteBookInstanceEntryForm = () => {
                         const basePages = [...noteBookData.pages].sort(
                           (a, b) => (a.order || 0) - (b.order || 0),
                         );
-                        const isPathologyTemplate = isPathologyNotebook(
-                          noteBookData,
-                        );
+                        const isPathologyTemplate =
+                          isPathologyNotebook(noteBookData);
                         const hasProcessingStage = basePages.some((page) =>
                           String(page.title || "")
                             .toLowerCase()

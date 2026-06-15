@@ -249,14 +249,9 @@ function NoteBookDashBoard() {
     if (refreshTreeRef.current) {
       refreshTreeRef.current();
     }
-    // Navigate to the new instance
+    // Open the persisted project directly in workflow edit mode (no manual Save step)
     if (newInstance && newInstance.id) {
-      handleTreeSelect(newInstance.id, false, {
-        id: newInstance.id,
-        title: newInstance.title,
-        isChildInstance: true,
-        parentNotebookId: newInstance.parentNotebookId,
-      });
+      window.location.href = `/NoteBookInstanceEditForm/${newInstance.id}?mode=edit&tab=workflow`;
     }
   };
 
