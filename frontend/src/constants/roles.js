@@ -334,7 +334,11 @@ export const Permissions = {
   ],
 
   // Can view audit trail
-  VIEW_AUDIT_TRAIL: [Roles.GLOBAL_ADMIN, Roles.AUDIT_TRAIL, Roles.IT_SUPPORT_STAFF],
+  VIEW_AUDIT_TRAIL: [
+    Roles.GLOBAL_ADMIN,
+    Roles.AUDIT_TRAIL,
+    Roles.IT_SUPPORT_STAFF,
+  ],
 
   // Full system administration
   SYSTEM_ADMIN: [Roles.GLOBAL_ADMIN, Roles.SYSTEM_ADMIN],

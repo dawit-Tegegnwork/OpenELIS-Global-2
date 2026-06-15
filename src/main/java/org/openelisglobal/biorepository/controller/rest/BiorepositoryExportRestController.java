@@ -244,4 +244,28 @@ public class BiorepositoryExportRestController extends BaseRestController {
             throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "Export failed: " + e.getMessage(), e);
         }
     }
+
+    /**
+     * Export blank printable QC worksheet for a generated batch manifest.
+     */
+    @GetMapping("/qc/export/worksheet/pdf")
+    public void exportQcWorksheet(@RequestParam String qcBatchId, HttpServletResponse response) throws IOException {
+        if (qcBatchId == null || qcBatchId.trim().isEmpty()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "qcBatchId is required");
+        }
+        try {
+            byte[] exportData = exportService.exportQcWorksheetToPDF(qcBatchId.trim());
+            String timestamp = LocalDate.now().format(DateTimeFormatter.ISO_LOCAL_DATE);
+            String filename = "biorepository_qc_worksheet_" + qcBatchId.trim() + "_" + timestamp + ".pdf";
+            response.setContentType("application/pdf");
+            response.setHeader("Content-Disposition", "attachment; filename=\"" + filename + "\"");
+            response.setContentLength(exportData.length);
+            response.getOutputStream().write(exportData);
+            response.getOutputStream().flush();
+        } catch (ResponseStatusException e) {
+            throw e;
+        } catch (Exception e) {
+            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "Export failed: " + e.getMessage(), e);
+        }
+    }
 }

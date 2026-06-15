@@ -55,6 +55,11 @@ import {
 } from "../../../esignature";
 import PermissionGate from "../../../security/PermissionGate";
 import useStagePersonas from "../../../../hooks/useStagePersonas";
+import ModalSaveErrorNotification from "./ModalSaveErrorNotification";
+import {
+  reportModalSaveFailure,
+  extractApiErrorMessage,
+} from "./mntdModalErrorHelpers";
 
 /**
  * MNTDSampleProcessingPage - Page 4 of the MNTD workflow.
@@ -100,6 +105,7 @@ function MNTDSampleProcessingPage({
 
   // Bulk apply modal state
   const [bulkApplyModalOpen, setBulkApplyModalOpen] = useState(false);
+  const [bulkApplyModalError, setBulkApplyModalError] = useState(null);
   const [bulkApplyValues, setBulkApplyValues] = useState({
     processingType: "",
     processingTypeOther: "",
@@ -117,6 +123,7 @@ function MNTDSampleProcessingPage({
 
   // Add missed sample modal state
   const [addSampleModalOpen, setAddSampleModalOpen] = useState(false);
+  const [addSampleModalError, setAddSampleModalError] = useState(null);
   const [newSampleData, setNewSampleData] = useState({
     externalId: "",
     sampleType: "",
@@ -150,6 +157,38 @@ function MNTDSampleProcessingPage({
       setNotificationVisible(true);
     },
     [addNotification, intl, setNotificationVisible],
+  );
+
+  const reopenBulkApplyModal = useCallback(() => {
+    setBulkApplyModalOpen(true);
+  }, []);
+
+  const reopenAddSampleModal = useCallback(() => {
+    setAddSampleModalOpen(true);
+  }, []);
+
+  const reportBulkApplyFailure = useCallback(
+    (message) => {
+      reportModalSaveFailure({
+        message,
+        reopenModal: reopenBulkApplyModal,
+        setModalError: setBulkApplyModalError,
+        notifyError,
+      });
+    },
+    [notifyError, reopenBulkApplyModal],
+  );
+
+  const reportAddSampleFailure = useCallback(
+    (message) => {
+      reportModalSaveFailure({
+        message,
+        reopenModal: reopenAddSampleModal,
+        setModalError: setAddSampleModalError,
+        notifyError,
+      });
+    },
+    [notifyError, reopenAddSampleModal],
   );
 
   // Load samples and reference data on mount
@@ -227,19 +266,21 @@ function MNTDSampleProcessingPage({
   // Handle bulk apply
   const handleBulkApply = useCallback(() => {
     if (selectedSampleIds.length === 0) {
-      setError("Please select samples to apply values to.");
+      reportBulkApplyFailure("Please select samples to apply values to.");
       return;
     }
 
     const hasRealPageId =
       pageData?.id && !String(pageData.id).startsWith("default-");
     if (!hasRealPageId) {
-      setError("Cannot update samples: Page not properly initialized.");
+      reportBulkApplyFailure(
+        "Cannot update samples: Page not properly initialized.",
+      );
       return;
     }
 
     if (!bulkApplyValues.processingType) {
-      setError("Processing type is required.");
+      reportBulkApplyFailure("Processing type is required.");
       return;
     }
 
@@ -247,7 +288,9 @@ function MNTDSampleProcessingPage({
       bulkApplyValues.processingType === "other" &&
       !bulkApplyValues.processingTypeOther?.trim()
     ) {
-      setError("Please specify the processing type when Other is selected.");
+      reportBulkApplyFailure(
+        "Please specify the processing type when Other is selected.",
+      );
       return;
     }
 
@@ -258,7 +301,7 @@ function MNTDSampleProcessingPage({
         bulkApplyValues.reagentQuantities,
       );
       if (invalidReagentItems.length > 0) {
-        notifyError(
+        reportBulkApplyFailure(
           "Enter a quantity greater than 0 for each selected reagent.",
         );
         return;
@@ -266,7 +309,7 @@ function MNTDSampleProcessingPage({
     }
 
     setIsBulkApplying(true);
-    setError(null);
+    setBulkApplyModalError(null);
 
     const applyPayload = {
       processingType: bulkApplyValues.processingType,
@@ -307,13 +350,14 @@ function MNTDSampleProcessingPage({
             `Applied processing values to ${selectedSampleIds.length} samples.`,
           );
           setBulkApplyModalOpen(false);
+          setBulkApplyModalError(null);
           loadPageSamples();
           setSelectedSampleIds([]);
           if (onProgressUpdate) {
             onProgressUpdate();
           }
         } else {
-          setError("Failed to apply values. Please try again.");
+          reportBulkApplyFailure("Failed to apply values. Please try again.");
         }
       },
     );
@@ -323,7 +367,7 @@ function MNTDSampleProcessingPage({
     bulkApplyValues,
     loadPageSamples,
     onProgressUpdate,
-    notifyError,
+    reportBulkApplyFailure,
   ]);
 
   // Handle marking samples as ready for processing
@@ -381,12 +425,19 @@ function MNTDSampleProcessingPage({
   // Handle adding missed sample
   const handleAddMissedSample = useCallback(() => {
     if (!newSampleData.externalId || !newSampleData.sampleType) {
-      setError("Sample ID and Sample Type are required.");
+      reportAddSampleFailure("Sample ID and Sample Type are required.");
+      return;
+    }
+
+    if (!entryId) {
+      reportAddSampleFailure(
+        "Notebook entry is not loaded. Please refresh the page.",
+      );
       return;
     }
 
     setIsAddingSample(true);
-    setError(null);
+    setAddSampleModalError(null);
 
     const sampleData = {
       entryId: entryId,
@@ -398,11 +449,6 @@ function MNTDSampleProcessingPage({
       source: "MISSED_FROM_FIELD",
     };
 
-    if (!entryId) {
-      setError("Notebook entry is not loaded. Please refresh the page.");
-      return;
-    }
-
     postToOpenElisServerJsonResponse(
       `/rest/notebook-entry/${entryId}/samples/add`,
       JSON.stringify(sampleData),
@@ -411,6 +457,7 @@ function MNTDSampleProcessingPage({
         if (response?.success) {
           setSuccessMessage("Missed sample registered successfully.");
           setAddSampleModalOpen(false);
+          setAddSampleModalError(null);
           setNewSampleData({
             externalId: "",
             sampleType: "",
@@ -422,14 +469,23 @@ function MNTDSampleProcessingPage({
             onProgressUpdate();
           }
         } else {
-          setError(
-            response?.error ||
+          reportAddSampleFailure(
+            extractApiErrorMessage(
+              response,
               "Failed to add sample. Please try again.",
+            ),
           );
         }
       },
     );
-  }, [entryId, pageData?.id, newSampleData, loadPageSamples, onProgressUpdate]);
+  }, [
+    entryId,
+    pageData?.id,
+    newSampleData,
+    loadPageSamples,
+    onProgressUpdate,
+    reportAddSampleFailure,
+  ]);
 
   // E-Signature Integration (21 CFR Part 11)
   const handleSignAndSave = useCallback(
@@ -627,6 +683,7 @@ function MNTDSampleProcessingPage({
           renderIcon={Edit}
           onClick={() => {
             resetBulkApplyValues();
+            setBulkApplyModalError(null);
             setBulkApplyModalOpen(true);
           }}
           disabled={selectedSampleIds.length === 0}
@@ -642,7 +699,10 @@ function MNTDSampleProcessingPage({
           kind="tertiary"
           size="sm"
           renderIcon={Add}
-          onClick={() => setAddSampleModalOpen(true)}
+          onClick={() => {
+            setAddSampleModalError(null);
+            setAddSampleModalOpen(true);
+          }}
         >
           <FormattedMessage
             id="notebook.page.mntd.addMissedSample"
@@ -742,7 +802,10 @@ function MNTDSampleProcessingPage({
       {/* Bulk Apply Modal */}
       <Modal
         open={bulkApplyModalOpen}
-        onRequestClose={() => setBulkApplyModalOpen(false)}
+        onRequestClose={() => {
+          setBulkApplyModalOpen(false);
+          setBulkApplyModalError(null);
+        }}
         modalHeading={intl.formatMessage({
           id: "notebook.mntd.bulkPrepare.title",
           defaultMessage: "Bulk Processing Preparation",
@@ -762,10 +825,17 @@ function MNTDSampleProcessingPage({
         onRequestSubmit={() =>
           triggerEsigForSave(handleBulkApply, () => setBulkApplyModalOpen(true))
         }
-        onSecondarySubmit={() => setBulkApplyModalOpen(false)}
+        onSecondarySubmit={() => {
+          setBulkApplyModalOpen(false);
+          setBulkApplyModalError(null);
+        }}
         size="lg"
         primaryButtonDisabled={isBulkApplying}
       >
+        <ModalSaveErrorNotification
+          message={bulkApplyModalError}
+          onClose={() => setBulkApplyModalError(null)}
+        />
         <p className="modal-description">
           <FormattedMessage
             id="notebook.mntd.bulkPrepare.description"
@@ -1008,7 +1078,10 @@ function MNTDSampleProcessingPage({
       {/* Add Missed Sample Modal */}
       <Modal
         open={addSampleModalOpen}
-        onRequestClose={() => setAddSampleModalOpen(false)}
+        onRequestClose={() => {
+          setAddSampleModalOpen(false);
+          setAddSampleModalError(null);
+        }}
         modalHeading={intl.formatMessage({
           id: "notebook.mntd.addMissedSample.title",
           defaultMessage: "Register Missed Sample from Field",
@@ -1033,10 +1106,17 @@ function MNTDSampleProcessingPage({
             setAddSampleModalOpen(true),
           )
         }
-        onSecondarySubmit={() => setAddSampleModalOpen(false)}
+        onSecondarySubmit={() => {
+          setAddSampleModalOpen(false);
+          setAddSampleModalError(null);
+        }}
         size="md"
         primaryButtonDisabled={isAddingSample}
       >
+        <ModalSaveErrorNotification
+          message={addSampleModalError}
+          onClose={() => setAddSampleModalError(null)}
+        />
         <p className="modal-description">
           <FormattedMessage
             id="notebook.mntd.addMissedSample.description"

@@ -107,7 +107,9 @@ function PatientOrderEntryPage({
   // Full session list (includes patients who already have orders)
   const [allRegisteredPatients, setAllRegisteredPatients] = useState([]);
   // Patients awaiting an order (Tab 2 picker)
-  const [pendingRegisteredPatients, setPendingRegisteredPatients] = useState([]);
+  const [pendingRegisteredPatients, setPendingRegisteredPatients] = useState(
+    [],
+  );
 
   // Bulk order selection state
   const [selectedPatientsForBulk, setSelectedPatientsForBulk] = useState([]);
@@ -202,10 +204,7 @@ function PatientOrderEntryPage({
     getFromOpenElisServer(
       `/rest/medlab/lab-number-preview?prefix=${encodeURIComponent(prefix)}&count=1`,
       (response) => {
-        if (
-          componentMounted.current &&
-          response?.labNumbers?.length > 0
-        ) {
+        if (componentMounted.current && response?.labNumbers?.length > 0) {
           setLabOrderForm((prev) => {
             if (prev.labNo.trim()) {
               return prev;
@@ -663,8 +662,10 @@ function PatientOrderEntryPage({
 
       setSubmitting(true);
 
-      const { payload, birthDateForDisplay } =
-        buildPatientManagementPayload(patientForm, mode);
+      const { payload, birthDateForDisplay } = buildPatientManagementPayload(
+        patientForm,
+        mode,
+      );
 
       postToOpenElisServerJsonResponse(
         "/rest/PatientManagement",
@@ -932,7 +933,8 @@ function PatientOrderEntryPage({
                     }
                     placeholder={intl.formatMessage({
                       id: "patient.last.name.placeholder",
-                      defaultMessage: "Enter last name (optional for participants)",
+                      defaultMessage:
+                        "Enter last name (optional for participants)",
                     })}
                   />
                 </Column>
@@ -1036,9 +1038,7 @@ function PatientOrderEntryPage({
                 size="sm"
                 renderIcon={UserFollow}
                 onClick={() => handleRegisterPatient(REGISTER_MODE.PATIENT)}
-                disabled={
-                  submitting || !isFormValid(REGISTER_MODE.PATIENT)
-                }
+                disabled={submitting || !isFormValid(REGISTER_MODE.PATIENT)}
               >
                 {submitting ? (
                   <Loading small withOverlay={false} />
@@ -1054,12 +1054,8 @@ function PatientOrderEntryPage({
                 kind="primary"
                 size="sm"
                 renderIcon={UserFollow}
-                onClick={() =>
-                  handleRegisterPatient(REGISTER_MODE.PARTICIPANT)
-                }
-                disabled={
-                  submitting || !isFormValid(REGISTER_MODE.PARTICIPANT)
-                }
+                onClick={() => handleRegisterPatient(REGISTER_MODE.PARTICIPANT)}
+                disabled={submitting || !isFormValid(REGISTER_MODE.PARTICIPANT)}
               >
                 <FormattedMessage
                   id="medlab.patient.registerParticipant"
@@ -1151,7 +1147,10 @@ function PatientOrderEntryPage({
                       values={{ count: selectedPatientsForBulk.length }}
                     />
                   </Button>
-                  <p className="bulk-order-hint" style={{ marginTop: "0.5rem" }}>
+                  <p
+                    className="bulk-order-hint"
+                    style={{ marginTop: "0.5rem" }}
+                  >
                     <FormattedMessage
                       id="medlab.patient.bulkOrderHint"
                       defaultMessage="Select patients awaiting an order, or use the Lab Order & Samples tab for test selection and sample requirements."
@@ -1200,8 +1199,7 @@ function PatientOrderEntryPage({
                               (p) => String(p.id) === String(row.id),
                             );
                             const canBulkOrder =
-                              patient &&
-                              getPatientOrderCount(patient) === 0;
+                              patient && getPatientOrderCount(patient) === 0;
                             return (
                               <TableRow key={row.id}>
                                 <TableCell>
@@ -1232,24 +1230,25 @@ function PatientOrderEntryPage({
                                         : intl.formatMessage({
                                             id: "patient.female",
                                           })
-                                      : cell.info.header === "birthDateForDisplay"
+                                      : cell.info.header ===
+                                          "birthDateForDisplay"
                                         ? formatPatientBirthDateDisplay(patient)
-                                      : cell.info.header === "orders"
-                                        ? (() => {
-                                            const orderCount = patient
-                                              ? getPatientOrderCount(patient)
-                                              : 0;
-                                            return orderCount > 0 ? (
-                                              <Tag type="green" size="sm">
-                                                {orderCount}
-                                              </Tag>
-                                            ) : (
-                                              <Tag type="gray" size="sm">
-                                                0
-                                              </Tag>
-                                            );
-                                          })()
-                                        : cell.value || "-"}
+                                        : cell.info.header === "orders"
+                                          ? (() => {
+                                              const orderCount = patient
+                                                ? getPatientOrderCount(patient)
+                                                : 0;
+                                              return orderCount > 0 ? (
+                                                <Tag type="green" size="sm">
+                                                  {orderCount}
+                                                </Tag>
+                                              ) : (
+                                                <Tag type="gray" size="sm">
+                                                  0
+                                                </Tag>
+                                              );
+                                            })()
+                                          : cell.value || "-"}
                                   </TableCell>
                                 ))}
                               </TableRow>

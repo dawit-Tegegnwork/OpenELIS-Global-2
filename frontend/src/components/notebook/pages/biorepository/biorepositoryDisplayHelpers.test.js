@@ -32,9 +32,9 @@ describe("biorepositoryDisplayHelpers", () => {
   });
 
   test("formatBiorepositoryUserText rewrites common room phrases", () => {
-    expect(formatBiorepositoryUserText("Biorepository room-level storage")).toBe(
-      "Biorepository zone-level storage",
-    );
+    expect(
+      formatBiorepositoryUserText("Biorepository room-level storage"),
+    ).toBe("Biorepository zone-level storage");
     expect(formatBiorepositoryUserText("Room Temperature (15-25°C)")).toBe(
       "Ambient Temperature (15-25°C)",
     );
@@ -47,9 +47,9 @@ describe("biorepositoryDisplayHelpers", () => {
     expect(resolveBiorepositoryPhysicalRoomName(null)).toBe(
       "Biorepository Laboratory",
     );
-    expect(
-      resolveBiorepositoryPhysicalRoomName(null, "Custom Facility"),
-    ).toBe("Custom Facility");
+    expect(resolveBiorepositoryPhysicalRoomName(null, "Custom Facility")).toBe(
+      "Custom Facility",
+    );
   });
 
   test("getStorageManagementLabels returns zone labels for biorepository users", () => {

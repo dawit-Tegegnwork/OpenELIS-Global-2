@@ -143,8 +143,7 @@ export function getStorageManagementLabels(intl, isBiorepo) {
     }),
     createZoneHelper: intl.formatMessage({
       id: "biorepository.storage.management.createZoneHelper",
-      defaultMessage:
-        "Zones are areas within the Biorepository storage room.",
+      defaultMessage: "Zones are areas within the Biorepository storage room.",
     }),
   };
 }

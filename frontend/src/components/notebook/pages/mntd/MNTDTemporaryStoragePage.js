@@ -1,4 +1,11 @@
-import React, { useState, useEffect, useRef, useCallback, useMemo } from "react";
+import React, {
+  useState,
+  useEffect,
+  useRef,
+  useCallback,
+  useMemo,
+  useContext,
+} from "react";
 import {
   Grid,
   Column,
@@ -55,6 +62,13 @@ import {
 } from "../../../esignature";
 import PermissionGate from "../../../security/PermissionGate";
 import useStagePersonas from "../../../../hooks/useStagePersonas";
+import { NotificationContext } from "../../../layout/Layout";
+import { NotificationKinds } from "../../../common/CustomNotification";
+import ModalSaveErrorNotification from "./ModalSaveErrorNotification";
+import {
+  extractApiErrorMessage,
+  reportModalSaveFailure,
+} from "./mntdModalErrorHelpers";
 
 /**
  * MNTDTemporaryStoragePage - Page 3 of the MNTD workflow.
@@ -82,6 +96,8 @@ function MNTDTemporaryStoragePage({
 }) {
   const intl = useIntl();
   const stageEditRoles = useStagePersonas("mntd", pageData);
+  const { addNotification, setNotificationVisible } =
+    useContext(NotificationContext);
   const componentMounted = useRef(false);
 
   // E-signature: pending action ref for shared AUTHORED hook
@@ -108,6 +124,7 @@ function MNTDTemporaryStoragePage({
 
   // Storage assignment modal state (unified single modal like Pharmaceutical)
   const [storageModalOpen, setStorageModalOpen] = useState(false);
+  const [storageModalError, setStorageModalError] = useState(null);
   const [selectedWell, setSelectedWell] = useState(null);
   const [isAssigning, setIsAssigning] = useState(false);
   const [wellAssignments, setWellAssignments] = useState({});
@@ -125,7 +142,48 @@ function MNTDTemporaryStoragePage({
   // Reassignment confirmation modal state
   const [confirmReassignModalOpen, setConfirmReassignModalOpen] =
     useState(false);
+  const [confirmReassignModalError, setConfirmReassignModalError] =
+    useState(null);
   const [samplesToReassign, setSamplesToReassign] = useState([]);
+
+  const notifyError = useCallback(
+    (message) => {
+      addNotification({
+        kind: NotificationKinds.error,
+        title: intl.formatMessage({
+          id: "notification.error",
+          defaultMessage: "Error",
+        }),
+        message,
+      });
+      setNotificationVisible(true);
+    },
+    [addNotification, intl, setNotificationVisible],
+  );
+
+  const reportStorageFailure = useCallback(
+    (message) => {
+      reportModalSaveFailure({
+        message,
+        reopenModal: () => setStorageModalOpen(true),
+        setModalError: setStorageModalError,
+        notifyError,
+      });
+    },
+    [notifyError],
+  );
+
+  const reportReassignFailure = useCallback(
+    (message) => {
+      reportModalSaveFailure({
+        message,
+        reopenModal: () => setConfirmReassignModalOpen(true),
+        setModalError: setConfirmReassignModalError,
+        notifyError,
+      });
+    },
+    [notifyError],
+  );
 
   // Load samples for this page
   useEffect(() => {
@@ -232,16 +290,19 @@ function MNTDTemporaryStoragePage({
     (wellCoord, wellInfo) => {
       if (wellInfo && !wellInfo.pending) {
         // Well is occupied by existing sample
-        setError(
-          intl.formatMessage(
-            {
-              id: "notebook.mntd.storage.wellOccupied",
-              defaultMessage:
-                "Well {well} is already occupied by {sample}. Choose another position.",
-            },
-            { well: wellCoord, sample: wellInfo.externalId || "a sample" },
-          ),
+        const occupiedMessage = intl.formatMessage(
+          {
+            id: "notebook.mntd.storage.wellOccupied",
+            defaultMessage:
+              "Well {well} is already occupied by {sample}. Choose another position.",
+          },
+          { well: wellCoord, sample: wellInfo.externalId || "a sample" },
         );
+        if (storageModalOpen) {
+          reportStorageFailure(occupiedMessage);
+        } else {
+          setError(occupiedMessage);
+        }
         return;
       }
 
@@ -273,7 +334,13 @@ function MNTDTemporaryStoragePage({
         setStorageModalOpen(true);
       }
     },
-    [selectedSampleIds, wellAssignments, storageModalOpen, intl],
+    [
+      selectedSampleIds,
+      wellAssignments,
+      storageModalOpen,
+      intl,
+      reportStorageFailure,
+    ],
   );
 
   // Handle open storage modal
@@ -305,6 +372,7 @@ function MNTDTemporaryStoragePage({
 
   const openStorageAssignmentModal = (reassigning) => {
     setIsReassignment(reassigning);
+    setStorageModalError(null);
     setStorageModalOpen(true);
     setError(null);
     setWellAssignments({});
@@ -327,7 +395,7 @@ function MNTDTemporaryStoragePage({
   // Auto-populate wells with selected samples
   const handleAutoPopulate = () => {
     if (!storageSelection.box) {
-      setError(
+      reportStorageFailure(
         intl.formatMessage({
           id: "notebook.mntd.storage.selectBoxFirst",
           defaultMessage: "Please select a storage box first.",
@@ -361,7 +429,7 @@ function MNTDTemporaryStoragePage({
     setWellAssignments(newAssignments);
 
     if (sampleIndex < selectedSampleIds.length) {
-      setError(
+      reportStorageFailure(
         intl.formatMessage(
           {
             id: "notebook.mntd.storage.notEnoughWells",
@@ -372,7 +440,7 @@ function MNTDTemporaryStoragePage({
         ),
       );
     } else {
-      setError(null);
+      setStorageModalError(null);
       setSuccessMessage(
         intl.formatMessage(
           {
@@ -407,7 +475,7 @@ function MNTDTemporaryStoragePage({
   const handleAssignStorage = useCallback(() => {
     // Validate at least room selection (minimum required level - all levels are optional after room)
     if (!storageSelection.room) {
-      setError(
+      reportStorageFailure(
         intl.formatMessage({
           id: "notebook.mntd.storage.selectRoom",
           defaultMessage: "Please select at least a storage room.",
@@ -418,7 +486,7 @@ function MNTDTemporaryStoragePage({
 
     // Check if box is selected and requires well assignments
     if (storageSelection.box && Object.keys(wellAssignments).length === 0) {
-      setError(
+      reportStorageFailure(
         intl.formatMessage({
           id: "notebook.mntd.storage.noWellAssignments",
           defaultMessage:
@@ -430,7 +498,7 @@ function MNTDTemporaryStoragePage({
 
     // Check if no box selected but no samples selected for hierarchy-level assignment
     if (!storageSelection.box && selectedSampleIds.length === 0) {
-      setError(
+      reportStorageFailure(
         intl.formatMessage({
           id: "notebook.mntd.storage.noSamplesSelected",
           defaultMessage: "Please select samples to assign to storage.",
@@ -442,12 +510,14 @@ function MNTDTemporaryStoragePage({
     const hasRealPageId =
       pageData?.id && !String(pageData.id).startsWith("default-");
     if (!hasRealPageId) {
-      setError("Cannot update samples: Page not properly initialized.");
+      reportStorageFailure(
+        "Cannot update samples: Page not properly initialized.",
+      );
       return;
     }
 
     setIsAssigning(true);
-    setError(null);
+    setStorageModalError(null);
 
     // Build storage path
     const storagePath = [
@@ -561,6 +631,7 @@ function MNTDTemporaryStoragePage({
 
           setIsReassignment(false);
           setStorageModalOpen(false);
+          setStorageModalError(null);
           setSelectedSampleIds([]);
           setWellAssignments({});
           loadPageSamples();
@@ -578,7 +649,7 @@ function MNTDTemporaryStoragePage({
           if (hasErrors) {
             errorMessage = response.errors.join("; ");
           }
-          setError(errorMessage);
+          reportStorageFailure(errorMessage);
         }
       },
     );
@@ -592,6 +663,7 @@ function MNTDTemporaryStoragePage({
     loadPageSamples,
     loadBoxOccupancy,
     onProgressUpdate,
+    reportStorageFailure,
   ]);
 
   // Handle marking samples as stored
@@ -1137,7 +1209,10 @@ function MNTDTemporaryStoragePage({
       {/* Unified Storage Assignment Modal (like Pharmaceutical page) */}
       <Modal
         open={storageModalOpen}
-        onRequestClose={() => setStorageModalOpen(false)}
+        onRequestClose={() => {
+          setStorageModalOpen(false);
+          setStorageModalError(null);
+        }}
         modalHeading={intl.formatMessage({
           id: "notebook.mntd.storage.modal.title",
           defaultMessage: "Assign to Storage",
@@ -1170,6 +1245,10 @@ function MNTDTemporaryStoragePage({
         }
         size="lg"
       >
+        <ModalSaveErrorNotification
+          message={storageModalError}
+          onClose={() => setStorageModalError(null)}
+        />
         <p className="modal-description">
           <FormattedMessage
             id="notebook.mntd.storage.modal.description"
@@ -1283,7 +1362,10 @@ function MNTDTemporaryStoragePage({
       {/* Reassignment Confirmation Modal */}
       <Modal
         open={confirmReassignModalOpen}
-        onRequestClose={() => setConfirmReassignModalOpen(false)}
+        onRequestClose={() => {
+          setConfirmReassignModalOpen(false);
+          setConfirmReassignModalError(null);
+        }}
         modalHeading={intl.formatMessage({
           id: "notebook.mntd.storage.reassignConfirm.title",
           defaultMessage: "Confirm Reassignment",
@@ -1304,6 +1386,10 @@ function MNTDTemporaryStoragePage({
         danger
         size="sm"
       >
+        <ModalSaveErrorNotification
+          message={confirmReassignModalError}
+          onClose={() => setConfirmReassignModalError(null)}
+        />
         <div style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
           <p>
             <FormattedMessage

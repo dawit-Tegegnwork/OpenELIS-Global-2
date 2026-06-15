@@ -17,6 +17,8 @@ import { Renew } from "@carbon/react/icons";
 import { FormattedMessage, useIntl } from "react-intl";
 import { getFromOpenElisServer } from "../../utils/Utils";
 import { usePageAccessControl } from "../../../hooks/usePageAccessControl";
+import { usePermissions } from "../../../hooks/usePermissions";
+import { hasActiveDepartmentScope } from "../../../security/departmentAccess";
 import config from "../../../config.json";
 import { NotificationContext } from "../../layout/Layout";
 import PageNavigation from "./PageNavigation";
@@ -74,6 +76,9 @@ const DEFAULT_BACTERIOLOGY_WORKFLOW_PAGES = [
 function BacteriologyWorkflowTab({ notebookId, entryId: propEntryId }) {
   const componentMounted = useRef(false);
   const intl = useIntl();
+  const { userSessionDetails, isGlobalAdmin } = usePermissions();
+  const requiresDepartmentSelection =
+    !isGlobalAdmin && !hasActiveDepartmentScope(userSessionDetails);
   const { notificationVisible, setNotificationVisible } =
     useContext(NotificationContext);
 
@@ -573,6 +578,23 @@ function BacteriologyWorkflowTab({ notebookId, entryId: propEntryId }) {
               subtitle={syncMessage.text}
               lowContrast
               onCloseButtonClick={() => setSyncMessage(null)}
+              style={{ marginTop: "0.5rem" }}
+            />
+          )}
+          {requiresDepartmentSelection && (
+            <InlineNotification
+              kind="warning"
+              title={intl.formatMessage({
+                id: "notebook.bacteriology.departmentRequired.title",
+                defaultMessage: "Active department required",
+              })}
+              subtitle={intl.formatMessage({
+                id: "notebook.bacteriology.departmentRequired.subtitle",
+                defaultMessage:
+                  "Select Bacteriology in the header before registering or processing samples.",
+              })}
+              lowContrast
+              hideCloseButton
               style={{ marginTop: "0.5rem" }}
             />
           )}

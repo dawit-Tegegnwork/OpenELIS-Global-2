@@ -88,12 +88,19 @@ function GBDWorkflowTab({ notebookId, entryId: propEntryId }) {
     if (explicit === "genomics" || explicit === "gbd") {
       return explicit;
     }
-    const title = String(notebook?.title || entry?.notebook?.title || "").toLowerCase();
+    const title = String(
+      notebook?.title || entry?.notebook?.title || "",
+    ).toLowerCase();
     if (title.includes("genomics") || title.includes("bioinformatics")) {
       return "genomics";
     }
     return "gbd";
-  }, [entry?.notebook?.title, entry?.notebook?.workflowType, notebook?.title, notebook?.workflowType]);
+  }, [
+    entry?.notebook?.title,
+    entry?.notebook?.workflowType,
+    notebook?.title,
+    notebook?.workflowType,
+  ]);
 
   // Use shared hook for page access control
   // isCreating: true when creating a new entry (bypasses page-level role restrictions)

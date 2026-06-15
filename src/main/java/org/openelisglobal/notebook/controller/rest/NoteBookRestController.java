@@ -34,8 +34,6 @@ import org.openelisglobal.common.util.IdValuePair;
 import org.openelisglobal.dataexchange.fhir.FhirConfig;
 import org.openelisglobal.dataexchange.fhir.FhirUtil;
 import org.openelisglobal.department.service.DepartmentIsolationService;
-import org.openelisglobal.rbac.RbacAction;
-import org.openelisglobal.rbac.RbacPermissionService;
 import org.openelisglobal.login.valueholder.UserSessionData;
 import org.openelisglobal.notebook.bean.NoteBookDashboardMetrics;
 import org.openelisglobal.notebook.bean.NoteBookDisplayBean;
@@ -45,17 +43,21 @@ import org.openelisglobal.notebook.form.NoteBookForm;
 import org.openelisglobal.notebook.service.NoteBookPageService;
 import org.openelisglobal.notebook.service.NoteBookSampleService;
 import org.openelisglobal.notebook.service.NoteBookService;
+import org.openelisglobal.notebook.service.NotebookEntryService;
 import org.openelisglobal.notebook.service.NotebookPageSampleService;
 import org.openelisglobal.notebook.service.NotebookSecurityService;
 import org.openelisglobal.notebook.service.WorkflowPageTemplateService;
 import org.openelisglobal.notebook.valueholder.NoteBook;
 import org.openelisglobal.notebook.valueholder.NoteBook.NoteBookStatus;
 import org.openelisglobal.notebook.valueholder.NoteBookPage;
+import org.openelisglobal.notebook.valueholder.NotebookEntry;
 import org.openelisglobal.notebook.valueholder.NotebookPageSample;
 import org.openelisglobal.notebook.valueholder.NotebookPageSample.Status;
 import org.openelisglobal.notebook.valueholder.WorkflowPageTemplate;
 import org.openelisglobal.organization.service.OrganizationService;
 import org.openelisglobal.organization.valueholder.Organization;
+import org.openelisglobal.rbac.RbacAction;
+import org.openelisglobal.rbac.RbacPermissionService;
 import org.openelisglobal.role.service.RoleService;
 import org.openelisglobal.role.valueholder.Role;
 import org.openelisglobal.test.service.TestSectionService;
@@ -114,6 +116,9 @@ public class NoteBookRestController extends BaseRestController {
 
     @Autowired
     private RbacPermissionService rbacPermissionService;
+
+    @Autowired
+    private NotebookEntryService notebookEntryService;
 
     @GetMapping(value = "/dashboard/entries", produces = MediaType.APPLICATION_JSON_VALUE)
     @ResponseBody
@@ -369,8 +374,7 @@ public class NoteBookRestController extends BaseRestController {
         }
 
         if (!hasNotebookEditRbac(request)) {
-            return ResponseEntity.status(403)
-                    .body(Map.of("error", "Insufficient permission to update notebook data"));
+            return ResponseEntity.status(403).body(Map.of("error", "Insufficient permission to update notebook data"));
         }
 
         form.setSystemUserId(Integer.valueOf(sysUserId));
@@ -400,8 +404,7 @@ public class NoteBookRestController extends BaseRestController {
             return ResponseEntity.status(403)
                     .body(Map.of("error", "Insufficient permission to approve notebook entries"));
         }
-        if (!rbacPermissionService.hasPermission(request, RbacAction.SYSTEM_ADMIN)
-                && !hasNotebookEditRbac(request)) {
+        if (!rbacPermissionService.hasPermission(request, RbacAction.SYSTEM_ADMIN) && !hasNotebookEditRbac(request)) {
             return ResponseEntity.status(403)
                     .body(Map.of("error", "Insufficient permission to update notebook status"));
         }
@@ -1048,8 +1051,7 @@ public class NoteBookRestController extends BaseRestController {
             if (!rbacPermissionService.hasPermission(request, RbacAction.GENERATE_REPORTS)) {
                 response.setStatus(HttpServletResponse.SC_FORBIDDEN);
                 response.setContentType(MediaType.APPLICATION_JSON_VALUE);
-                response.getWriter()
-                        .write("{\"error\":\"Insufficient permission to generate reports\"}");
+                response.getWriter().write("{\"error\":\"Insufficient permission to generate reports\"}");
                 return;
             }
 
@@ -1213,10 +1215,43 @@ public class NoteBookRestController extends BaseRestController {
 
         try {
             NoteBook child = noteBookService.createChildInstance(parentId, title.trim(), sysUserId);
-            return ResponseEntity.ok(Map.of("id", child.getId(), "title", child.getTitle(), "parentNotebookId",
-                    parentId, "isChildInstance", true));
+            Integer entryId = ensureWorkflowNotebookEntry(child.getId(), title.trim(), loginLabUnit, sysUserId);
+            Map<String, Object> response = new java.util.HashMap<>();
+            response.put("id", child.getId());
+            response.put("title", child.getTitle());
+            response.put("parentNotebookId", parentId);
+            response.put("isChildInstance", true);
+            if (entryId != null) {
+                response.put("entryId", entryId);
+            }
+            return ResponseEntity.ok(response);
         } catch (IllegalArgumentException e) {
             return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+        }
+    }
+
+    /**
+     * Ensure a child instance has a notebook_entry so workflow stages are editable
+     * immediately after project creation (no manual Save required).
+     */
+    private Integer ensureWorkflowNotebookEntry(Integer notebookId, String title, String loginLabUnit,
+            String sysUserId) {
+        if (notebookId == null || sysUserId == null) {
+            return null;
+        }
+        try {
+            List<NotebookEntry> existing = notebookEntryService.findByNotebookId(notebookId);
+            if (existing != null && !existing.isEmpty() && existing.get(0).getId() != null) {
+                return existing.get(0).getId();
+            }
+            Organization organization = notebookSecurityService.getOrganizationForLoginLabUnit(loginLabUnit);
+            NotebookEntry entry = notebookEntryService.createEntry(notebookId, title, organization, sysUserId);
+            return entry != null ? entry.getId() : null;
+        } catch (RuntimeException e) {
+            org.openelisglobal.common.log.LogEvent.logWarn(this.getClass().getSimpleName(),
+                    "ensureWorkflowNotebookEntry",
+                    "Could not auto-create notebook entry for notebook " + notebookId + ": " + e.getMessage());
+            return null;
         }
     }
 

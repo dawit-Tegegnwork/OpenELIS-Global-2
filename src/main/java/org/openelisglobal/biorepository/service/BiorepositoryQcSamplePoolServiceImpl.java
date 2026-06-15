@@ -76,10 +76,10 @@ public class BiorepositoryQcSamplePoolServiceImpl implements BiorepositoryQcSamp
     public Map<String, Object> buildStorageOverview(String freezerFilter, String shelfFilter, String rackFilter,
             String boxFilter, boolean includeAllQcVisits, Integer notebookId, boolean summaryOnly,
             Integer eligibleLimit, Integer eligibleOffset) {
-        final String freezer = normalizeFilter(freezerFilter);
-        final String shelf = normalizeFilter(shelfFilter);
-        final String rack = normalizeFilter(rackFilter);
-        final String box = normalizeFilter(boxFilter);
+        final String freezer = BiorepositoryQcFilterHelper.normalizeFilter(freezerFilter);
+        final String shelf = BiorepositoryQcFilterHelper.normalizeFilter(shelfFilter);
+        final String rack = BiorepositoryQcFilterHelper.normalizeFilter(rackFilter);
+        final String box = BiorepositoryQcFilterHelper.normalizeFilter(boxFilter);
 
         CalendarQuarter currentQuarter = resolveCurrentCalendarQuarter(ZoneId.systemDefault());
         BiorepositoryHierarchyContext hierarchy = resolveBiorepositoryHierarchy(notebookId);
@@ -90,11 +90,12 @@ public class BiorepositoryQcSamplePoolServiceImpl implements BiorepositoryQcSamp
         List<StorageRack> allRacks = hierarchy.racks;
         List<StorageBox> allBoxes = hierarchy.boxes;
         List<StorageDevice> scopedDevices = allDevices.stream()
-                .filter(device -> matches(deviceName(device), freezer)).toList();
+                .filter(device -> BiorepositoryQcFilterHelper.matchesLeaf(deviceName(device), freezer)).toList();
 
         List<StorageShelf> scopedShelves = allShelves.stream().filter(s -> {
             String device = s.getParentDevice() != null ? deviceName(s.getParentDevice()) : null;
-            return matches(device, freezer) && matches(s.getLabel(), shelf);
+            return BiorepositoryQcFilterHelper.matchesLeaf(device, freezer)
+                    && BiorepositoryQcFilterHelper.matchesShelfFilter(device, s.getLabel(), shelf);
         }).toList();
 
         List<StorageRack> scopedRacks = allRacks.stream().filter(r -> {
@@ -102,8 +103,9 @@ public class BiorepositoryQcSamplePoolServiceImpl implements BiorepositoryQcSamp
             StorageDevice parentDevice = parentShelf != null ? parentShelf.getParentDevice() : null;
             String device = parentDevice != null ? deviceName(parentDevice) : null;
             String shelfLabel = parentShelf != null ? parentShelf.getLabel() : null;
-            return matches(device, freezer) && matches(shelfLabel, shelf)
-                    && matches(r.getLabel(), rack);
+            return BiorepositoryQcFilterHelper.matchesLeaf(device, freezer)
+                    && BiorepositoryQcFilterHelper.matchesShelfFilter(device, shelfLabel, shelf)
+                    && BiorepositoryQcFilterHelper.matchesRackFilter(device, shelfLabel, r.getLabel(), rack);
         }).toList();
 
         List<StorageBox> scopedBoxes = allBoxes.stream().filter(b -> {
@@ -113,32 +115,43 @@ public class BiorepositoryQcSamplePoolServiceImpl implements BiorepositoryQcSamp
             String device = parentDevice != null ? deviceName(parentDevice) : null;
             String shelfLabel = parentShelf != null ? parentShelf.getLabel() : null;
             String rackLabel = parentRack != null ? parentRack.getLabel() : null;
-            return matches(device, freezer) && matches(shelfLabel, shelf)
-                    && matches(rackLabel, rack) && matches(b.getLabel(), box);
+            return BiorepositoryQcFilterHelper.matchesLeaf(device, freezer)
+                    && BiorepositoryQcFilterHelper.matchesShelfFilter(device, shelfLabel, shelf)
+                    && BiorepositoryQcFilterHelper.matchesRackFilter(device, shelfLabel, rackLabel, rack)
+                    && BiorepositoryQcFilterHelper.matchesBoxFilter(device, shelfLabel, rackLabel, b.getLabel(), box);
         }).toList();
 
         Set<String> freezerOptions = new LinkedHashSet<>();
         for (StorageDevice d : allDevices) {
             freezerOptions.add(deviceName(d));
         }
-        Set<String> shelfOptions = new LinkedHashSet<>();
+        List<Map<String, String>> shelfOptions = new ArrayList<>();
         for (StorageShelf s : allShelves) {
             String parentFreezer = s.getParentDevice() != null ? deviceName(s.getParentDevice()) : null;
-            if (matches(parentFreezer, freezer)) {
-                shelfOptions.add(s.getLabel());
+            String shelfLabel = s.getLabel();
+            if (parentFreezer == null || shelfLabel == null || shelfLabel.isBlank()) {
+                continue;
+            }
+            if (BiorepositoryQcFilterHelper.matchesLeaf(parentFreezer, freezer)) {
+                shelfOptions.add(BiorepositoryQcFilterHelper.shelfOption(parentFreezer, shelfLabel));
             }
         }
-        Set<String> rackOptions = new LinkedHashSet<>();
+        List<Map<String, String>> rackOptions = new ArrayList<>();
         for (StorageRack r : allRacks) {
             StorageShelf parentShelf = r.getParentShelf();
             StorageDevice parentDevice = parentShelf != null ? parentShelf.getParentDevice() : null;
             String parentFreezer = parentDevice != null ? deviceName(parentDevice) : null;
             String parentShelfLabel = parentShelf != null ? parentShelf.getLabel() : null;
-            if (matches(parentFreezer, freezer) && matches(parentShelfLabel, shelf)) {
-                rackOptions.add(r.getLabel());
+            String rackLabel = r.getLabel();
+            if (parentFreezer == null || parentShelfLabel == null || rackLabel == null || rackLabel.isBlank()) {
+                continue;
+            }
+            if (BiorepositoryQcFilterHelper.matchesLeaf(parentFreezer, freezer)
+                    && BiorepositoryQcFilterHelper.matchesShelfFilter(parentFreezer, parentShelfLabel, shelf)) {
+                rackOptions.add(BiorepositoryQcFilterHelper.rackOption(parentFreezer, parentShelfLabel, rackLabel));
             }
         }
-        Set<String> boxOptions = new LinkedHashSet<>();
+        List<Map<String, String>> boxOptions = new ArrayList<>();
         for (StorageBox b : allBoxes) {
             StorageRack parentRack = b.getParentRack();
             StorageShelf parentShelf = parentRack != null ? parentRack.getParentShelf() : null;
@@ -146,9 +159,17 @@ public class BiorepositoryQcSamplePoolServiceImpl implements BiorepositoryQcSamp
             String parentFreezer = parentDevice != null ? deviceName(parentDevice) : null;
             String parentShelfLabel = parentShelf != null ? parentShelf.getLabel() : null;
             String parentRackLabel = parentRack != null ? parentRack.getLabel() : null;
-            if (matches(parentFreezer, freezer) && matches(parentShelfLabel, shelf)
-                    && matches(parentRackLabel, rack)) {
-                boxOptions.add(b.getLabel());
+            String boxLabel = b.getLabel();
+            if (parentFreezer == null || parentShelfLabel == null || parentRackLabel == null || boxLabel == null
+                    || boxLabel.isBlank()) {
+                continue;
+            }
+            if (BiorepositoryQcFilterHelper.matchesLeaf(parentFreezer, freezer)
+                    && BiorepositoryQcFilterHelper.matchesShelfFilter(parentFreezer, parentShelfLabel, shelf)
+                    && BiorepositoryQcFilterHelper.matchesRackFilter(parentFreezer, parentShelfLabel, parentRackLabel,
+                            rack)) {
+                boxOptions.add(BiorepositoryQcFilterHelper.boxOption(parentFreezer, parentShelfLabel, parentRackLabel,
+                        boxLabel));
             }
         }
 
@@ -158,16 +179,16 @@ public class BiorepositoryQcSamplePoolServiceImpl implements BiorepositoryQcSamp
                 continue;
             }
             String[] levels = entry.levels;
-            if (!matches(levels[0], freezer) || !matches(levels[1], shelf)
-                    || !matches(levels[2], rack) || !matches(levels[3], box)) {
+            if (!BiorepositoryQcFilterHelper.matchesPoolLevels(levels, freezer, shelf, rack, box)) {
                 continue;
             }
             if (!summaryOnly) {
                 allEligibleSummaries.add(entry.toEligibleSummary());
             }
         }
-        int eligibleCount = summaryOnly ? countEligibleSamples(poolResult.inScope, freezer, shelf, rack, box,
-                includeAllQcVisits) : allEligibleSummaries.size();
+        int eligibleCount = summaryOnly
+                ? countEligibleSamples(poolResult.inScope, freezer, shelf, rack, box, includeAllQcVisits)
+                : allEligibleSummaries.size();
         List<Map<String, Object>> eligibleSamples = summaryOnly ? List.of()
                 : paginateEligibleSamples(allEligibleSummaries, eligibleLimit, eligibleOffset);
 
@@ -180,23 +201,23 @@ public class BiorepositoryQcSamplePoolServiceImpl implements BiorepositoryQcSamp
 
         Map<String, Object> filterOptions = new HashMap<>();
         filterOptions.put("freezers", freezerOptions.stream().filter(v -> v != null && !v.isBlank()).sorted().toList());
-        filterOptions.put("shelves", shelfOptions.stream().filter(v -> v != null && !v.isBlank()).sorted().toList());
-        filterOptions.put("racks", rackOptions.stream().filter(v -> v != null && !v.isBlank()).sorted().toList());
-        filterOptions.put("boxes", boxOptions.stream().filter(v -> v != null && !v.isBlank()).sorted().toList());
+        filterOptions.put("shelves", BiorepositoryQcFilterHelper.dedupeStructuredOptions(shelfOptions));
+        filterOptions.put("racks", BiorepositoryQcFilterHelper.dedupeStructuredOptions(rackOptions));
+        filterOptions.put("boxes", BiorepositoryQcFilterHelper.dedupeStructuredOptions(boxOptions));
 
         Map<String, Object> response = new HashMap<>();
         response.put("counts", counts);
         response.put("filters", filterOptions);
         response.put("eligibleSamples", eligibleSamples);
-        response.put("biorepositoryScope", Map.of(
-                "deviceHierarchyBiorepositoryOnly", true,
-                "includesAllActiveDeviceTypes", false,
-                "usedDepartmentFallback", hierarchy.usedDepartmentFallback,
-                "reason", "QC scope limited to biorepository storage devices"));
-        response.put("qcExclusionWindow", Map.of("mode", "CALENDAR_QUARTER", "label", currentQuarter.label, "start",
-                currentQuarter.start.toString(), "end", currentQuarter.end.toString(),
-                "poolIncludesRepeatInspectionThisQuarter", includeAllQcVisits,
-                "whenPoolExcludesCompletedThisQuarter", !includeAllQcVisits));
+        response.put("biorepositoryScope",
+                Map.of("deviceHierarchyBiorepositoryOnly", true, "includesAllActiveDeviceTypes", false,
+                        "usedDepartmentFallback", hierarchy.usedDepartmentFallback, "reason",
+                        "QC scope limited to biorepository storage devices"));
+        response.put("qcExclusionWindow",
+                Map.of("mode", "CALENDAR_QUARTER", "label", currentQuarter.label, "start",
+                        currentQuarter.start.toString(), "end", currentQuarter.end.toString(),
+                        "poolIncludesRepeatInspectionThisQuarter", includeAllQcVisits,
+                        "whenPoolExcludesCompletedThisQuarter", !includeAllQcVisits));
         response.put("scopeStats", buildScopeStats(poolResult.inScope, freezer, shelf, rack, box));
         response.put("diagnostics", poolResult.diagnostics);
         response.put("summaryOnly", summaryOnly);
@@ -214,8 +235,7 @@ public class BiorepositoryQcSamplePoolServiceImpl implements BiorepositoryQcSamp
                 continue;
             }
             String[] levels = entry.levels;
-            if (!matches(levels[0], freezer) || !matches(levels[1], shelf)
-                    || !matches(levels[2], rack) || !matches(levels[3], box)) {
+            if (!BiorepositoryQcFilterHelper.matchesPoolLevels(levels, freezer, shelf, rack, box)) {
                 continue;
             }
             count++;
@@ -331,8 +351,8 @@ public class BiorepositoryQcSamplePoolServiceImpl implements BiorepositoryQcSamp
                 continue;
             }
 
-            String[] levels = resolveHierarchyLevels(locationPath, hierarchy.validShelfKeys,
-                    hierarchy.validRackKeys, hierarchy.validBoxKeys);
+            String[] levels = resolveHierarchyLevels(locationPath, hierarchy.validShelfKeys, hierarchy.validRackKeys,
+                    hierarchy.validBoxKeys);
             if (levels == null) {
                 excludedNoBioSample++;
                 continue;
@@ -348,9 +368,8 @@ public class BiorepositoryQcSamplePoolServiceImpl implements BiorepositoryQcSamp
 
         List<Integer> sampleItemIds = scopeCandidates.stream().map(c -> c.sampleItemId).distinct().toList();
         Map<Integer, BioSample> bioSampleBySampleItemId = bioSampleService.getBySampleItemIds(sampleItemIds).stream()
-                .filter(bs -> bs.getSampleItem() != null && bs.getSampleItem().getId() != null)
-                .collect(Collectors.toMap(bs -> Integer.valueOf(bs.getSampleItem().getId()), bs -> bs,
-                        (left, right) -> left));
+                .filter(bs -> bs.getSampleItem() != null && bs.getSampleItem().getId() != null).collect(Collectors
+                        .toMap(bs -> Integer.valueOf(bs.getSampleItem().getId()), bs -> bs, (left, right) -> left));
 
         List<PooledSampleEntry> inScope = new ArrayList<>();
         List<Integer> distinctBioSampleIds = new ArrayList<>();
@@ -394,8 +413,7 @@ public class BiorepositoryQcSamplePoolServiceImpl implements BiorepositoryQcSamp
             entry.inspectedThisQuarter = bioSampleIdsInspectedThisQuarter.contains(bioSample.getId());
             entry.mostRecentInspection = mostRecentByBioSampleId.get(bioSample.getId());
             entry.shelfKey = buildHierarchyKey(parsedFreezer, parsedShelf);
-            entry.boxKey = hasParsedBox
-                    ? buildHierarchyKey(parsedFreezer, parsedShelf, parsedRack, parsedBox)
+            entry.boxKey = hasParsedBox ? buildHierarchyKey(parsedFreezer, parsedShelf, parsedRack, parsedBox)
                     : buildHierarchyKey(parsedFreezer, parsedShelf, parsedRack);
             inScope.add(entry);
         }
@@ -423,8 +441,7 @@ public class BiorepositoryQcSamplePoolServiceImpl implements BiorepositoryQcSamp
     }
 
     private boolean isInBiorepositoryScope(Map<String, Object> row, Set<Integer> departmentIds,
-            String departmentNameHint, BiorepositoryHierarchyContext hierarchy,
-            Set<String> hierarchyDeviceNames) {
+            String departmentNameHint, BiorepositoryHierarchyContext hierarchy, Set<String> hierarchyDeviceNames) {
         String locationPath = asString(row.get("location"));
         boolean departmentMatch = matchesDepartmentScope(row, departmentIds, departmentNameHint, locationPath);
         boolean requiresDepartment = !departmentIds.isEmpty()
@@ -519,8 +536,8 @@ public class BiorepositoryQcSamplePoolServiceImpl implements BiorepositoryQcSamp
 
         for (PooledSampleEntry entry : inScope) {
             String[] levels = entry.levels;
-            if (!matches(levels[0], freezerFilter) || !matches(levels[1], shelfFilter)
-                    || !matches(levels[2], rackFilter) || !matches(levels[3], boxFilter)) {
+            if (!BiorepositoryQcFilterHelper.matchesPoolLevels(levels, freezerFilter, shelfFilter, rackFilter,
+                    boxFilter)) {
                 continue;
             }
             totalStoredInScope++;
@@ -624,8 +641,9 @@ public class BiorepositoryQcSamplePoolServiceImpl implements BiorepositoryQcSamp
     }
 
     /**
-     * QC scope always includes the Biorepository Laboratory department (this service is biorepository-only),
-     * unioned with notebook-linked departments when notebookId is present.
+     * QC scope always includes the Biorepository Laboratory department (this
+     * service is biorepository-only), unioned with notebook-linked departments when
+     * notebookId is present.
      */
     private Set<Integer> resolveQcDepartmentScope(Integer notebookId) {
         Set<Integer> ids = new HashSet<>();
@@ -672,41 +690,37 @@ public class BiorepositoryQcSamplePoolServiceImpl implements BiorepositoryQcSamp
         return normalizeNotebookDepartmentTitle(notebook != null ? notebook.getTitle() : null);
     }
 
-    // --- Hierarchy resolution (aligned with BiorepositoryQCInspectionRestController) ---
+    // --- Hierarchy resolution (aligned with
+    // BiorepositoryQCInspectionRestController) ---
 
     private BiorepositoryHierarchyContext resolveBiorepositoryHierarchy(Integer notebookId) {
-        List<StorageDevice> eligibleDevices = storageLocationService.getAllDevices().stream()
-                .filter(this::isActive)
-                .filter(this::isQCEligibleDevice)
-                .toList();
+        List<StorageDevice> eligibleDevices = storageLocationService.getAllDevices().stream().filter(this::isActive)
+                .filter(this::isQCEligibleDevice).toList();
         boolean hasFlaggedDevices = eligibleDevices.stream().anyMatch(this::isBiorepositoryStorageDevice);
 
         List<StorageDevice> devices = resolveBiorepositoryDevices(notebookId);
         boolean usedDepartmentFallback = !hasFlaggedDevices && notebookId != null && !devices.isEmpty();
 
-        Set<Integer> activeDeviceIds = devices.stream().map(StorageDevice::getId)
-                .filter(id -> id != null).collect(java.util.stream.Collectors.toSet());
+        Set<Integer> activeDeviceIds = devices.stream().map(StorageDevice::getId).filter(id -> id != null)
+                .collect(java.util.stream.Collectors.toSet());
 
-        List<StorageShelf> shelves = storageLocationService.getAllShelves().stream()
-                .filter(this::isActive)
+        List<StorageShelf> shelves = storageLocationService.getAllShelves().stream().filter(this::isActive)
                 .filter(shelfEntity -> shelfEntity.getParentDevice() != null
                         && activeDeviceIds.contains(shelfEntity.getParentDevice().getId()))
                 .toList();
 
-        Set<Integer> activeShelfIds = shelves.stream().map(StorageShelf::getId)
-                .filter(id -> id != null).collect(java.util.stream.Collectors.toSet());
+        Set<Integer> activeShelfIds = shelves.stream().map(StorageShelf::getId).filter(id -> id != null)
+                .collect(java.util.stream.Collectors.toSet());
 
-        List<StorageRack> racks = storageLocationService.getAllRacks().stream()
-                .filter(this::isActive)
+        List<StorageRack> racks = storageLocationService.getAllRacks().stream().filter(this::isActive)
                 .filter(rackEntity -> rackEntity.getParentShelf() != null
                         && activeShelfIds.contains(rackEntity.getParentShelf().getId()))
                 .toList();
 
-        Set<Integer> activeRackIds = racks.stream().map(StorageRack::getId)
-                .filter(id -> id != null).collect(java.util.stream.Collectors.toSet());
+        Set<Integer> activeRackIds = racks.stream().map(StorageRack::getId).filter(id -> id != null)
+                .collect(java.util.stream.Collectors.toSet());
 
-        List<StorageBox> boxes = storageLocationService.getAllBoxes().stream()
-                .filter(this::isActive)
+        List<StorageBox> boxes = storageLocationService.getAllBoxes().stream().filter(this::isActive)
                 .filter(boxEntity -> boxEntity.getParentRack() != null
                         && activeRackIds.contains(boxEntity.getParentRack().getId()))
                 .toList();
@@ -728,8 +742,8 @@ public class BiorepositoryQcSamplePoolServiceImpl implements BiorepositoryQcSamp
             String freezerName = parentDevice != null ? deviceName(parentDevice) : null;
             String shelfLabel = parentShelf != null ? parentShelf.getLabel() : null;
             String rackLabel = rackEntity.getLabel();
-            if (freezerName != null && shelfLabel != null && !shelfLabel.isBlank()
-                    && rackLabel != null && !rackLabel.isBlank()) {
+            if (freezerName != null && shelfLabel != null && !shelfLabel.isBlank() && rackLabel != null
+                    && !rackLabel.isBlank()) {
                 validRackKeys.add(buildHierarchyKey(freezerName, shelfLabel, rackLabel));
             }
         }
@@ -743,9 +757,8 @@ public class BiorepositoryQcSamplePoolServiceImpl implements BiorepositoryQcSamp
             String shelfLabel = parentShelf != null ? parentShelf.getLabel() : null;
             String rackLabel = parentRack != null ? parentRack.getLabel() : null;
             String boxLabel = boxEntity.getLabel();
-            if (freezerName != null && shelfLabel != null && !shelfLabel.isBlank()
-                    && rackLabel != null && !rackLabel.isBlank()
-                    && boxLabel != null && !boxLabel.isBlank()) {
+            if (freezerName != null && shelfLabel != null && !shelfLabel.isBlank() && rackLabel != null
+                    && !rackLabel.isBlank() && boxLabel != null && !boxLabel.isBlank()) {
                 validBoxKeys.add(buildHierarchyKey(freezerName, shelfLabel, rackLabel, boxLabel));
             }
         }
@@ -763,14 +776,10 @@ public class BiorepositoryQcSamplePoolServiceImpl implements BiorepositoryQcSamp
     }
 
     private List<StorageDevice> resolveBiorepositoryDevices(Integer notebookId) {
-        List<StorageDevice> eligible = storageLocationService.getAllDevices().stream()
-                .filter(this::isActive)
-                .filter(this::isQCEligibleDevice)
-                .toList();
+        List<StorageDevice> eligible = storageLocationService.getAllDevices().stream().filter(this::isActive)
+                .filter(this::isQCEligibleDevice).toList();
 
-        List<StorageDevice> flagged = eligible.stream()
-                .filter(this::isBiorepositoryStorageDevice)
-                .toList();
+        List<StorageDevice> flagged = eligible.stream().filter(this::isBiorepositoryStorageDevice).toList();
         if (!flagged.isEmpty()) {
             return flagged;
         }
@@ -784,15 +793,13 @@ public class BiorepositoryQcSamplePoolServiceImpl implements BiorepositoryQcSamp
             return List.of();
         }
 
-        return eligible.stream()
-                .filter(device -> {
-                    if (device.getParentRoom() == null) {
-                        return false;
-                    }
-                    Integer deptId = device.getParentRoom().getDepartmentTestSectionId();
-                    return deptId != null && departmentIds.contains(deptId);
-                })
-                .toList();
+        return eligible.stream().filter(device -> {
+            if (device.getParentRoom() == null) {
+                return false;
+            }
+            Integer deptId = device.getParentRoom().getDepartmentTestSectionId();
+            return deptId != null && departmentIds.contains(deptId);
+        }).toList();
     }
 
     private String normalizeNotebookDepartmentTitle(String title) {
@@ -814,10 +821,8 @@ public class BiorepositoryQcSamplePoolServiceImpl implements BiorepositoryQcSamp
         if (activeSections == null || activeSections.isEmpty()) {
             return null;
         }
-        return activeSections.stream()
-                .filter(section -> templateTitleMatchesDepartment(notebookTitle, section))
-                .findFirst()
-                .orElse(null);
+        return activeSections.stream().filter(section -> templateTitleMatchesDepartment(notebookTitle, section))
+                .findFirst().orElse(null);
     }
 
     private boolean templateTitleMatchesDepartment(String notebookTitle, TestSection department) {
@@ -946,14 +951,7 @@ public class BiorepositoryQcSamplePoolServiceImpl implements BiorepositoryQcSamp
     }
 
     private String normalizeFilter(String raw) {
-        if (raw == null) {
-            return null;
-        }
-        String v = raw.trim();
-        if (v.isEmpty() || "__ALL__".equals(v)) {
-            return null;
-        }
-        return v;
+        return BiorepositoryQcFilterHelper.normalizeFilter(raw);
     }
 
     private String asString(Object value) {
@@ -1033,6 +1031,7 @@ public class BiorepositoryQcSamplePoolServiceImpl implements BiorepositoryQcSamp
             sampleSummary.put("positionCoordinate", positionCoordinate);
             sampleSummary.put("accessionNumber",
                     sampleItem.getSample() != null ? sampleItem.getSample().getAccessionNumber() : null);
+            sampleSummary.put("externalId", sampleItem.getExternalId());
             sampleSummary.put("anyPriorInspection", anyPriorInspection);
             sampleSummary.put("hasInspectionHistory", anyPriorInspection);
             sampleSummary.put("inspectedThisQuarter", inspectedThisQuarter);

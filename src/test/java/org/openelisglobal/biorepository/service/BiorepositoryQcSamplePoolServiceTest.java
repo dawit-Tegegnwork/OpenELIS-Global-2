@@ -2,6 +2,7 @@ package org.openelisglobal.biorepository.service;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
@@ -19,8 +20,8 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.MockitoJUnitRunner;
 import org.openelisglobal.biorepository.valueholder.BioSample;
-import org.openelisglobal.biorepository.valueholder.BiorepositoryQCInspection;
 import org.openelisglobal.biorepository.valueholder.BioSample.WorkflowStatus;
+import org.openelisglobal.biorepository.valueholder.BiorepositoryQCInspection;
 import org.openelisglobal.common.services.IStatusService;
 import org.openelisglobal.common.services.StatusService.SampleStatus;
 import org.openelisglobal.notebook.service.NoteBookService;
@@ -28,6 +29,8 @@ import org.openelisglobal.notebook.service.NotebookDepartmentScopeService;
 import org.openelisglobal.sampleitem.valueholder.SampleItem;
 import org.openelisglobal.storage.service.SampleStorageService;
 import org.openelisglobal.storage.service.StorageLocationService;
+import org.openelisglobal.storage.valueholder.StorageDevice;
+import org.openelisglobal.storage.valueholder.StorageShelf;
 import org.openelisglobal.test.service.TestSectionService;
 import org.openelisglobal.test.valueholder.TestSection;
 
@@ -130,8 +133,8 @@ public class BiorepositoryQcSamplePoolServiceTest {
 
     @Test
     public void listSamplesForQcTable_returnsSampleItemId() {
-        Map<String, Object> row = assignmentRow("11",
-                "Biorepository Laboratory > Freezer-A > Shelf-1 > Rack-1 > Box-1", DEPT_ID, "active");
+        Map<String, Object> row = assignmentRow("11", "Biorepository Laboratory > Freezer-A > Shelf-1 > Rack-1 > Box-1",
+                DEPT_ID, "active");
         when(sampleStorageService.getAllSamplesWithAssignments()).thenReturn(List.of(row));
 
         BioSample existing = new BioSample();
@@ -150,8 +153,8 @@ public class BiorepositoryQcSamplePoolServiceTest {
 
     @Test
     public void listSamplesForQcTable_mapsMostRecentInspectionForImmediateDisplay() {
-        Map<String, Object> row = assignmentRow("12",
-                "Biorepository Laboratory > Freezer-A > Shelf-1 > Rack-1 > Box-1", DEPT_ID, "active");
+        Map<String, Object> row = assignmentRow("12", "Biorepository Laboratory > Freezer-A > Shelf-1 > Rack-1 > Box-1",
+                DEPT_ID, "active");
         when(sampleStorageService.getAllSamplesWithAssignments()).thenReturn(List.of(row));
 
         BioSample existing = new BioSample();
@@ -179,6 +182,88 @@ public class BiorepositoryQcSamplePoolServiceTest {
         assertEquals("DISCREPANCY_FOUND", String.valueOf(lastQCInspection.get("qcResult")));
         assertEquals("FAILED_CORRECTED", String.valueOf(lastQCInspection.get("lifecycleOutcome")));
         assertNotNull(lastQCInspection.get("inspectionDate"));
+    }
+
+    @Test
+    public void buildStorageOverview_returnsAllStructuredShelvesWhenNoDeviceFilter() {
+        StorageDevice freezerA1 = buildBiorepositoryDevice(1, "ULT Freezer A1");
+        StorageDevice freezerA2 = buildBiorepositoryDevice(2, "ULT Freezer A2");
+        StorageDevice freezerB1 = buildBiorepositoryDevice(3, "ULT Freezer B1");
+        StorageDevice freezerB2 = buildBiorepositoryDevice(4, "ULT Freezer B2");
+        List<StorageShelf> shelves = List.of(buildShelf(101, "Shelf A", freezerA1),
+                buildShelf(102, "Shelf B", freezerA1), buildShelf(201, "Shelf A", freezerA2),
+                buildShelf(202, "Shelf B", freezerA2), buildShelf(301, "Shelf A", freezerB1),
+                buildShelf(302, "Shelf B", freezerB1), buildShelf(401, "Shelf A", freezerB2),
+                buildShelf(402, "Shelf B", freezerB2));
+
+        when(storageLocationService.getAllDevices()).thenReturn(List.of(freezerA1, freezerA2, freezerB1, freezerB2));
+        when(storageLocationService.getAllShelves()).thenReturn(shelves);
+        when(storageLocationService.getAllRacks()).thenReturn(List.of());
+        when(storageLocationService.getAllBoxes()).thenReturn(List.of());
+        when(sampleStorageService.getAllSamplesWithAssignments()).thenReturn(List.of());
+
+        Map<String, Object> overview = poolService.buildStorageOverview(null, null, null, null, true, NOTEBOOK_ID);
+
+        @SuppressWarnings("unchecked")
+        Map<String, Object> filters = (Map<String, Object>) overview.get("filters");
+        @SuppressWarnings("unchecked")
+        List<Map<String, String>> shelfFilters = (List<Map<String, String>>) filters.get("shelves");
+        assertEquals(8, shelfFilters.size());
+        assertEquals(8, ((Map<String, Object>) overview.get("counts")).get("shelves"));
+        assertTrue(shelfFilters.stream().anyMatch(option -> "ULT Freezer A1|Shelf A".equals(option.get("value"))));
+        assertTrue(shelfFilters.stream().anyMatch(option -> "ULT Freezer B2|Shelf B".equals(option.get("value"))));
+    }
+
+    @Test
+    public void buildStorageOverview_scopesStructuredShelfFiltersToSelectedDevice() {
+        StorageDevice freezerA1 = buildBiorepositoryDevice(1, "ULT Freezer A1");
+        StorageDevice freezerA2 = buildBiorepositoryDevice(2, "ULT Freezer A2");
+        StorageShelf shelfA1A = buildShelf(101, "Shelf A", freezerA1);
+        StorageShelf shelfA1B = buildShelf(102, "Shelf B", freezerA1);
+        StorageShelf shelfA2A = buildShelf(201, "Shelf A", freezerA2);
+        StorageShelf shelfA2B = buildShelf(202, "Shelf B", freezerA2);
+
+        when(storageLocationService.getAllDevices()).thenReturn(List.of(freezerA1, freezerA2));
+        when(storageLocationService.getAllShelves()).thenReturn(List.of(shelfA1A, shelfA1B, shelfA2A, shelfA2B));
+        when(storageLocationService.getAllRacks()).thenReturn(List.of());
+        when(storageLocationService.getAllBoxes()).thenReturn(List.of());
+        when(sampleStorageService.getAllSamplesWithAssignments()).thenReturn(List.of());
+
+        Map<String, Object> overview = poolService.buildStorageOverview("ULT Freezer A1", null, null, null, true,
+                NOTEBOOK_ID);
+
+        @SuppressWarnings("unchecked")
+        Map<String, Object> filters = (Map<String, Object>) overview.get("filters");
+        @SuppressWarnings("unchecked")
+        List<Map<String, String>> shelves = (List<Map<String, String>>) filters.get("shelves");
+        assertEquals(2, shelves.size());
+        assertTrue(shelves.stream().allMatch(option -> option.get("value").startsWith("ULT Freezer A1|")));
+        assertTrue(shelves.stream().anyMatch(option -> "ULT Freezer A1|Shelf A".equals(option.get("value"))));
+        assertTrue(shelves.stream().anyMatch(option -> "ULT Freezer A1|Shelf B".equals(option.get("value"))));
+
+        @SuppressWarnings("unchecked")
+        Map<String, Object> counts = (Map<String, Object>) overview.get("counts");
+        assertEquals(1, counts.get("freezers"));
+        assertEquals(2, counts.get("shelves"));
+    }
+
+    private static StorageDevice buildBiorepositoryDevice(int id, String name) {
+        StorageDevice device = new StorageDevice();
+        device.setId(id);
+        device.setName(name);
+        device.setType(StorageDevice.DeviceType.FREEZER.getValue());
+        device.setActive(true);
+        device.setBiorepositoryStorage(true);
+        return device;
+    }
+
+    private static StorageShelf buildShelf(int id, String label, StorageDevice parentDevice) {
+        StorageShelf shelf = new StorageShelf();
+        shelf.setId(id);
+        shelf.setLabel(label);
+        shelf.setActive(true);
+        shelf.setParentDevice(parentDevice);
+        return shelf;
     }
 
     private static Map<String, Object> assignmentRow(String id, String location, int departmentId, String status) {

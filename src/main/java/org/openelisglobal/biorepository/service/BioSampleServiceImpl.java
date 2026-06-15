@@ -139,8 +139,9 @@ public class BioSampleServiceImpl extends AuditableBaseObjectServiceImpl<BioSamp
             return null;
         }
         String locationPath = location.get("location") != null ? String.valueOf(location.get("location")) : "";
-        String hierarchicalPath =
-                location.get("hierarchicalPath") != null ? String.valueOf(location.get("hierarchicalPath")) : "";
+        String hierarchicalPath = location.get("hierarchicalPath") != null
+                ? String.valueOf(location.get("hierarchicalPath"))
+                : "";
         if (locationPath.isBlank() && hierarchicalPath.isBlank()) {
             return null;
         }

@@ -46,6 +46,8 @@ import {
 } from "../../../esignature";
 import PermissionGate from "../../../security/PermissionGate";
 import useStagePersonas from "../../../../hooks/useStagePersonas";
+import ModalSaveErrorNotification from "./ModalSaveErrorNotification";
+import { reportModalSaveFailure } from "./mntdModalErrorHelpers";
 
 /**
  * MNTDProcessingQCPage - Page 6 of the MNTD workflow.
@@ -138,6 +140,7 @@ function MNTDProcessingQCPage({
 
   // Extraction modal state
   const [showExtractionModal, setShowExtractionModal] = useState(false);
+  const [extractionModalError, setExtractionModalError] = useState(null);
   const [extractionData, setExtractionData] = useState({
     sampleType: "PARASITE", // PARASITE or VECTOR
     extractionType: "MANUAL", // MANUAL or AUTOMATIC
@@ -180,6 +183,22 @@ function MNTDProcessingQCPage({
       setNotificationVisible(true);
     },
     [addNotification, intl, setNotificationVisible],
+  );
+
+  const reopenExtractionModal = useCallback(() => {
+    setShowExtractionModal(true);
+  }, []);
+
+  const reportExtractionFailure = useCallback(
+    (message) => {
+      reportModalSaveFailure({
+        message,
+        reopenModal: reopenExtractionModal,
+        setModalError: setExtractionModalError,
+        notifyError,
+      });
+    },
+    [notifyError, reopenExtractionModal],
   );
 
   // Load samples for this page
@@ -277,13 +296,14 @@ function MNTDProcessingQCPage({
       operator: "",
       notes: "",
     });
+    setExtractionModalError(null);
     setShowExtractionModal(true);
   }, [selectedIds, intl]);
 
   // Handle saving extraction data
   const handleSaveExtractionData = useCallback(() => {
     if (!extractionData.extractionMethod) {
-      setError(
+      reportExtractionFailure(
         intl.formatMessage({
           id: "notebook.mntd.extraction.methodRequired",
           defaultMessage: "Extraction method is required.",
@@ -293,7 +313,13 @@ function MNTDProcessingQCPage({
     }
 
     if (!hasRealPageId) {
-      setShowExtractionModal(false);
+      reportExtractionFailure(
+        intl.formatMessage({
+          id: "notebook.page.mntd.error.noPage",
+          defaultMessage:
+            "Cannot update samples: Page not properly initialized.",
+        }),
+      );
       return;
     }
 
@@ -301,7 +327,9 @@ function MNTDProcessingQCPage({
 
     const selectedKitObjects = extractionData.selectedKitItems || [];
     if (selectedKitObjects.length === 0) {
-      notifyError("Select at least one extraction kit before saving.");
+      reportExtractionFailure(
+        "Select at least one extraction kit before saving.",
+      );
       return;
     }
     const invalidKitItems = getInvalidReagentUsageItems(
@@ -309,7 +337,7 @@ function MNTDProcessingQCPage({
       extractionData.kitQuantities,
     );
     if (invalidKitItems.length > 0) {
-      notifyError(
+      reportExtractionFailure(
         "Enter a quantity greater than 0 for each selected extraction kit.",
       );
       return;
@@ -375,6 +403,7 @@ function MNTDProcessingQCPage({
                   ),
                 );
                 setShowExtractionModal(false);
+                setExtractionModalError(null);
                 setSelectedIds([]);
                 loadPageSamples();
                 if (onProgressUpdate) {
@@ -383,7 +412,7 @@ function MNTDProcessingQCPage({
               },
             );
           } else {
-            setError("Failed to save extraction data.");
+            reportExtractionFailure("Failed to save extraction data.");
           }
         }
       },
@@ -396,6 +425,7 @@ function MNTDProcessingQCPage({
     loadPageSamples,
     onProgressUpdate,
     intl,
+    reportExtractionFailure,
   ]);
 
   // Bulk mark as completed
@@ -761,11 +791,18 @@ function MNTDProcessingQCPage({
           id: "label.cancel",
           defaultMessage: "Cancel",
         })}
-        onRequestClose={() => setShowExtractionModal(false)}
+        onRequestClose={() => {
+          setShowExtractionModal(false);
+          setExtractionModalError(null);
+        }}
         onRequestSubmit={openExtractionSignatureModal}
         size="md"
       >
         <div style={{ marginBottom: "1rem" }}>
+          <ModalSaveErrorNotification
+            message={extractionModalError}
+            onClose={() => setExtractionModalError(null)}
+          />
           <p style={{ color: "#525252", marginBottom: "1rem" }}>
             <FormattedMessage
               id="notebook.mntd.extraction.modal.description"

@@ -1,0 +1,230 @@
+{
+  "started": "2026-06-15T15:58:15.057930+00:00",
+  "base_url": "https://localhost",
+  "users": [
+    {
+      "username": "tegbar",
+      "department": "Malaria and Neglected Tropical Disease (MNTD) Laboratory",
+      "passed": true,
+      "checks": [
+        {
+          "name": "login",
+          "ok": true,
+          "detail": "success"
+        },
+        {
+          "name": "resolve_test_section",
+          "ok": true,
+          "detail": "191"
+        },
+        {
+          "name": "session_roles",
+          "ok": true,
+          "detail": "Audit Trail, Principal Investigator"
+        },
+        {
+          "name": "lab_unit_roles",
+          "ok": true,
+          "detail": "6 roles on section 191"
+        },
+        {
+          "name": "set_login_lab_unit",
+          "ok": true,
+          "detail": "Malaria and Neglected Tropical Disease (MNTD) Laboratory"
+        },
+        {
+          "name": "notebook_hierarchy",
+          "ok": true,
+          "detail": "Malaria and Neglected Tropical Disease (MNTD) Laboratory"
+        },
+        {
+          "name": "create_lab_instance",
+          "ok": true,
+          "detail": "id=42"
+        },
+        {
+          "name": "workflow_pages",
+          "ok": true,
+          "detail": "11 pages including Sample Intake / Sample Creation"
+        },
+        {
+          "name": "ensure_notebook_entry",
+          "ok": true,
+          "detail": "created id=15"
+        },
+        {
+          "name": "manifest_preview",
+          "ok": true,
+          "detail": "entry=15 rows=1"
+        }
+      ]
+    },
+    {
+      "username": "wubalech.temesgen",
+      "department": "Bacteriology",
+      "passed": true,
+      "checks": [
+        {
+          "name": "login",
+          "ok": true,
+          "detail": "success"
+        },
+        {
+          "name": "resolve_test_section",
+          "ok": true,
+          "detail": "168"
+        },
+        {
+          "name": "session_roles",
+          "ok": true,
+          "detail": "Audit Trail, Principal Investigator"
+        },
+        {
+          "name": "lab_unit_roles",
+          "ok": true,
+          "detail": "6 roles on section 168"
+        },
+        {
+          "name": "set_login_lab_unit",
+          "ok": true,
+          "detail": "Bacteriology"
+        },
+        {
+          "name": "notebook_hierarchy",
+          "ok": true,
+          "detail": "Bacteriology Laboratory"
+        },
+        {
+          "name": "create_lab_instance",
+          "ok": true,
+          "detail": "id=43"
+        },
+        {
+          "name": "workflow_pages",
+          "ok": true,
+          "detail": "9 pages including Sample Reception, Isolate Creation"
+        },
+        {
+          "name": "ensure_notebook_entry",
+          "ok": true,
+          "detail": "created id=16"
+        },
+        {
+          "name": "manifest_preview",
+          "ok": true,
+          "detail": "entry=16 rows=1"
+        }
+      ]
+    },
+    {
+      "username": "sofia.yimam",
+      "department": "Pathology Laboratory",
+      "passed": true,
+      "checks": [
+        {
+          "name": "login",
+          "ok": true,
+          "detail": "success"
+        },
+        {
+          "name": "resolve_test_section",
+          "ok": true,
+          "detail": "190"
+        },
+        {
+          "name": "session_roles",
+          "ok": true,
+          "detail": "Audit Trail, Principal Investigator"
+        },
+        {
+          "name": "lab_unit_roles",
+          "ok": true,
+          "detail": "6 roles on section 190"
+        },
+        {
+          "name": "set_login_lab_unit",
+          "ok": true,
+          "detail": "Pathology Laboratory"
+        },
+        {
+          "name": "notebook_hierarchy",
+          "ok": true,
+          "detail": "Pathology Laboratory"
+        },
+        {
+          "name": "create_lab_instance",
+          "ok": true,
+          "detail": "id=44"
+        },
+        {
+          "name": "workflow_pages",
+          "ok": true,
+          "detail": "13 pages including Sample Creation & Metadata Capture"
+        },
+        {
+          "name": "ensure_notebook_entry",
+          "ok": true,
+          "detail": "created id=17"
+        }
+      ]
+    },
+    {
+      "username": "muhidin.awol",
+      "department": "Biorepository Laboratory",
+      "passed": true,
+      "checks": [
+        {
+          "name": "login",
+          "ok": true,
+          "detail": "success"
+        },
+        {
+          "name": "resolve_test_section",
+          "ok": true,
+          "detail": "196"
+        },
+        {
+          "name": "session_roles",
+          "ok": true,
+          "detail": "Audit Trail, Principal Investigator"
+        },
+        {
+          "name": "lab_unit_roles",
+          "ok": true,
+          "detail": "6 roles on section 196"
+        },
+        {
+          "name": "set_login_lab_unit",
+          "ok": true,
+          "detail": "Biorepository Laboratory"
+        },
+        {
+          "name": "notebook_hierarchy",
+          "ok": true,
+          "detail": "Biorepository Laboratory"
+        },
+        {
+          "name": "create_lab_instance",
+          "ok": true,
+          "detail": "id=45"
+        },
+        {
+          "name": "workflow_pages",
+          "ok": true,
+          "detail": "7 pages including Sample Intake & Registration"
+        },
+        {
+          "name": "ensure_notebook_entry",
+          "ok": true,
+          "detail": "created id=18"
+        }
+      ]
+    }
+  ],
+  "summary": {
+    "total": 4,
+    "passed": 4,
+    "failed": 0,
+    "full_workflow": true
+  }
+}

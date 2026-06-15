@@ -1,0 +1,81 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+    xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+      http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-3.8.xsd">
+
+    <changeSet id="create-biorepository-qc-round-sample-sequence" author="openelis-biorepository">
+        <preConditions onFail="MARK_RAN">
+            <not>
+                <sequenceExists sequenceName="biorepository_qc_round_sample_seq" schemaName="clinlims"/>
+            </not>
+        </preConditions>
+        <createSequence sequenceName="biorepository_qc_round_sample_seq"
+                        schemaName="clinlims"
+                        startValue="1"
+                        incrementBy="1"/>
+    </changeSet>
+
+    <changeSet id="create-biorepository-qc-round-tables" author="openelis-biorepository">
+        <preConditions onFail="MARK_RAN">
+            <not>
+                <tableExists tableName="biorepository_qc_round" schemaName="clinlims"/>
+            </not>
+        </preConditions>
+        <createTable tableName="biorepository_qc_round" schemaName="clinlims">
+            <column name="qc_batch_id" type="VARCHAR(80)">
+                <constraints primaryKey="true" nullable="false"/>
+            </column>
+            <column name="notebook_id" type="INTEGER"/>
+            <column name="freezer_filter" type="VARCHAR(255)"/>
+            <column name="shelf_filter" type="VARCHAR(255)"/>
+            <column name="rack_filter" type="VARCHAR(255)"/>
+            <column name="box_filter" type="VARCHAR(255)"/>
+            <column name="boxes_per_round" type="INTEGER"/>
+            <column name="samples_per_box" type="INTEGER"/>
+            <column name="include_inspected" type="BOOLEAN" defaultValueBoolean="true"/>
+            <column name="created_by_user_id" type="VARCHAR(36)"/>
+            <column name="created_at" type="TIMESTAMP" defaultValueComputed="CURRENT_TIMESTAMP">
+                <constraints nullable="false"/>
+            </column>
+        </createTable>
+
+        <createTable tableName="biorepository_qc_round_sample" schemaName="clinlims">
+            <column name="id" type="INTEGER">
+                <constraints primaryKey="true" nullable="false"/>
+            </column>
+            <column name="qc_batch_id" type="VARCHAR(80)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="bio_sample_id" type="INTEGER">
+                <constraints nullable="false"/>
+            </column>
+            <column name="sample_item_id" type="INTEGER"/>
+            <column name="accession_number" type="VARCHAR(50)"/>
+            <column name="external_id" type="VARCHAR(100)"/>
+            <column name="freezer_name" type="VARCHAR(255)"/>
+            <column name="shelf_label" type="VARCHAR(100)"/>
+            <column name="rack_label" type="VARCHAR(100)"/>
+            <column name="box_label" type="VARCHAR(100)"/>
+            <column name="position_coordinate" type="VARCHAR(50)"/>
+            <column name="location_path" type="TEXT"/>
+            <column name="sort_order" type="INTEGER" defaultValueNumeric="0"/>
+        </createTable>
+
+        <addForeignKeyConstraint baseTableSchemaName="clinlims"
+                                 baseTableName="biorepository_qc_round_sample"
+                                 baseColumnNames="qc_batch_id"
+                                 referencedTableSchemaName="clinlims"
+                                 referencedTableName="biorepository_qc_round"
+                                 referencedColumnNames="qc_batch_id"
+                                 constraintName="fk_qc_round_sample_round"
+                                 onDelete="CASCADE"/>
+
+        <createIndex indexName="idx_qc_round_sample_batch"
+                     tableName="biorepository_qc_round_sample"
+                     schemaName="clinlims">
+            <column name="qc_batch_id"/>
+        </createIndex>
+    </changeSet>
+</databaseChangeLog>

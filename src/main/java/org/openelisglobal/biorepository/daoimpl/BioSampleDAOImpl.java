@@ -131,16 +131,10 @@ public class BioSampleDAOImpl extends BaseDAOImpl<BioSample, Integer> implements
         }
 
         Session session = entityManager.unwrap(Session.class);
-        String hql = "SELECT DISTINCT bs FROM BioSample bs "
-                + "LEFT JOIN FETCH bs.shipment "
-                + "LEFT JOIN FETCH bs.sampleItem si "
-                + "LEFT JOIN FETCH si.typeOfSample "
-                + "LEFT JOIN FETCH si.sample "
-                + "WHERE bs.workflowStatus = :workflowStatus "
-                + "ORDER BY bs.id DESC";
-        return session.createQuery(hql, BioSample.class)
-            .setParameter("workflowStatus", workflowStatus)
-                .getResultList();
+        String hql = "SELECT DISTINCT bs FROM BioSample bs " + "LEFT JOIN FETCH bs.shipment "
+                + "LEFT JOIN FETCH bs.sampleItem si " + "LEFT JOIN FETCH si.typeOfSample "
+                + "LEFT JOIN FETCH si.sample " + "WHERE bs.workflowStatus = :workflowStatus " + "ORDER BY bs.id DESC";
+        return session.createQuery(hql, BioSample.class).setParameter("workflowStatus", workflowStatus).getResultList();
     }
 
     @Override
@@ -253,7 +247,8 @@ public class BioSampleDAOImpl extends BaseDAOImpl<BioSample, Integer> implements
 
         Query<BioSample> query = session.createQuery(hql.toString(), BioSample.class);
         if (criteria.getWorkflowStatus() != null) {
-            // Bind as string to avoid PostgreSQL "character varying = bytea" on enum parameters
+            // Bind as string to avoid PostgreSQL "character varying = bytea" on enum
+            // parameters
             query.setParameter("workflowStatus", criteria.getWorkflowStatus().name());
         }
         if (criteria.getIdentityPattern() != null) {

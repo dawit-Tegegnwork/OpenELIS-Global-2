@@ -25,6 +25,7 @@ import "./AssayPlateCreator.css";
  * @param {string[]} props.selectedSampleIds - Sample IDs selected for routing
  * @param {Object} props.wellAssignments - Map of sampleId -> well coordinate (e.g. A1)
  * @param {Function} props.onWellAssignmentsChange - Callback when well assignments change
+ * @param {Object} props.sampleLabels - Optional map of sampleId -> display label
  */
 function AssayPlateCreator({
   plates = [],
@@ -35,14 +36,21 @@ function AssayPlateCreator({
   selectedSampleIds = [],
   wellAssignments = {},
   onWellAssignmentsChange,
+  sampleLabels = {},
 }) {
   const intl = useIntl();
+  const [focusedSampleId, setFocusedSampleId] = useState(null);
 
   // New plate creation state
   const [showCreateForm, setShowCreateForm] = useState(false);
   const [newPlateName, setNewPlateName] = useState("");
   const [newPlateRows, setNewPlateRows] = useState(8);
   const [newPlateColumns, setNewPlateColumns] = useState(12);
+
+  const getSampleLabel = useCallback(
+    (sampleId) => sampleLabels[sampleId] || sampleId,
+    [sampleLabels],
+  );
 
   // Calculate total capacity and usage
   const plateStats = useMemo(() => {
@@ -168,6 +176,33 @@ function AssayPlateCreator({
 
   const interactiveMode = typeof onWellAssignmentsChange === "function";
 
+  const getPlateAssignmentMap = useCallback(
+    (plate) => {
+      if (interactiveMode && plate.id === selectedPlateId) {
+        const inverse = {};
+        Object.entries(wellAssignments || {}).forEach(([sampleId, coord]) => {
+          if (coord) {
+            inverse[coord] = sampleId;
+          }
+        });
+        return inverse;
+      }
+      return plate.assignments || {};
+    },
+    [interactiveMode, selectedPlateId, wellAssignments],
+  );
+
+  const getPlateAssignedCount = useCallback(
+    (plate) => {
+      if (interactiveMode && plate.id === selectedPlateId) {
+        return selectedSampleIds.filter((sampleId) => wellAssignments[sampleId])
+          .length;
+      }
+      return plate.assignedCount || 0;
+    },
+    [interactiveMode, selectedPlateId, wellAssignments, selectedSampleIds],
+  );
+
   const syncPlatesFromAssignments = useCallback(
     (assignments, plateId = selectedPlateId) => {
       if (!onPlatesChange) {
@@ -195,7 +230,11 @@ function AssayPlateCreator({
   );
 
   const handleAutoAssign = useCallback(() => {
-    if (!interactiveMode || !selectedPlateId || selectedSampleIds.length === 0) {
+    if (
+      !interactiveMode ||
+      !selectedPlateId ||
+      selectedSampleIds.length === 0
+    ) {
       return;
     }
     const plate = plates.find((p) => p.id === selectedPlateId);
@@ -248,12 +287,19 @@ function AssayPlateCreator({
 
       if (occupiedSampleId) {
         delete assignments[occupiedSampleId];
+        if (focusedSampleId === occupiedSampleId) {
+          setFocusedSampleId(occupiedSampleId);
+        }
       } else {
-        const nextSampleId = selectedSampleIds.find(
-          (sampleId) => !assignments[sampleId],
-        );
-        if (nextSampleId) {
-          assignments[nextSampleId] = coord;
+        const targetSampleId =
+          focusedSampleId && selectedSampleIds.includes(focusedSampleId)
+            ? focusedSampleId
+            : selectedSampleIds.find((sampleId) => !assignments[sampleId]);
+
+        if (targetSampleId) {
+          delete assignments[targetSampleId];
+          assignments[targetSampleId] = coord;
+          setFocusedSampleId(targetSampleId);
         }
       }
 
@@ -265,32 +311,102 @@ function AssayPlateCreator({
       selectedPlateId,
       wellAssignments,
       selectedSampleIds,
+      focusedSampleId,
       onWellAssignmentsChange,
       syncPlatesFromAssignments,
     ],
   );
 
+  const renderAssignmentSummary = () => {
+    if (!interactiveMode || selectedSampleIds.length === 0) {
+      return null;
+    }
+
+    return (
+      <div className="assignment-summary">
+        <h6>
+          <FormattedMessage
+            id="notebook.routing.assignmentSummary"
+            defaultMessage="Well Assignments"
+          />
+        </h6>
+        <p className="assignment-summary-hint">
+          <FormattedMessage
+            id="notebook.routing.assignmentSummaryHint"
+            defaultMessage="Click a sample row, then click a well to place or move it."
+          />
+        </p>
+        <table className="assignment-summary-table">
+          <thead>
+            <tr>
+              <th>
+                <FormattedMessage
+                  id="notebook.routing.sampleColumn"
+                  defaultMessage="Sample"
+                />
+              </th>
+              <th>
+                <FormattedMessage
+                  id="notebook.routing.wellColumn"
+                  defaultMessage="Well"
+                />
+              </th>
+            </tr>
+          </thead>
+          <tbody>
+            {selectedSampleIds.map((sampleId) => {
+              const well = wellAssignments[sampleId];
+              const isFocused = focusedSampleId === sampleId;
+              return (
+                <tr
+                  key={sampleId}
+                  className={`assignment-summary-row ${
+                    isFocused ? "focused" : ""
+                  } ${well ? "assigned" : "unassigned"}`}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setFocusedSampleId(sampleId);
+                  }}
+                >
+                  <td>{getSampleLabel(sampleId)}</td>
+                  <td>{well || "—"}</td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+    );
+  };
+
   // Render plate grid preview
   const renderPlatePreview = (plate) => {
     const wells = [];
     const totalWells = plate.rows * plate.columns;
+    const isSelectedPlate = interactiveMode && plate.id === selectedPlateId;
+    const focusedWell =
+      focusedSampleId && wellAssignments[focusedSampleId]
+        ? wellAssignments[focusedSampleId]
+        : null;
+
+    const assignmentMap = getPlateAssignmentMap(plate);
 
     for (let i = 0; i < totalWells; i++) {
       const coord = getWellCoordinate(i, plate.columns);
-      const isAssigned = plate.assignments && plate.assignments[coord];
+      const assignedSampleId = assignmentMap[coord];
+      const isAssigned = Boolean(assignedSampleId);
+      const isFocusedWell = isSelectedPlate && focusedWell === coord;
 
       wells.push(
         <div
           key={coord}
-          role={interactiveMode && plate.id === selectedPlateId ? "button" : undefined}
-          tabIndex={interactiveMode && plate.id === selectedPlateId ? 0 : undefined}
+          role={isSelectedPlate ? "button" : undefined}
+          tabIndex={isSelectedPlate ? 0 : undefined}
           className={`preview-well ${isAssigned ? "assigned" : "empty"} ${
-            interactiveMode && plate.id === selectedPlateId ? "clickable" : ""
-          }`}
+            isSelectedPlate ? "clickable" : ""
+          } ${isFocusedWell ? "focused" : ""}`}
           title={
-            isAssigned
-              ? `${coord}: sample ${plate.assignments[coord]}`
-              : coord
+            isAssigned ? `${coord}: ${getSampleLabel(assignedSampleId)}` : coord
           }
           onClick={(e) => {
             if (interactiveMode) {
@@ -326,10 +442,10 @@ function AssayPlateCreator({
         </h5>
         {sampleCount > 0 && (
           <Tag type="blue">
-            {sampleCount}{" "}
             <FormattedMessage
-              id="notebook.routing.samplesToAssign"
-              defaultMessage="samples to assign"
+              id="notebook.routing.samplesToAssignCount"
+              defaultMessage="{count} sample(s) to place on plate"
+              values={{ count: sampleCount }}
             />
           </Tag>
         )}
@@ -516,58 +632,64 @@ function AssayPlateCreator({
             </p>
           </div>
         ) : (
-          plates.map((plate) => (
-            <Tile
-              key={plate.id}
-              className={`plate-tile ${selectedPlateId === plate.id ? "selected" : ""}`}
-              onClick={() => onPlateSelect(plate.id)}
-            >
-              <div className="plate-header">
-                <div className="plate-info">
-                  <span className="plate-name">{plate.name}</span>
-                  <span className="plate-dimensions">
-                    {plate.rows}x{plate.columns} ({plate.capacity} wells)
-                  </span>
+          plates.map((plate) => {
+            const assignedCount = getPlateAssignedCount(plate);
+            return (
+              <Tile
+                key={plate.id}
+                className={`plate-tile ${selectedPlateId === plate.id ? "selected" : ""}`}
+                onClick={() => onPlateSelect(plate.id)}
+              >
+                <div className="plate-header">
+                  <div className="plate-info">
+                    <span className="plate-name">{plate.name}</span>
+                    <span className="plate-dimensions">
+                      {plate.rows}x{plate.columns} ({plate.capacity} wells)
+                    </span>
+                  </div>
+                  <div className="plate-actions">
+                    <Button
+                      kind="ghost"
+                      size="sm"
+                      renderIcon={View}
+                      iconDescription="View"
+                      hasIconOnly
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onPlateSelect(plate.id);
+                      }}
+                    />
+                    <Button
+                      kind="danger--ghost"
+                      size="sm"
+                      renderIcon={TrashCan}
+                      iconDescription="Delete"
+                      hasIconOnly
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleDeletePlate(plate.id);
+                      }}
+                      disabled={assignedCount > 0}
+                    />
+                  </div>
                 </div>
-                <div className="plate-actions">
-                  <Button
-                    kind="ghost"
-                    size="sm"
-                    renderIcon={View}
-                    iconDescription="View"
-                    hasIconOnly
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      onPlateSelect(plate.id);
-                    }}
-                  />
-                  <Button
-                    kind="danger--ghost"
-                    size="sm"
-                    renderIcon={TrashCan}
-                    iconDescription="Delete"
-                    hasIconOnly
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      handleDeletePlate(plate.id);
-                    }}
-                    disabled={plate.assignedCount > 0}
-                  />
-                </div>
-              </div>
-              <div className="plate-stats">
-                <Tag type={plate.assignedCount > 0 ? "green" : "gray"}>
-                  {plate.assignedCount}/{plate.capacity} assigned
-                </Tag>
-                {plate.assignedCount < plate.capacity && (
-                  <Tag type="blue">
-                    {plate.capacity - plate.assignedCount} available
+                <div className="plate-stats">
+                  <Tag type={assignedCount > 0 ? "green" : "gray"}>
+                    {assignedCount}/{plate.capacity} assigned
                   </Tag>
-                )}
-              </div>
-              {renderPlatePreview(plate)}
-            </Tile>
-          ))
+                  {assignedCount < plate.capacity && (
+                    <Tag type="blue">
+                      {plate.capacity - assignedCount} available
+                    </Tag>
+                  )}
+                </div>
+                {renderPlatePreview(plate)}
+                {interactiveMode &&
+                  plate.id === selectedPlateId &&
+                  renderAssignmentSummary()}
+              </Tile>
+            );
+          })
         )}
       </div>
     </div>

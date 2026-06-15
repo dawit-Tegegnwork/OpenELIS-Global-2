@@ -19,6 +19,7 @@ import org.openelisglobal.common.constants.Constants;
 import org.openelisglobal.department.service.DepartmentIsolationService;
 import org.openelisglobal.notebook.valueholder.NoteBook;
 import org.openelisglobal.notebook.valueholder.NoteBookPage;
+import org.openelisglobal.notebook.valueholder.NotebookEntry;
 import org.openelisglobal.notebook.valueholder.NotebookStageAction;
 import org.openelisglobal.role.service.RoleService;
 import org.openelisglobal.role.valueholder.Role;
@@ -28,7 +29,8 @@ import org.openelisglobal.userrole.valueholder.UserLabUnitRoles;
 import org.springframework.web.server.ResponseStatusException;
 
 /**
- * MNTD SRS persona matrix: intake registration, lab manager override, biomedical denial.
+ * MNTD SRS persona matrix: intake registration, lab manager override,
+ * biomedical denial.
  */
 @RunWith(MockitoJUnitRunner.class)
 public class MNTDStageAccessMatrixTest {
@@ -73,8 +75,7 @@ public class MNTDStageAccessMatrixTest {
     public void sampleCollector_allowedOnMntdIntake() {
         stubRestrictedUser("177", "r-sc");
         when(roleService.getRoleById("r-sc")).thenReturn(role(Constants.ROLE_SAMPLE_COLLECTOR));
-        when(workflowRegistryService.isActionPermitted("mntd", "intake", 1, NotebookStageAction.EDIT))
-                .thenReturn(true);
+        when(workflowRegistryService.isActionPermitted("mntd", "intake", 1, NotebookStageAction.EDIT)).thenReturn(true);
         when(workflowRegistryService.resolveAllowedPersonasForAction(any(), any(), any(), any(), any(), any()))
                 .thenReturn(List.of(Constants.ROLE_SAMPLE_COLLECTOR, Constants.ROLE_LABORATORY_TECHNICIAN,
                         Constants.ROLE_LAB_MANAGER));
@@ -86,8 +87,7 @@ public class MNTDStageAccessMatrixTest {
     public void labManagerOnly_allowedOnMntdIntakeViaSupervisorOverride() {
         stubRestrictedUser("177", "r-lm");
         when(roleService.getRoleById("r-lm")).thenReturn(role(Constants.ROLE_LAB_MANAGER));
-        when(workflowRegistryService.isActionPermitted("mntd", "intake", 1, NotebookStageAction.EDIT))
-                .thenReturn(true);
+        when(workflowRegistryService.isActionPermitted("mntd", "intake", 1, NotebookStageAction.EDIT)).thenReturn(true);
         when(workflowRegistryService.resolveAllowedPersonasForAction(any(), any(), any(), any(), any(), any()))
                 .thenReturn(List.of(Constants.ROLE_SAMPLE_COLLECTOR, Constants.ROLE_LABORATORY_TECHNICIAN));
 
@@ -98,8 +98,7 @@ public class MNTDStageAccessMatrixTest {
     public void juniorResearcher_deniedOnMntdIntake() {
         stubRestrictedUser("177", "r-jr");
         when(roleService.getRoleById("r-jr")).thenReturn(role(Constants.ROLE_JUNIOR_RESEARCHER));
-        when(workflowRegistryService.isActionPermitted("mntd", "intake", 1, NotebookStageAction.EDIT))
-                .thenReturn(true);
+        when(workflowRegistryService.isActionPermitted("mntd", "intake", 1, NotebookStageAction.EDIT)).thenReturn(true);
         when(workflowRegistryService.resolveAllowedPersonasForAction(any(), any(), any(), any(), any(), any()))
                 .thenReturn(List.of(Constants.ROLE_SAMPLE_COLLECTOR, Constants.ROLE_LABORATORY_TECHNICIAN));
 
@@ -111,13 +110,51 @@ public class MNTDStageAccessMatrixTest {
     public void biomedicalStaff_deniedOnMntdIntake() {
         stubRestrictedUser("177", "r-bio");
         when(roleService.getRoleById("r-bio")).thenReturn(role(Constants.ROLE_BIOMEDICAL_STAFF));
-        when(workflowRegistryService.isActionPermitted("mntd", "intake", 1, NotebookStageAction.EDIT))
-                .thenReturn(true);
+        when(workflowRegistryService.isActionPermitted("mntd", "intake", 1, NotebookStageAction.EDIT)).thenReturn(true);
         when(workflowRegistryService.resolveAllowedPersonasForAction(any(), any(), any(), any(), any(), any()))
                 .thenReturn(List.of(Constants.ROLE_SAMPLE_COLLECTOR, Constants.ROLE_LABORATORY_TECHNICIAN));
 
         assertThrows(ResponseStatusException.class,
                 () -> service.assertStageAccess(request, notebook, intakePage, NotebookStageAction.EDIT));
+    }
+
+    @Test
+    public void assertMntdManifestIntakeEdit_childInstanceInheritsTemplateIntakePage() {
+        when(departmentIsolationService.hasUnrestrictedDepartmentAccess(request)).thenReturn(true);
+
+        NoteBook template = new NoteBook();
+        template.setId(8801);
+        template.setWorkflowType("mntd");
+        template.setIsTemplate(true);
+        template.getPages().add(page(1, "intake"));
+
+        NoteBook child = new NoteBook();
+        child.setId(8802);
+        child.setWorkflowType("mntd");
+        child.setIsTemplate(false);
+        child.setParentNotebook(template);
+
+        NotebookEntry entry = new NotebookEntry();
+        entry.setId(8801);
+        entry.setNotebook(child);
+
+        when(noteBookPageService.get(1)).thenReturn(template.getPages().get(0));
+        doNothing().when(departmentIsolationService).assertNotebookDepartmentAccess(any(), any());
+
+        service.assertMntdManifestIntakeEdit(request, entry);
+    }
+
+    @Test
+    public void assertMntdManifestIntakeEdit_missingIntakePage_returnsBadRequest() {
+        NoteBook notebook = new NoteBook();
+        notebook.setId(8803);
+        notebook.setWorkflowType("mntd");
+        notebook.setIsTemplate(false);
+
+        NotebookEntry entry = new NotebookEntry();
+        entry.setNotebook(notebook);
+
+        assertThrows(ResponseStatusException.class, () -> service.assertMntdManifestIntakeEdit(request, entry));
     }
 
     @Test

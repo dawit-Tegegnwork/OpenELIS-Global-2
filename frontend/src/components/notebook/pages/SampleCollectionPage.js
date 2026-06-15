@@ -99,7 +99,8 @@ function SampleCollectionPage({
   const [collectionTimeInput, setCollectionTimeInput] = useState("");
   const [collectionSampleTypeId, setCollectionSampleTypeId] = useState("");
   const [sampleTypeOptions, setSampleTypeOptions] = useState([]);
-  const [needsSampleTypeSelection, setNeedsSampleTypeSelection] = useState(false);
+  const [needsSampleTypeSelection, setNeedsSampleTypeSelection] =
+    useState(false);
   const [isCollecting, setIsCollecting] = useState(false);
 
   // Barcode generation state
@@ -121,24 +122,24 @@ function SampleCollectionPage({
   }, []);
 
   const loadSampleTypeOptions = useCallback(() => {
-    getFromOpenElisServer("/rest/displayList/SAMPLE_TYPE_ACTIVE", (response) => {
-      if (componentMounted.current && response && Array.isArray(response)) {
-        setSampleTypeOptions(response);
-      }
-    });
+    getFromOpenElisServer(
+      "/rest/displayList/SAMPLE_TYPE_ACTIVE",
+      (response) => {
+        if (componentMounted.current && response && Array.isArray(response)) {
+          setSampleTypeOptions(response);
+        }
+      },
+    );
   }, []);
 
-  const resolveSampleTypeId = useCallback(
-    (sample, overrideSampleTypeId) => {
-      return (
-        sample?.sampleTypeId ||
-        sample?.data?.sampleTypeId ||
-        overrideSampleTypeId ||
-        ""
-      );
-    },
-    [],
-  );
+  const resolveSampleTypeId = useCallback((sample, overrideSampleTypeId) => {
+    return (
+      sample?.sampleTypeId ||
+      sample?.data?.sampleTypeId ||
+      overrideSampleTypeId ||
+      ""
+    );
+  }, []);
 
   // Load data on mount
   useEffect(() => {

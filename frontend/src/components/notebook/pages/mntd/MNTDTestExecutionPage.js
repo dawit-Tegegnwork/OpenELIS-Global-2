@@ -77,6 +77,11 @@ import {
 } from "../../../esignature";
 import PermissionGate from "../../../security/PermissionGate";
 import { Permissions } from "../../../../constants/roles";
+import ModalSaveErrorNotification from "./ModalSaveErrorNotification";
+import {
+  extractApiErrorMessage,
+  reportModalSaveFailure,
+} from "./mntdModalErrorHelpers";
 
 /**
  * MNTDTestExecutionPage - Page 8 of the MNTD workflow.
@@ -144,8 +149,57 @@ function MNTDTestExecutionPage({
     [addNotification, intl, setNotificationVisible],
   );
 
+  const reportExecutionFailure = useCallback(
+    (message) => {
+      reportModalSaveFailure({
+        message,
+        reopenModal: () => setShowExecutionModal(true),
+        setModalError: setExecutionModalError,
+        notifyError,
+      });
+    },
+    [notifyError],
+  );
+
+  const reportDataUploadFailure = useCallback(
+    (message) => {
+      reportModalSaveFailure({
+        message,
+        reopenModal: () => setShowDataUploadModal(true),
+        setModalError: setDataUploadModalError,
+        notifyError,
+      });
+    },
+    [notifyError],
+  );
+
+  const reportBulkValueFailure = useCallback(
+    (message) => {
+      reportModalSaveFailure({
+        message,
+        reopenModal: () => setShowBulkValueModal(true),
+        setModalError: setBulkValueModalError,
+        notifyError,
+      });
+    },
+    [notifyError],
+  );
+
+  const reportPostTestQcFailure = useCallback(
+    (message) => {
+      reportModalSaveFailure({
+        message,
+        reopenModal: () => setShowPostTestQCModal(true),
+        setModalError: setPostTestQCModalError,
+        notifyError,
+      });
+    },
+    [notifyError],
+  );
+
   // Execution confirmation modal state
   const [showExecutionModal, setShowExecutionModal] = useState(false);
+  const [executionModalError, setExecutionModalError] = useState(null);
   const [executionData, setExecutionData] = useState({
     runCompleted: "YES",
     runIssues: "",
@@ -161,6 +215,7 @@ function MNTDTestExecutionPage({
 
   // Raw data upload modal state
   const [showDataUploadModal, setShowDataUploadModal] = useState(false);
+  const [dataUploadModalError, setDataUploadModalError] = useState(null);
   const [uploadedFile, setUploadedFile] = useState(null);
   const [uploadMetadata, setUploadMetadata] = useState({
     machineType: "",
@@ -172,6 +227,7 @@ function MNTDTestExecutionPage({
 
   // Bulk value entry modal state
   const [showBulkValueModal, setShowBulkValueModal] = useState(false);
+  const [bulkValueModalError, setBulkValueModalError] = useState(null);
   const [bulkValueData, setBulkValueData] = useState({
     runId: "",
     kitLot: "",
@@ -186,6 +242,7 @@ function MNTDTestExecutionPage({
 
   // Post-test QC modal state
   const [showPostTestQCModal, setShowPostTestQCModal] = useState(false);
+  const [postTestQCModalError, setPostTestQCModalError] = useState(null);
   const [postTestQCData, setPostTestQCData] = useState({
     qcResult: "PASS",
     repeatTest: false,
@@ -343,7 +400,9 @@ function MNTDTestExecutionPage({
   // Handle saving execution confirmation data
   const handleSaveExecutionData = useCallback(() => {
     if (!hasRealPageId) {
-      setShowExecutionModal(false);
+      reportExecutionFailure(
+        "Cannot update samples: Page not properly initialized.",
+      );
       return;
     }
 
@@ -351,7 +410,9 @@ function MNTDTestExecutionPage({
 
     const selectedKitObjects = executionData.selectedKitItems || [];
     if (selectedKitObjects.length === 0) {
-      notifyError("Select at least one kit before saving execution data.");
+      reportExecutionFailure(
+        "Select at least one kit before saving execution data.",
+      );
       return;
     }
     const invalidKitItems = getInvalidReagentUsageItems(
@@ -359,7 +420,9 @@ function MNTDTestExecutionPage({
       executionData.kitQuantities,
     );
     if (invalidKitItems.length > 0) {
-      notifyError("Enter a quantity greater than 0 for each selected kit.");
+      reportExecutionFailure(
+        "Enter a quantity greater than 0 for each selected kit.",
+      );
       return;
     }
 
@@ -419,6 +482,7 @@ function MNTDTestExecutionPage({
                   ),
                 );
                 setShowExecutionModal(false);
+                setExecutionModalError(null);
                 setSelectedIds([]);
                 // Reset form
                 setExecutionData({
@@ -440,7 +504,12 @@ function MNTDTestExecutionPage({
               },
             );
           } else {
-            setError(response?.error || "Failed to save execution data.");
+            reportExecutionFailure(
+              extractApiErrorMessage(
+                response,
+                "Failed to save execution data.",
+              ),
+            );
           }
         }
       },
@@ -453,7 +522,7 @@ function MNTDTestExecutionPage({
     loadPageSamples,
     onProgressUpdate,
     intl,
-    notifyError,
+    reportExecutionFailure,
   ]);
 
   // Handle file upload
@@ -467,7 +536,7 @@ function MNTDTestExecutionPage({
   // Handle save upload with file
   const handleSaveDataUpload = useCallback(async () => {
     if (!uploadedFile) {
-      setError(
+      reportDataUploadFailure(
         intl.formatMessage({
           id: "notebook.mntd.testexecution.fileRequired",
           defaultMessage: "Please select a file to upload.",
@@ -477,11 +546,14 @@ function MNTDTestExecutionPage({
     }
 
     if (!hasRealPageId) {
-      setShowDataUploadModal(false);
+      reportDataUploadFailure(
+        "Cannot update samples: Page not properly initialized.",
+      );
       return;
     }
 
     setIsUploading(true);
+    setDataUploadModalError(null);
 
     const numericIds = selectedIds.map((id) => parseInt(id, 10));
 
@@ -521,6 +593,7 @@ function MNTDTestExecutionPage({
           ),
         );
         setShowDataUploadModal(false);
+        setDataUploadModalError(null);
         setSelectedIds([]);
         setUploadedFile(null);
         setUploadMetadata({
@@ -534,11 +607,13 @@ function MNTDTestExecutionPage({
           onProgressUpdate();
         }
       } else {
-        setError(result.error || "Failed to upload raw data.");
+        reportDataUploadFailure(
+          extractApiErrorMessage(result, "Failed to upload raw data."),
+        );
       }
     } catch (err) {
       console.error("Upload error:", err);
-      setError("Network error during upload.");
+      reportDataUploadFailure("Network error during upload.");
     } finally {
       setIsUploading(false);
     }
@@ -551,6 +626,7 @@ function MNTDTestExecutionPage({
     loadPageSamples,
     onProgressUpdate,
     intl,
+    reportDataUploadFailure,
   ]);
 
   // Handle bulk value application
@@ -572,7 +648,7 @@ function MNTDTestExecutionPage({
 
     // Check if at least one field has a value
     if (Object.keys(dataToSave).length === 0) {
-      setError(
+      reportBulkValueFailure(
         intl.formatMessage({
           id: "notebook.mntd.testexecution.bulkValueRequired",
           defaultMessage: "Please enter at least one value to apply.",
@@ -582,7 +658,9 @@ function MNTDTestExecutionPage({
     }
 
     if (!hasRealPageId) {
-      setShowBulkValueModal(false);
+      reportBulkValueFailure(
+        "Cannot update samples: Page not properly initialized.",
+      );
       return;
     }
 
@@ -591,7 +669,7 @@ function MNTDTestExecutionPage({
       : selectedIds.map((id) => parseInt(id, 10));
 
     if (targetIds.length === 0) {
-      setError(
+      reportBulkValueFailure(
         intl.formatMessage({
           id: "notebook.mntd.testexecution.noSamplesSelected",
           defaultMessage: "No samples to apply value to.",
@@ -619,6 +697,7 @@ function MNTDTestExecutionPage({
               ),
             );
             setShowBulkValueModal(false);
+            setBulkValueModalError(null);
             setBulkValueData({
               runId: "",
               kitLot: "",
@@ -632,7 +711,9 @@ function MNTDTestExecutionPage({
             });
             loadPageSamples();
           } else {
-            setError(response?.error || "Failed to apply bulk values.");
+            reportBulkValueFailure(
+              extractApiErrorMessage(response, "Failed to apply bulk values."),
+            );
           }
         }
       },
@@ -645,6 +726,7 @@ function MNTDTestExecutionPage({
     pageData?.id,
     loadPageSamples,
     intl,
+    reportBulkValueFailure,
   ]);
 
   // Handle opening post-test QC modal
@@ -664,7 +746,7 @@ function MNTDTestExecutionPage({
   // Handle saving post-test QC data
   const handleSavePostTestQCData = useCallback(() => {
     if (!postTestQCData.qcResult) {
-      setError(
+      reportPostTestQcFailure(
         intl.formatMessage({
           id: "notebook.mntd.testexecution.qcResultRequired",
           defaultMessage: "QC result is required.",
@@ -674,7 +756,9 @@ function MNTDTestExecutionPage({
     }
 
     if (!hasRealPageId) {
-      setShowPostTestQCModal(false);
+      reportPostTestQcFailure(
+        "Cannot update samples: Page not properly initialized.",
+      );
       return;
     }
 
@@ -724,6 +808,7 @@ function MNTDTestExecutionPage({
                   ),
                 );
                 setShowPostTestQCModal(false);
+                setPostTestQCModalError(null);
                 setSelectedIds([]);
                 // Reset form
                 setPostTestQCData({
@@ -741,7 +826,12 @@ function MNTDTestExecutionPage({
               },
             );
           } else {
-            setError(response?.error || "Failed to save post-test QC data.");
+            reportPostTestQcFailure(
+              extractApiErrorMessage(
+                response,
+                "Failed to save post-test QC data.",
+              ),
+            );
           }
         }
       },
@@ -754,6 +844,7 @@ function MNTDTestExecutionPage({
     loadPageSamples,
     onProgressUpdate,
     intl,
+    reportPostTestQcFailure,
   ]);
 
   // Handle status change
@@ -1255,7 +1346,10 @@ function MNTDTestExecutionPage({
           id: "label.cancel",
           defaultMessage: "Cancel",
         })}
-        onRequestClose={() => setShowExecutionModal(false)}
+        onRequestClose={() => {
+          setShowExecutionModal(false);
+          setExecutionModalError(null);
+        }}
         onRequestSubmit={() =>
           triggerEsigForSave(handleSaveExecutionData, () =>
             setShowExecutionModal(true),
@@ -1264,6 +1358,10 @@ function MNTDTestExecutionPage({
         size="md"
       >
         <div style={{ marginBottom: "1rem" }}>
+          <ModalSaveErrorNotification
+            message={executionModalError}
+            onClose={() => setExecutionModalError(null)}
+          />
           <p style={{ color: "#525252", marginBottom: "1rem" }}>
             <FormattedMessage
               id="notebook.mntd.testexecution.modal.executionDescription"
@@ -1471,6 +1569,7 @@ function MNTDTestExecutionPage({
         })}
         onRequestClose={() => {
           setShowDataUploadModal(false);
+          setDataUploadModalError(null);
           setUploadedFile(null);
         }}
         onRequestSubmit={() =>
@@ -1482,6 +1581,10 @@ function MNTDTestExecutionPage({
         size="md"
       >
         <div style={{ marginBottom: "1rem" }}>
+          <ModalSaveErrorNotification
+            message={dataUploadModalError}
+            onClose={() => setDataUploadModalError(null)}
+          />
           <p style={{ color: "#525252", marginBottom: "1rem" }}>
             <FormattedMessage
               id="notebook.mntd.testexecution.modal.uploadDescription"
@@ -1637,7 +1740,10 @@ function MNTDTestExecutionPage({
           id: "label.cancel",
           defaultMessage: "Cancel",
         })}
-        onRequestClose={() => setShowBulkValueModal(false)}
+        onRequestClose={() => {
+          setShowBulkValueModal(false);
+          setBulkValueModalError(null);
+        }}
         onRequestSubmit={() =>
           triggerEsigForSave(handleApplyBulkValue, () =>
             setShowBulkValueModal(true),
@@ -1646,6 +1752,10 @@ function MNTDTestExecutionPage({
         size="lg"
       >
         <div style={{ marginBottom: "1rem" }}>
+          <ModalSaveErrorNotification
+            message={bulkValueModalError}
+            onClose={() => setBulkValueModalError(null)}
+          />
           <p style={{ color: "#525252", marginBottom: "1rem" }}>
             <FormattedMessage
               id="notebook.mntd.testexecution.modal.bulkValueDescription"
@@ -1879,7 +1989,10 @@ function MNTDTestExecutionPage({
           id: "label.cancel",
           defaultMessage: "Cancel",
         })}
-        onRequestClose={() => setShowPostTestQCModal(false)}
+        onRequestClose={() => {
+          setShowPostTestQCModal(false);
+          setPostTestQCModalError(null);
+        }}
         onRequestSubmit={() =>
           triggerEsigForSave(handleSavePostTestQCData, () =>
             setShowPostTestQCModal(true),
@@ -1888,6 +2001,10 @@ function MNTDTestExecutionPage({
         size="md"
       >
         <div style={{ marginBottom: "1rem" }}>
+          <ModalSaveErrorNotification
+            message={postTestQCModalError}
+            onClose={() => setPostTestQCModalError(null)}
+          />
           <p style={{ color: "#525252", marginBottom: "1rem" }}>
             <FormattedMessage
               id="notebook.mntd.testexecution.modal.postTestQCDescription"

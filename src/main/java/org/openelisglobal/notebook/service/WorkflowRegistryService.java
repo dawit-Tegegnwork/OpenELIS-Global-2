@@ -44,8 +44,8 @@ public class WorkflowRegistryService {
     }
 
     public Optional<WorkflowStageDefinition> getStage(String workflowType, int stageOrder) {
-        return getStagesForWorkflowType(workflowType).stream()
-                .filter(stage -> stage.getStageOrder() == stageOrder).findFirst();
+        return getStagesForWorkflowType(workflowType).stream().filter(stage -> stage.getStageOrder() == stageOrder)
+                .findFirst();
     }
 
     public Optional<WorkflowStageDefinition> getStageByPageKey(String workflowType, String pageKey) {
@@ -109,8 +109,7 @@ public class WorkflowRegistryService {
             }
         }
         if (pageAllowedRoles != null && !pageAllowedRoles.isEmpty()) {
-            return pageAllowedRoles.stream().filter(AHRIRoleCatalog::isDepartmentRoleName)
-                    .collect(Collectors.toList());
+            return pageAllowedRoles.stream().filter(AHRIRoleCatalog::isDepartmentRoleName).collect(Collectors.toList());
         }
         LogEvent.logWarn(this.getClass().getSimpleName(), "resolveAllowedPersonas",
                 "No allowed personas for workflowType=" + workflowType + " pageKey=" + pageKey + " stageOrder="
@@ -138,23 +137,23 @@ public class WorkflowRegistryService {
             return false;
         }
         switch (normalized) {
-            case "pathology":
-            case "histopathology_biopsy_tissue":
-            case "histopathology":
-            case "histopathology/biopsy":
-            case "histopathology_biopsy":
-            case "peripheral_smear_bone_marrow_morphology":
-            case "peripheral_smear":
-            case "bone_marrow":
-            case "peripheral_smear_bone_marrow":
-            case "fnac":
-            case "cytology_liquid_based_pap_smear":
-            case "cytology":
-            case "liquid_based_pap_smear":
-            case "pap_smear":
-                return true;
-            default:
-                return false;
+        case "pathology":
+        case "histopathology_biopsy_tissue":
+        case "histopathology":
+        case "histopathology/biopsy":
+        case "histopathology_biopsy":
+        case "peripheral_smear_bone_marrow_morphology":
+        case "peripheral_smear":
+        case "bone_marrow":
+        case "peripheral_smear_bone_marrow":
+        case "fnac":
+        case "cytology_liquid_based_pap_smear":
+        case "cytology":
+        case "liquid_based_pap_smear":
+        case "pap_smear":
+            return true;
+        default:
+            return false;
         }
     }
 
@@ -175,9 +174,8 @@ public class WorkflowRegistryService {
 
     public static void validateDepartmentName(String departmentName, String fileName, int lineNumber) {
         if (!AHRITestSectionCatalog.contains(departmentName)) {
-            LogEvent.logWarn("WorkflowRegistry", "validate",
-                    fileName + " line " + lineNumber + ": department '" + departmentName
-                            + "' is not in AHRI test section allowlist");
+            LogEvent.logWarn("WorkflowRegistry", "validate", fileName + " line " + lineNumber + ": department '"
+                    + departmentName + "' is not in AHRI test section allowlist");
         }
     }
 }

@@ -4,6 +4,7 @@ import React, {
   useRef,
   useCallback,
   useMemo,
+  useContext,
 } from "react";
 import {
   Grid,
@@ -56,6 +57,13 @@ import {
   SignatureMeaning,
   useESign,
 } from "../../../esignature";
+import { NotificationContext } from "../../../layout/Layout";
+import { NotificationKinds } from "../../../common/CustomNotification";
+import ModalSaveErrorNotification from "./ModalSaveErrorNotification";
+import {
+  extractApiErrorMessage,
+  reportModalSaveFailure,
+} from "./mntdModalErrorHelpers";
 
 /**
  * MNTDReportingREDCapPage - Page 10 of the MNTD workflow.
@@ -93,6 +101,8 @@ function MNTDReportingREDCapPage({
 }) {
   const intl = useIntl();
   const componentMounted = useRef(false);
+  const { addNotification, setNotificationVisible } =
+    useContext(NotificationContext);
 
   // E-signature: pending action ref for shared AUTHORED hook
   const pendingAction = useRef(null);
@@ -108,8 +118,60 @@ function MNTDReportingREDCapPage({
   // Active tab state
   const [activeTab, setActiveTab] = useState(0);
 
+  const notifyError = useCallback(
+    (message) => {
+      addNotification({
+        kind: NotificationKinds.error,
+        title: intl.formatMessage({
+          id: "notification.error",
+          defaultMessage: "Error",
+        }),
+        message,
+      });
+      setNotificationVisible(true);
+    },
+    [addNotification, intl, setNotificationVisible],
+  );
+
+  const reportReportFailure = useCallback(
+    (message) => {
+      reportModalSaveFailure({
+        message,
+        reopenModal: () => setShowReportModal(true),
+        setModalError: setReportModalError,
+        notifyError,
+      });
+    },
+    [notifyError],
+  );
+
+  const reportRedcapFailure = useCallback(
+    (message) => {
+      reportModalSaveFailure({
+        message,
+        reopenModal: () => setShowREDCapModal(true),
+        setModalError: setRedcapModalError,
+        notifyError,
+      });
+    },
+    [notifyError],
+  );
+
+  const reportArchiveFailure = useCallback(
+    (message) => {
+      reportModalSaveFailure({
+        message,
+        reopenModal: () => setShowArchiveModal(true),
+        setModalError: setArchiveModalError,
+        notifyError,
+      });
+    },
+    [notifyError],
+  );
+
   // Report generation modal state
   const [showReportModal, setShowReportModal] = useState(false);
+  const [reportModalError, setReportModalError] = useState(null);
   const [reportData, setReportData] = useState({
     reportType: "SUMMARY",
     dateRangeStart: "",
@@ -123,6 +185,7 @@ function MNTDReportingREDCapPage({
 
   // REDCap submission modal state
   const [showREDCapModal, setShowREDCapModal] = useState(false);
+  const [redcapModalError, setRedcapModalError] = useState(null);
   const [redcapData, setRedcapData] = useState({
     projectId: "",
     recordIdField: "record_id",
@@ -133,6 +196,7 @@ function MNTDReportingREDCapPage({
 
   // Archive modal state
   const [showArchiveModal, setShowArchiveModal] = useState(false);
+  const [archiveModalError, setArchiveModalError] = useState(null);
   const [archiveData, setArchiveData] = useState({
     archiveNotes: "",
     createBackup: true,
@@ -373,6 +437,7 @@ function MNTDReportingREDCapPage({
       );
       return;
     }
+    setReportModalError(null);
     setShowReportModal(true);
   }, [selectedIds, reportData.includeAllSamples, intl]);
 
@@ -391,7 +456,7 @@ function MNTDReportingREDCapPage({
   // Handle generating report - downloads file and saves to history
   const handleGenerateReport = useCallback(() => {
     if (!reportData.reportType) {
-      setError(
+      reportReportFailure(
         intl.formatMessage({
           id: "notebook.mntd.reporting.reportTypeRequired",
           defaultMessage: "Please select a report type.",
@@ -401,11 +466,18 @@ function MNTDReportingREDCapPage({
     }
 
     if (!hasRealPageId) {
-      setShowReportModal(false);
+      reportReportFailure(
+        intl.formatMessage({
+          id: "notebook.mntd.reporting.pageNotInitialized",
+          defaultMessage:
+            "Cannot update samples: Page not properly initialized.",
+        }),
+      );
       return;
     }
 
     setIsGeneratingReport(true);
+    setReportModalError(null);
 
     const targetIds = reportData.includeAllSamples
       ? samples.map((s) => parseInt(s.id, 10))
@@ -491,6 +563,7 @@ function MNTDReportingREDCapPage({
                 ),
               );
               setShowReportModal(false);
+              setReportModalError(null);
               setSelectedIds([]);
               setReportData({
                 reportType: "SUMMARY",
@@ -513,7 +586,7 @@ function MNTDReportingREDCapPage({
       .catch((err) => {
         if (componentMounted.current) {
           setIsGeneratingReport(false);
-          setError(err.message || "Failed to generate report.");
+          reportReportFailure(err.message || "Failed to generate report.");
         }
       });
   }, [
@@ -527,6 +600,7 @@ function MNTDReportingREDCapPage({
     onProgressUpdate,
     intl,
     downloadFile,
+    reportReportFailure,
   ]);
 
   // Handle downloading a report from history
@@ -571,17 +645,21 @@ function MNTDReportingREDCapPage({
       );
       return;
     }
+    setRedcapModalError(null);
     setShowREDCapModal(true);
   }, [selectedIds, intl]);
 
   // Handle REDCap file generation and download
   const handleGenerateREDCapFile = useCallback(() => {
     if (!hasRealPageId) {
-      setShowREDCapModal(false);
+      reportRedcapFailure(
+        "Cannot update samples: Page not properly initialized.",
+      );
       return;
     }
 
     setIsGeneratingREDCapFile(true);
+    setRedcapModalError(null);
 
     const numericIds = selectedIds.map((id) => parseInt(id, 10));
 
@@ -646,6 +724,7 @@ function MNTDReportingREDCapPage({
                 ),
               );
               setShowREDCapModal(false);
+              setRedcapModalError(null);
               setSelectedIds([]);
               setRedcapData({
                 projectId: "",
@@ -664,7 +743,7 @@ function MNTDReportingREDCapPage({
       .catch((err) => {
         if (componentMounted.current) {
           setIsGeneratingREDCapFile(false);
-          setError(err.message || "Failed to generate REDCap file.");
+          reportRedcapFailure(err.message || "Failed to generate REDCap file.");
         }
       });
   }, [
@@ -676,6 +755,7 @@ function MNTDReportingREDCapPage({
     onProgressUpdate,
     intl,
     downloadFile,
+    reportRedcapFailure,
   ]);
 
   // Handle opening archive modal
@@ -689,6 +769,7 @@ function MNTDReportingREDCapPage({
       );
       return;
     }
+    setArchiveModalError(null);
     setShowArchiveModal(true);
     // Reset storage selection
     setStorageSelection({
@@ -705,12 +786,14 @@ function MNTDReportingREDCapPage({
   // Handle archiving samples with storage location assignment
   const handleArchiveSamples = useCallback(() => {
     if (!hasRealPageId) {
-      setShowArchiveModal(false);
+      reportArchiveFailure(
+        "Cannot update samples: Page not properly initialized.",
+      );
       return;
     }
 
     if (!storageSelection.box) {
-      setError(
+      reportArchiveFailure(
         intl.formatMessage({
           id: "notebook.mntd.reporting.selectStorageBox",
           defaultMessage: "Please select a storage box for archiving.",
@@ -724,7 +807,7 @@ function MNTDReportingREDCapPage({
       useAutoAssign &&
       autoAssignPreview.previewWells.length < selectedIds.length
     ) {
-      setError(
+      reportArchiveFailure(
         intl.formatMessage(
           {
             id: "notebook.mntd.reporting.notEnoughWells",
@@ -741,6 +824,7 @@ function MNTDReportingREDCapPage({
     }
 
     setIsArchiving(true);
+    setArchiveModalError(null);
 
     const numericIds = selectedIds.map((id) => parseInt(id, 10));
 
@@ -837,6 +921,7 @@ function MNTDReportingREDCapPage({
                             ),
                           );
                           setShowArchiveModal(false);
+                          setArchiveModalError(null);
                           setSelectedIds([]);
                           setStorageSelection({
                             room: null,
@@ -860,9 +945,11 @@ function MNTDReportingREDCapPage({
                       );
                     } else {
                       setIsArchiving(false);
-                      setError(
-                        autoResponse?.error ||
+                      reportArchiveFailure(
+                        extractApiErrorMessage(
+                          autoResponse,
                           "Failed to auto-assign storage locations.",
+                        ),
                       );
                     }
                   },
@@ -905,6 +992,7 @@ function MNTDReportingREDCapPage({
                           ),
                         );
                         setShowArchiveModal(false);
+                        setArchiveModalError(null);
                         setSelectedIds([]);
                         setStorageSelection({
                           room: null,
@@ -931,11 +1019,13 @@ function MNTDReportingREDCapPage({
               }
             } else {
               setIsArchiving(false);
-              setError("Storage box selection is required.");
+              reportArchiveFailure("Storage box selection is required.");
             }
           } else {
             setIsArchiving(false);
-            setError(response?.error || "Failed to archive samples.");
+            reportArchiveFailure(
+              extractApiErrorMessage(response, "Failed to archive samples."),
+            );
           }
         }
       },
@@ -953,6 +1043,7 @@ function MNTDReportingREDCapPage({
     loadPageSamples,
     onProgressUpdate,
     intl,
+    reportArchiveFailure,
   ]);
 
   // Handle status change
@@ -1530,7 +1621,10 @@ function MNTDReportingREDCapPage({
           id: "label.cancel",
           defaultMessage: "Cancel",
         })}
-        onRequestClose={() => setShowReportModal(false)}
+        onRequestClose={() => {
+          setShowReportModal(false);
+          setReportModalError(null);
+        }}
         onRequestSubmit={() =>
           triggerEsigForSave(handleGenerateReport, () =>
             setShowReportModal(true),
@@ -1540,6 +1634,10 @@ function MNTDReportingREDCapPage({
         size="md"
       >
         <div style={{ marginBottom: "1rem" }}>
+          <ModalSaveErrorNotification
+            message={reportModalError}
+            onClose={() => setReportModalError(null)}
+          />
           <p style={{ color: "#525252", marginBottom: "1rem" }}>
             <FormattedMessage
               id="notebook.mntd.reporting.modal.reportDescription"
@@ -1746,7 +1844,10 @@ function MNTDReportingREDCapPage({
           id: "label.cancel",
           defaultMessage: "Cancel",
         })}
-        onRequestClose={() => setShowREDCapModal(false)}
+        onRequestClose={() => {
+          setShowREDCapModal(false);
+          setRedcapModalError(null);
+        }}
         onRequestSubmit={() =>
           triggerEsigForSave(handleGenerateREDCapFile, () =>
             setShowREDCapModal(true),
@@ -1756,6 +1857,10 @@ function MNTDReportingREDCapPage({
         size="md"
       >
         <div style={{ marginBottom: "1rem" }}>
+          <ModalSaveErrorNotification
+            message={redcapModalError}
+            onClose={() => setRedcapModalError(null)}
+          />
           <p style={{ color: "#525252", marginBottom: "1rem" }}>
             <FormattedMessage
               id="notebook.mntd.reporting.modal.redcapDescription"
@@ -1880,6 +1985,7 @@ function MNTDReportingREDCapPage({
         })}
         onRequestClose={() => {
           setShowArchiveModal(false);
+          setArchiveModalError(null);
           setStorageSelection({
             room: null,
             device: null,
@@ -1905,6 +2011,10 @@ function MNTDReportingREDCapPage({
         size="lg"
       >
         <div style={{ marginBottom: "1rem" }}>
+          <ModalSaveErrorNotification
+            message={archiveModalError}
+            onClose={() => setArchiveModalError(null)}
+          />
           <p style={{ color: "#525252", marginBottom: "1rem" }}>
             <FormattedMessage
               id="notebook.mntd.reporting.modal.archiveDescription"

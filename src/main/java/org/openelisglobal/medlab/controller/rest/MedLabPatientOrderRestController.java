@@ -404,8 +404,9 @@ public class MedLabPatientOrderRestController extends BaseRestController {
     }
 
     /**
-     * Gets patients registered on this page. Use {@code all=true} for the full session list;
-     * default returns only patients without a pending order on this page.
+     * Gets patients registered on this page. Use {@code all=true} for the full
+     * session list; default returns only patients without a pending order on this
+     * page.
      */
     @GetMapping(value = "/page/{pageId}/registered-patients", produces = MediaType.APPLICATION_JSON_VALUE)
     @ResponseBody

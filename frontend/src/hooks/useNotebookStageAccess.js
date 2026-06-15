@@ -24,12 +24,16 @@ export function useNotebookStageAccess(
 
   const resolveRolesForPage = useCallback(
     (page, pageIndex, action = null) => {
-      return resolvePageAllowedRoles(workflowType, {
-        ...page,
-        order: page?.order ?? page?.pageOrder ?? pageIndex + 1,
-        pageOrder: page?.pageOrder ?? page?.order ?? pageIndex + 1,
-        pageKey: page?.pageKey ?? resolvePageKey(page),
-      }, action);
+      return resolvePageAllowedRoles(
+        workflowType,
+        {
+          ...page,
+          order: page?.order ?? page?.pageOrder ?? pageIndex + 1,
+          pageOrder: page?.pageOrder ?? page?.order ?? pageIndex + 1,
+          pageKey: page?.pageKey ?? resolvePageKey(page),
+        },
+        action,
+      );
     },
     [workflowType],
   );
@@ -48,7 +52,12 @@ export function useNotebookStageAccess(
       }
       return hasPersonaForActiveDepartment(roles);
     },
-    [hasPersonaForActiveDepartment, isGlobalAdmin, resolveRolesForPage, workflowType],
+    [
+      hasPersonaForActiveDepartment,
+      isGlobalAdmin,
+      resolveRolesForPage,
+      workflowType,
+    ],
   );
 
   const hasPageAccess = useCallback(
@@ -56,7 +65,10 @@ export function useNotebookStageAccess(
       const stageOrder = page?.pageOrder ?? page?.order ?? pageIndex + 1;
 
       if (isCreating) {
-        return stageOrder === 1 && canPerformAction(page, pageIndex, NOTEBOOK_STAGE_ACTIONS.VIEW);
+        return (
+          stageOrder === 1 &&
+          canPerformAction(page, pageIndex, NOTEBOOK_STAGE_ACTIONS.VIEW)
+        );
       }
 
       return canPerformAction(page, pageIndex, NOTEBOOK_STAGE_ACTIONS.VIEW);
@@ -65,12 +77,14 @@ export function useNotebookStageAccess(
   );
 
   const canEditPage = useCallback(
-    (page, pageIndex) => canPerformAction(page, pageIndex, NOTEBOOK_STAGE_ACTIONS.EDIT),
+    (page, pageIndex) =>
+      canPerformAction(page, pageIndex, NOTEBOOK_STAGE_ACTIONS.EDIT),
     [canPerformAction],
   );
 
   const canCompletePage = useCallback(
-    (page, pageIndex) => canPerformAction(page, pageIndex, NOTEBOOK_STAGE_ACTIONS.COMPLETE),
+    (page, pageIndex) =>
+      canPerformAction(page, pageIndex, NOTEBOOK_STAGE_ACTIONS.COMPLETE),
     [canPerformAction],
   );
 
@@ -88,7 +102,11 @@ export function useNotebookStageAccess(
       hasAccess: hasPageAccess(page, index),
       canEdit: canEditPage(page, index),
       canComplete: canCompletePage(page, index),
-      requiredRoles: resolveRolesForPage(page, index, NOTEBOOK_STAGE_ACTIONS.EDIT),
+      requiredRoles: resolveRolesForPage(
+        page,
+        index,
+        NOTEBOOK_STAGE_ACTIONS.EDIT,
+      ),
     }));
   }, [
     pages,

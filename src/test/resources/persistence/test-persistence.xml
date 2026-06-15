@@ -135,6 +135,8 @@
         <class>org.openelisglobal.biorepository.valueholder.SampleRetrievalItem</class>
         <class>org.openelisglobal.biorepository.valueholder.ChainOfCustodyLog</class>
         <class>org.openelisglobal.biorepository.valueholder.BiorepositoryQCInspection</class>
+        <class>org.openelisglobal.biorepository.valueholder.BiorepositoryQcRound</class>
+        <class>org.openelisglobal.biorepository.valueholder.BiorepositoryQcRoundSample</class>
 
         <!-- Patient Merge Backend entities (008-patient-merge-backend) -->
         <class>org.openelisglobal.patient.merge.valueholder.PatientMergeAudit</class>

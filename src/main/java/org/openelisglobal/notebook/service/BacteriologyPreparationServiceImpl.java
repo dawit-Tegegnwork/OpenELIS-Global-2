@@ -27,8 +27,9 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 public class BacteriologyPreparationServiceImpl implements BacteriologyPreparationService {
 
-    // Processing QC page is at order 4 in Bacteriology workflow
-    private static final int PROCESSING_QC_PAGE_ORDER = 4;
+    // Processing QC page is at order 5 after Isolate Creation was inserted at order
+    // 3.
+    private static final int PROCESSING_QC_PAGE_ORDER = 5;
     private static final String PROCESSING_QC_PAGE_TITLE = "Processing & Quality Control";
     private static final String CULTURE_MEDIA_KEY = "cultureMediaPreparations";
     private static final String BIOCHEMICAL_MEDIA_KEY = "biochemicalMediaPreparations";
@@ -63,14 +64,13 @@ public class BacteriologyPreparationServiceImpl implements BacteriologyPreparati
 
         Integer notebookId = notebook.getId();
 
-        // Use scalar query to get page ID by order (more reliable) - no entity loading
-        Integer pageId = noteBookPageService.getPageIdByNotebookIdAndOrder(notebookId, PROCESSING_QC_PAGE_ORDER);
+        // Prefer title match (stable across page renumbering), then fall back to order.
+        Integer pageId = noteBookPageService.getPageIdByNotebookIdAndTitlePattern(notebookId, "Processing");
         if (pageId != null) {
             return pageId;
         }
 
-        // Fallback to title pattern matching - also no entity loading
-        return noteBookPageService.getPageIdByNotebookIdAndTitlePattern(notebookId, "Processing");
+        return noteBookPageService.getPageIdByNotebookIdAndOrder(notebookId, PROCESSING_QC_PAGE_ORDER);
     }
 
     /**

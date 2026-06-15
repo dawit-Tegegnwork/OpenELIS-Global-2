@@ -4,6 +4,7 @@ import React, {
   useRef,
   useCallback,
   useMemo,
+  useContext,
 } from "react";
 import {
   Grid,
@@ -63,6 +64,13 @@ import {
 } from "../../../esignature";
 import PermissionGate from "../../../security/PermissionGate";
 import useStagePersonas from "../../../../hooks/useStagePersonas";
+import { NotificationContext } from "../../../layout/Layout";
+import { NotificationKinds } from "../../../common/CustomNotification";
+import ModalSaveErrorNotification from "./ModalSaveErrorNotification";
+import {
+  extractApiErrorMessage,
+  reportModalSaveFailure,
+} from "./mntdModalErrorHelpers";
 
 /**
  * MNTDAliquotingPage - Page 5 of the MNTD workflow.
@@ -99,6 +107,8 @@ function MNTDAliquotingPage({
   const intl = useIntl();
   const stageEditRoles = useStagePersonas("mntd", pageData);
   const componentMounted = useRef(false);
+  const { addNotification, setNotificationVisible } =
+    useContext(NotificationContext);
 
   // E-signature: pending action ref for shared AUTHORED hook
   const pendingAction = useRef(null);
@@ -111,13 +121,13 @@ function MNTDAliquotingPage({
   const [statusFilter, setStatusFilter] = useState("ALL");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  const [success, setSuccess] = useState(null);
 
   // Active tab state
   const [activeTab, setActiveTab] = useState(0);
 
   // Create aliquots modal state
   const [createModalOpen, setCreateModalOpen] = useState(false);
+  const [createModalError, setCreateModalError] = useState(null);
   const [aliquotType, setAliquotType] = useState("tube");
   const [childCount, setChildCount] = useState(1);
   const [externalIdPrefix, setExternalIdPrefix] = useState("MNTD-ALQ");
@@ -127,6 +137,7 @@ function MNTDAliquotingPage({
 
   // QC During Processing modal state
   const [qcModalOpen, setQcModalOpen] = useState(false);
+  const [qcModalError, setQcModalError] = useState(null);
   const [qcProcessing, setQcProcessing] = useState(false);
   const [processingQcResult, setProcessingQcResult] = useState("");
   const [processingQcFailAction, setProcessingQcFailAction] = useState("");
@@ -142,17 +153,20 @@ function MNTDAliquotingPage({
 
   // Bulk import state
   const [bulkImportModalOpen, setBulkImportModalOpen] = useState(false);
+  const [bulkImportModalError, setBulkImportModalError] = useState(null);
   const [importFile, setImportFile] = useState(null);
   const [importPreview, setImportPreview] = useState(null);
   const [importing, setImporting] = useState(false);
 
   // Route to analyzer modal state
   const [routeModalOpen, setRouteModalOpen] = useState(false);
+  const [routeModalError, setRouteModalError] = useState(null);
   const [routing, setRouting] = useState(false);
 
   // Assay plate state (for Internal Analysis)
   const [assayPlates, setAssayPlates] = useState([]);
   const [selectedAssayPlateId, setSelectedAssayPlateId] = useState(null);
+  const [assayWellAssignments, setAssayWellAssignments] = useState({});
 
   // Aliquot type options
   const aliquotTypeOptions = [
@@ -169,6 +183,84 @@ function MNTDAliquotingPage({
 
   // Sample type for DBS tracking
   const isDbs = aliquotType === "dbs-card";
+
+  const notifyError = useCallback(
+    (message) => {
+      addNotification({
+        kind: NotificationKinds.error,
+        title: intl.formatMessage({
+          id: "notification.error",
+          defaultMessage: "Error",
+        }),
+        message,
+      });
+      setNotificationVisible(true);
+    },
+    [addNotification, intl, setNotificationVisible],
+  );
+
+  const notifySuccess = useCallback(
+    (message) => {
+      addNotification({
+        kind: NotificationKinds.success,
+        title: intl.formatMessage({
+          id: "notification.success",
+          defaultMessage: "Success",
+        }),
+        message,
+      });
+      setNotificationVisible(true);
+    },
+    [addNotification, intl, setNotificationVisible],
+  );
+
+  const reportCreateFailure = useCallback(
+    (message) => {
+      reportModalSaveFailure({
+        message,
+        reopenModal: () => setCreateModalOpen(true),
+        setModalError: setCreateModalError,
+        notifyError,
+      });
+    },
+    [notifyError],
+  );
+
+  const reportBulkImportFailure = useCallback(
+    (message) => {
+      reportModalSaveFailure({
+        message,
+        reopenModal: () => setBulkImportModalOpen(true),
+        setModalError: setBulkImportModalError,
+        notifyError,
+      });
+    },
+    [notifyError],
+  );
+
+  const reportRouteFailure = useCallback(
+    (message) => {
+      reportModalSaveFailure({
+        message,
+        reopenModal: () => setRouteModalOpen(true),
+        setModalError: setRouteModalError,
+        notifyError,
+      });
+    },
+    [notifyError],
+  );
+
+  const reportQcFailure = useCallback(
+    (message) => {
+      reportModalSaveFailure({
+        message,
+        reopenModal: () => setQcModalOpen(true),
+        setModalError: setQcModalError,
+        notifyError,
+      });
+    },
+    [notifyError],
+  );
 
   // Load samples for this page
   useEffect(() => {
@@ -293,6 +385,142 @@ function MNTDAliquotingPage({
     };
   }, [childSamples]);
 
+  const selectedChildLabelMap = useMemo(() => {
+    const map = {};
+    childSamples.forEach((sample) => {
+      if (selectedChildIds.includes(sample.id)) {
+        map[sample.id] =
+          sample.externalId || sample.accessionNumber || sample.id;
+      }
+    });
+    return map;
+  }, [childSamples, selectedChildIds]);
+
+  const createDefaultAssayPlate = useCallback((plateNumber = 1) => {
+    return {
+      id: `assay-plate-${Date.now()}`,
+      name: `96-Well Plate #${plateNumber}`,
+      rows: 8,
+      columns: 12,
+      capacity: 96,
+      assignedCount: 0,
+      assignments: {},
+      createdAt: new Date().toISOString(),
+    };
+  }, []);
+
+  const clearAssayPlateVisualState = useCallback(() => {
+    setAssayPlates((prev) =>
+      prev.map((plate) => ({
+        ...plate,
+        assignments: {},
+        assignedCount: 0,
+      })),
+    );
+  }, []);
+
+  const syncAssayPlatesFromWellAssignments = useCallback(
+    (assignments, plateId = selectedAssayPlateId) => {
+      if (!plateId) {
+        return;
+      }
+      setAssayPlates((prev) =>
+        prev.map((plate) => {
+          if (plate.id !== plateId) {
+            return plate;
+          }
+          const inverse = {};
+          Object.entries(assignments || {}).forEach(([sampleId, coord]) => {
+            if (coord) {
+              inverse[coord] = sampleId;
+            }
+          });
+          return {
+            ...plate,
+            assignments: inverse,
+            assignedCount: Object.keys(inverse).length,
+          };
+        }),
+      );
+    },
+    [selectedAssayPlateId],
+  );
+
+  const autoAssignAssayWells = useCallback(
+    (
+      plateId = selectedAssayPlateId,
+      platesSnapshot = assayPlates,
+      currentAssignments = assayWellAssignments,
+    ) => {
+      const plate = platesSnapshot.find((p) => p.id === plateId);
+      if (!plate || selectedChildIds.length === 0) {
+        return;
+      }
+
+      const assignments = { ...currentAssignments };
+      const occupied = new Set(Object.values(assignments));
+      let index = 0;
+      const capacity = plate.rows * plate.columns;
+      const rowLetters = (row) => String.fromCharCode(65 + row);
+
+      for (const sampleId of selectedChildIds) {
+        if (assignments[sampleId]) {
+          continue;
+        }
+        while (index < capacity) {
+          const row = Math.floor(index / plate.columns);
+          const col = (index % plate.columns) + 1;
+          const coord = `${rowLetters(row)}${col}`;
+          index += 1;
+          if (!occupied.has(coord)) {
+            assignments[sampleId] = coord;
+            occupied.add(coord);
+            break;
+          }
+        }
+      }
+
+      setAssayWellAssignments(assignments);
+      syncAssayPlatesFromWellAssignments(assignments, plate.id);
+    },
+    [
+      assayPlates,
+      selectedAssayPlateId,
+      selectedChildIds,
+      assayWellAssignments,
+      syncAssayPlatesFromWellAssignments,
+    ],
+  );
+
+  useEffect(() => {
+    if (
+      !routeModalOpen ||
+      !selectedAssayPlateId ||
+      selectedChildIds.length === 0
+    ) {
+      return;
+    }
+
+    const plate = assayPlates.find((p) => p.id === selectedAssayPlateId);
+    if (!plate) {
+      return;
+    }
+
+    const needsAssignment = selectedChildIds.some(
+      (id) => !assayWellAssignments[id],
+    );
+    if (needsAssignment) {
+      autoAssignAssayWells(selectedAssayPlateId, assayPlates);
+    }
+  }, [
+    routeModalOpen,
+    selectedAssayPlateId,
+    selectedChildIds,
+    assayPlates,
+    assayWellAssignments,
+    autoAssignAssayWells,
+  ]);
+
   // Handle create aliquots modal open
   const handleOpenCreateModal = useCallback(() => {
     if (selectedParentIds.length === 0) {
@@ -304,6 +532,8 @@ function MNTDAliquotingPage({
       );
       return;
     }
+    setCreateModalError(null);
+    setError(null);
     setCreateModalOpen(true);
   }, [selectedParentIds, intl]);
 
@@ -312,7 +542,7 @@ function MNTDAliquotingPage({
     if (selectedParentIds.length === 0 || !hasRealPageId) return;
 
     setCreating(true);
-    setError(null);
+    setCreateModalError(null);
 
     // Build request with aliquot-specific data
     const requestData = {
@@ -334,10 +564,11 @@ function MNTDAliquotingPage({
       JSON.stringify(requestData),
       (response) => {
         setCreating(false);
-        setCreateModalOpen(false);
 
         if (response && response.success) {
-          setSuccess(
+          setCreateModalOpen(false);
+          setCreateModalError(null);
+          notifySuccess(
             intl.formatMessage(
               {
                 id: "notebook.mntd.aliquoting.createSuccess",
@@ -352,7 +583,12 @@ function MNTDAliquotingPage({
             onProgressUpdate();
           }
         } else {
-          setError(response?.error || "Failed to create aliquot samples.");
+          reportCreateFailure(
+            extractApiErrorMessage(
+              response,
+              "Failed to create aliquot samples.",
+            ),
+          );
         }
       },
     );
@@ -370,6 +606,8 @@ function MNTDAliquotingPage({
     intl,
     isDbs,
     initialDbsSpots,
+    reportCreateFailure,
+    notifySuccess,
   ]);
 
   // Handle view children for a parent
@@ -393,6 +631,8 @@ function MNTDAliquotingPage({
 
   // Handle bulk import modal open
   const handleOpenBulkImportModal = useCallback(() => {
+    setBulkImportModalError(null);
+    setError(null);
     setBulkImportModalOpen(true);
     setImportFile(null);
     setImportPreview(null);
@@ -429,7 +669,7 @@ function MNTDAliquotingPage({
     if (!importFile || !hasRealPageId) return;
 
     setImporting(true);
-    setError(null);
+    setBulkImportModalError(null);
 
     const formData = new FormData();
     formData.append("file", importFile);
@@ -440,10 +680,11 @@ function MNTDAliquotingPage({
       formData,
       (response) => {
         setImporting(false);
-        setBulkImportModalOpen(false);
 
         if (response && response.success) {
-          setSuccess(
+          setBulkImportModalOpen(false);
+          setBulkImportModalError(null);
+          notifySuccess(
             intl.formatMessage(
               {
                 id: "notebook.mntd.aliquoting.importSuccess",
@@ -458,7 +699,9 @@ function MNTDAliquotingPage({
             onProgressUpdate();
           }
         } else {
-          setError(response?.error || "Failed to import aliquots.");
+          reportBulkImportFailure(
+            extractApiErrorMessage(response, "Failed to import aliquots."),
+          );
         }
       },
       true, // isFormData
@@ -471,6 +714,8 @@ function MNTDAliquotingPage({
     loadPageSamples,
     onProgressUpdate,
     intl,
+    reportBulkImportFailure,
+    notifySuccess,
   ]);
 
   // Handle route to analyzer modal open
@@ -484,11 +729,31 @@ function MNTDAliquotingPage({
       );
       return;
     }
-    if (assayPlates.length > 0 && !selectedAssayPlateId) {
-      setSelectedAssayPlateId(assayPlates[0].id);
+
+    setRouteModalError(null);
+    setError(null);
+    setAssayWellAssignments({});
+
+    if (assayPlates.length === 0) {
+      const newPlate = createDefaultAssayPlate(1);
+      setAssayPlates([newPlate]);
+      setSelectedAssayPlateId(newPlate.id);
+    } else {
+      clearAssayPlateVisualState();
+      if (!selectedAssayPlateId) {
+        setSelectedAssayPlateId(assayPlates[0].id);
+      }
     }
+
     setRouteModalOpen(true);
-  }, [selectedChildIds, intl, assayPlates, selectedAssayPlateId]);
+  }, [
+    selectedChildIds,
+    intl,
+    assayPlates,
+    selectedAssayPlateId,
+    createDefaultAssayPlate,
+    clearAssayPlateVisualState,
+  ]);
 
   // Handle route to analyzer
   const handleRouteToAnalyzer = useCallback(() => {
@@ -499,7 +764,7 @@ function MNTDAliquotingPage({
       (p) => p.id === selectedAssayPlateId,
     );
     if (!selectedPlate) {
-      setError(
+      reportRouteFailure(
         intl.formatMessage({
           id: "notebook.mntd.aliquoting.selectPlate",
           defaultMessage:
@@ -509,8 +774,22 @@ function MNTDAliquotingPage({
       return;
     }
 
+    const unassignedSamples = selectedChildIds.filter(
+      (id) => !assayWellAssignments[id],
+    );
+    if (unassignedSamples.length > 0) {
+      reportRouteFailure(
+        intl.formatMessage({
+          id: "notebook.mntd.aliquoting.assignAllWells",
+          defaultMessage:
+            "Please assign all selected samples to wells (use Auto-Assign or click wells).",
+        }),
+      );
+      return;
+    }
+
     setRouting(true);
-    setError(null);
+    setRouteModalError(null);
 
     const routeRequest = {
       sampleIds: selectedChildIds.map((id) => parseInt(id, 10)),
@@ -522,6 +801,7 @@ function MNTDAliquotingPage({
         rows: selectedPlate.rows,
         columns: selectedPlate.columns,
       },
+      wellAssignments: assayWellAssignments,
     };
 
     postToOpenElisServerJsonResponse(
@@ -529,10 +809,12 @@ function MNTDAliquotingPage({
       JSON.stringify(routeRequest),
       (response) => {
         setRouting(false);
-        setRouteModalOpen(false);
 
         if (response && response.success) {
-          setSuccess(
+          setRouteModalOpen(false);
+          setRouteModalError(null);
+          setAssayWellAssignments({});
+          notifySuccess(
             intl.formatMessage(
               {
                 id: "notebook.mntd.aliquoting.routeSuccess",
@@ -548,7 +830,9 @@ function MNTDAliquotingPage({
             onProgressUpdate();
           }
         } else {
-          setError(response?.error || "Failed to route samples.");
+          reportRouteFailure(
+            extractApiErrorMessage(response, "Failed to route samples."),
+          );
         }
       },
     );
@@ -562,6 +846,9 @@ function MNTDAliquotingPage({
     loadPageSamples,
     onProgressUpdate,
     intl,
+    assayWellAssignments,
+    reportRouteFailure,
+    notifySuccess,
   ]);
 
   // Handle status change for aliquoting completion
@@ -622,7 +909,7 @@ function MNTDAliquotingPage({
       }),
       (status) => {
         if (status === 200) {
-          setSuccess(
+          notifySuccess(
             intl.formatMessage(
               {
                 id: "notebook.mntd.aliquoting.markCompleted",
@@ -649,6 +936,7 @@ function MNTDAliquotingPage({
     loadPageSamples,
     onProgressUpdate,
     intl,
+    notifySuccess,
   ]);
 
   // E-Signature Integration (21 CFR Part 11)
@@ -738,6 +1026,8 @@ function MNTDAliquotingPage({
     setProcessingQcRemarks("");
     setMarkForReExtraction(false);
     setMarkForReRun(false);
+    setQcModalError(null);
+    setError(null);
     setQcModalOpen(true);
   }, [selectedChildIds, intl]);
 
@@ -747,7 +1037,7 @@ function MNTDAliquotingPage({
 
     // Validate fail action if failed
     if (processingQcResult === "Fail" && !processingQcFailAction) {
-      setError(
+      reportQcFailure(
         intl.formatMessage({
           id: "notebook.mntd.aliquoting.qc.selectFailAction",
           defaultMessage: "Please select an action for failed samples.",
@@ -757,7 +1047,7 @@ function MNTDAliquotingPage({
     }
 
     setQcProcessing(true);
-    setError(null);
+    setQcModalError(null);
 
     const qcData = {
       processingQcResult: processingQcResult,
@@ -781,7 +1071,8 @@ function MNTDAliquotingPage({
         setQcProcessing(false);
         if (status === 200) {
           setQcModalOpen(false);
-          setSuccess(
+          setQcModalError(null);
+          notifySuccess(
             intl.formatMessage(
               {
                 id: "notebook.mntd.aliquoting.qc.success",
@@ -796,7 +1087,7 @@ function MNTDAliquotingPage({
             onProgressUpdate();
           }
         } else {
-          setError("Failed to apply QC result. Please try again.");
+          reportQcFailure("Failed to apply QC result. Please try again.");
         }
       },
     );
@@ -812,6 +1103,8 @@ function MNTDAliquotingPage({
     loadPageSamples,
     onProgressUpdate,
     intl,
+    reportQcFailure,
+    notifySuccess,
   ]);
 
   // Render children action button
@@ -976,17 +1269,6 @@ function MNTDAliquotingPage({
           hideCloseButton={false}
           lowContrast
           onClose={() => setError(null)}
-          style={{ marginBottom: "1rem" }}
-        />
-      )}
-
-      {success && (
-        <InlineNotification
-          kind="success"
-          title={success}
-          hideCloseButton={false}
-          lowContrast
-          onClose={() => setSuccess(null)}
           style={{ marginBottom: "1rem" }}
         />
       )}
@@ -1294,7 +1576,10 @@ function MNTDAliquotingPage({
           id: "label.cancel",
           defaultMessage: "Cancel",
         })}
-        onRequestClose={() => setCreateModalOpen(false)}
+        onRequestClose={() => {
+          setCreateModalOpen(false);
+          setCreateModalError(null);
+        }}
         onRequestSubmit={() =>
           triggerEsigForSave(handleCreateAliquots, () =>
             setCreateModalOpen(true),
@@ -1304,6 +1589,10 @@ function MNTDAliquotingPage({
         size="md"
       >
         <div style={{ marginBottom: "1rem" }}>
+          <ModalSaveErrorNotification
+            message={createModalError}
+            onClose={() => setCreateModalError(null)}
+          />
           <p>
             <FormattedMessage
               id="notebook.mntd.aliquoting.modal.description"
@@ -1686,12 +1975,19 @@ function MNTDAliquotingPage({
           id: "label.cancel",
           defaultMessage: "Cancel",
         })}
-        onRequestClose={() => setBulkImportModalOpen(false)}
+        onRequestClose={() => {
+          setBulkImportModalOpen(false);
+          setBulkImportModalError(null);
+        }}
         onRequestSubmit={handleExecuteBulkImport}
         primaryButtonDisabled={importing || !importFile}
         size="lg"
       >
         <div style={{ marginBottom: "1rem" }}>
+          <ModalSaveErrorNotification
+            message={bulkImportModalError}
+            onClose={() => setBulkImportModalError(null)}
+          />
           <p>
             <FormattedMessage
               id="notebook.mntd.aliquoting.bulkImport.description"
@@ -1882,7 +2178,12 @@ function MNTDAliquotingPage({
           id: "label.cancel",
           defaultMessage: "Cancel",
         })}
-        onRequestClose={() => setRouteModalOpen(false)}
+        onRequestClose={() => {
+          setRouteModalOpen(false);
+          setRouteModalError(null);
+          setAssayWellAssignments({});
+          clearAssayPlateVisualState();
+        }}
         onRequestSubmit={() =>
           triggerEsigForSave(handleRouteToAnalyzer, () =>
             setRouteModalOpen(true),
@@ -1892,10 +2193,14 @@ function MNTDAliquotingPage({
         size="lg"
       >
         <div style={{ marginBottom: "1rem" }}>
+          <ModalSaveErrorNotification
+            message={routeModalError}
+            onClose={() => setRouteModalError(null)}
+          />
           <p>
             <FormattedMessage
               id="notebook.mntd.aliquoting.route.description"
-              defaultMessage="Route {count} aliquot sample(s) to an analyzer plate for internal analysis. Wells will be auto-assigned in row-major order (A1, A2, ..., A12, B1, ...)."
+              defaultMessage="Route {count} aliquot sample(s) to an analyzer plate. One sample uses one well (e.g. A1); the plate can hold more if needed."
               values={{ count: selectedChildIds.length }}
             />
           </p>
@@ -1907,6 +2212,13 @@ function MNTDAliquotingPage({
           selectedPlateId={selectedAssayPlateId}
           onPlateSelect={setSelectedAssayPlateId}
           sampleCount={selectedChildIds.length}
+          selectedSampleIds={selectedChildIds}
+          wellAssignments={assayWellAssignments}
+          onWellAssignmentsChange={(assignments) => {
+            setAssayWellAssignments(assignments);
+            syncAssayPlatesFromWellAssignments(assignments);
+          }}
+          sampleLabels={selectedChildLabelMap}
         />
 
         <p
@@ -1918,7 +2230,7 @@ function MNTDAliquotingPage({
         >
           <FormattedMessage
             id="notebook.mntd.aliquoting.route.help"
-            defaultMessage="Create or select an analyzer plate above. Samples will be automatically assigned to available wells."
+            defaultMessage="Select a sample in the table below the plate, then click a well to place or move it. Use Auto-Assign to refill row-major order (A1, A2, ..., A12, B1, ...)."
           />
         </p>
       </Modal>
@@ -1938,7 +2250,10 @@ function MNTDAliquotingPage({
           id: "label.cancel",
           defaultMessage: "Cancel",
         })}
-        onRequestClose={() => setQcModalOpen(false)}
+        onRequestClose={() => {
+          setQcModalOpen(false);
+          setQcModalError(null);
+        }}
         onRequestSubmit={() =>
           triggerEsigForSave(handleProcessingQcSubmit, () =>
             setQcModalOpen(true),
@@ -1948,6 +2263,10 @@ function MNTDAliquotingPage({
         size="md"
       >
         <div style={{ marginBottom: "1rem" }}>
+          <ModalSaveErrorNotification
+            message={qcModalError}
+            onClose={() => setQcModalError(null)}
+          />
           <p>
             <FormattedMessage
               id="notebook.mntd.aliquoting.qc.description"

@@ -398,26 +398,26 @@ function BulkOrderModal({
                     </p>
                   ) : (
                     availableTests.map((test) => (
-                    <div
-                      key={test.id}
-                      className="test-checkbox-item"
-                      onClick={() => handleTestToggle(test.id)}
-                      style={{ cursor: "pointer" }}
-                    >
-                      <Checkbox
-                        id={`test-${test.id}`}
-                        labelText={
-                          test.value ||
-                          test.localizedTestName ||
-                          test.testName ||
-                          test.name ||
-                          "Unknown Test"
-                        }
-                        checked={selectedTests.includes(String(test.id))}
-                        onChange={() => {}}
-                      />
-                    </div>
-                  ))
+                      <div
+                        key={test.id}
+                        className="test-checkbox-item"
+                        onClick={() => handleTestToggle(test.id)}
+                        style={{ cursor: "pointer" }}
+                      >
+                        <Checkbox
+                          id={`test-${test.id}`}
+                          labelText={
+                            test.value ||
+                            test.localizedTestName ||
+                            test.testName ||
+                            test.name ||
+                            "Unknown Test"
+                          }
+                          checked={selectedTests.includes(String(test.id))}
+                          onChange={() => {}}
+                        />
+                      </div>
+                    ))
                   )}
                 </div>
               )}

@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef, useCallback, useContext } from "react";
 import {
   Grid,
   Column,
@@ -27,6 +27,10 @@ import {
 } from "../../../esignature";
 import PermissionGate from "../../../security/PermissionGate";
 import useStagePersonas from "../../../../hooks/useStagePersonas";
+import { NotificationContext } from "../../../layout/Layout";
+import { NotificationKinds } from "../../../common/CustomNotification";
+import ModalSaveErrorNotification from "./ModalSaveErrorNotification";
+import { reportModalSaveFailure } from "./mntdModalErrorHelpers";
 
 /**
  * MNTDReceptionVerificationPage - Page 2 of the MNTD workflow.
@@ -55,6 +59,8 @@ function MNTDReceptionVerificationPage({
   const intl = useIntl();
   const stageEditRoles = useStagePersonas("mntd", pageData);
   const componentMounted = useRef(false);
+  const { addNotification, setNotificationVisible } =
+    useContext(NotificationContext);
 
   // State for samples
   const [samples, setSamples] = useState([]);
@@ -66,6 +72,7 @@ function MNTDReceptionVerificationPage({
 
   // Bulk apply modal state
   const [bulkApplyModalOpen, setBulkApplyModalOpen] = useState(false);
+  const [bulkApplyModalError, setBulkApplyModalError] = useState(null);
   const [isBulkApplying, setIsBulkApplying] = useState(false);
 
   // Bulk apply form values - Simplified: direct Pass/Fail selection
@@ -152,10 +159,41 @@ function MNTDReceptionVerificationPage({
     });
   };
 
+  const reopenBulkApplyModal = useCallback(() => {
+    setBulkApplyModalOpen(true);
+  }, []);
+
+  const notifyError = useCallback(
+    (message) => {
+      addNotification({
+        kind: NotificationKinds.error,
+        title: intl.formatMessage({
+          id: "notification.error",
+          defaultMessage: "Error",
+        }),
+        message,
+      });
+      setNotificationVisible(true);
+    },
+    [addNotification, intl, setNotificationVisible],
+  );
+
+  const reportBulkApplyFailure = useCallback(
+    (message) => {
+      reportModalSaveFailure({
+        message,
+        reopenModal: reopenBulkApplyModal,
+        setModalError: setBulkApplyModalError,
+        notifyError,
+      });
+    },
+    [notifyError, reopenBulkApplyModal],
+  );
+
   // Handle bulk apply
   const handleBulkApply = useCallback(() => {
     if (selectedSampleIds.length === 0) {
-      setError(
+      reportBulkApplyFailure(
         intl.formatMessage({
           id: "notebook.page.mntd.error.noSelection",
           defaultMessage: "Please select samples to apply values to.",
@@ -165,7 +203,7 @@ function MNTDReceptionVerificationPage({
     }
 
     if (!hasRealPageId) {
-      setError(
+      reportBulkApplyFailure(
         intl.formatMessage({
           id: "notebook.page.mntd.error.noPage",
           defaultMessage:
@@ -176,7 +214,7 @@ function MNTDReceptionVerificationPage({
     }
 
     setIsBulkApplying(true);
-    setError(null);
+    setBulkApplyModalError(null);
 
     // Prepare the data to apply
     const data = {};
@@ -197,13 +235,13 @@ function MNTDReceptionVerificationPage({
 
     // Check if any data was entered
     if (Object.keys(data).length === 0) {
-      setError(
+      setIsBulkApplying(false);
+      reportBulkApplyFailure(
         intl.formatMessage({
           id: "notebook.page.mntd.error.noData",
           defaultMessage: "Please enter at least one value to apply.",
         }),
       );
-      setIsBulkApplying(false);
       return;
     }
 
@@ -228,13 +266,14 @@ function MNTDReceptionVerificationPage({
             ),
           );
           setBulkApplyModalOpen(false);
+          setBulkApplyModalError(null);
           loadPageSamples();
           setSelectedSampleIds([]);
           if (onProgressUpdate) {
             onProgressUpdate();
           }
         } else {
-          setError(
+          reportBulkApplyFailure(
             intl.formatMessage({
               id: "notebook.page.mntd.error.apply",
               defaultMessage: "Failed to apply values. Please try again.",
@@ -251,6 +290,7 @@ function MNTDReceptionVerificationPage({
     intl,
     loadPageSamples,
     onProgressUpdate,
+    reportBulkApplyFailure,
   ]);
 
   // Handle marking samples as verified (QC complete)
@@ -557,6 +597,7 @@ function MNTDReceptionVerificationPage({
           renderIcon={Edit}
           onClick={() => {
             resetBulkApplyValues();
+            setBulkApplyModalError(null);
             setBulkApplyModalOpen(true);
           }}
           disabled={selectedSampleIds.length === 0}
@@ -861,7 +902,10 @@ function MNTDReceptionVerificationPage({
       {/* Bulk Apply Modal */}
       <Modal
         open={bulkApplyModalOpen}
-        onRequestClose={() => setBulkApplyModalOpen(false)}
+        onRequestClose={() => {
+          setBulkApplyModalOpen(false);
+          setBulkApplyModalError(null);
+        }}
         modalHeading={intl.formatMessage({
           id: "notebook.mntd.bulkApply.title",
           defaultMessage: "Laboratory Reception & Verification",
@@ -892,12 +936,19 @@ function MNTDReceptionVerificationPage({
           defaultMessage: "Cancel",
         })}
         onRequestSubmit={openBulkApplySignatureModal}
-        onSecondarySubmit={() => setBulkApplyModalOpen(false)}
+        onSecondarySubmit={() => {
+          setBulkApplyModalOpen(false);
+          setBulkApplyModalError(null);
+        }}
         size="lg"
         primaryButtonDisabled={isBulkApplying || !bulkApplyValues.qcResult}
         danger={bulkApplyValues.qcResult === "Fail"}
       >
         <div className="qc-bulk-apply-modal">
+          <ModalSaveErrorNotification
+            message={bulkApplyModalError}
+            onClose={() => setBulkApplyModalError(null)}
+          />
           <p className="modal-description">
             <FormattedMessage
               id="notebook.mntd.bulkApply.description"

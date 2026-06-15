@@ -1,4 +1,10 @@
-import React, { useState, useCallback, useEffect, useContext, useMemo } from "react";
+import React, {
+  useState,
+  useCallback,
+  useEffect,
+  useContext,
+  useMemo,
+} from "react";
 import {
   Modal,
   FileUploader,
@@ -835,10 +841,10 @@ function ManifestUploadModal({
         const { duplicateMessages, hardErrors } = partitionDuplicateMessages(
           backendRow?.errors || [],
         );
-        const duplicateIssue = getDuplicateIssueType(backendRow?.duplicateIssue, [
-          ...(backendRow?.warnings || []),
-          ...duplicateMessages,
-        ]);
+        const duplicateIssue = getDuplicateIssueType(
+          backendRow?.duplicateIssue,
+          [...(backendRow?.warnings || []), ...duplicateMessages],
+        );
         const isDuplicate = duplicateIssue !== DUPLICATE_ISSUE.NONE;
 
         hardErrors.forEach((errMsg) => {
@@ -873,7 +879,10 @@ function ManifestUploadModal({
         };
       });
 
-      const duplicatePreviews = computeDuplicateImportPreviews(provisionalRows, {});
+      const duplicatePreviews = computeDuplicateImportPreviews(
+        provisionalRows,
+        {},
+      );
       const updatedData = provisionalRows.map((row) => {
         if (!row._isDuplicate) {
           return row;
@@ -1261,8 +1270,12 @@ function ManifestUploadModal({
   const tableRows = parsedData.map((row) => {
     const hasNonDuplicateWarnings = (row._backendWarnings || []).some(
       (warningMsg) =>
-        !String(warningMsg).toLowerCase().startsWith("duplicate sample id in manifest:") &&
-        !String(warningMsg).toLowerCase().startsWith("sample id already exists:"),
+        !String(warningMsg)
+          .toLowerCase()
+          .startsWith("duplicate sample id in manifest:") &&
+        !String(warningMsg)
+          .toLowerCase()
+          .startsWith("sample id already exists:"),
     );
     let status = "error";
     if (row._valid) {
@@ -1311,7 +1324,10 @@ function ManifestUploadModal({
         },
       );
     }
-    if (hardErrorCount > 0 || duplicateRows.some((row) => !duplicateRowApprovals[row._rowNumber])) {
+    if (
+      hardErrorCount > 0 ||
+      duplicateRows.some((row) => !duplicateRowApprovals[row._rowNumber])
+    ) {
       return intl.formatMessage(
         {
           id: "biorepository.manifest.button.import",
@@ -1485,7 +1501,8 @@ function ManifestUploadModal({
                 "{importedCount} samples registered in intake successfully.{skippedMessage}",
             },
             {
-              importedCount: importResult?.registeredCount ?? importableSampleCount,
+              importedCount:
+                importResult?.registeredCount ?? importableSampleCount,
               skippedMessage:
                 (importResult?.failedCount ?? 0) > 0
                   ? ` ${importResult.failedCount} sample(s) could not be imported.`
@@ -1903,7 +1920,9 @@ function ManifestUploadModal({
                 )}
               </Tag>
             )}
-            {validationWarnings.some((warning) => warning.field === "sampleType") && (
+            {validationWarnings.some(
+              (warning) => warning.field === "sampleType",
+            ) && (
               <Tag type="warm-gray" style={{ marginLeft: "0.5rem" }}>
                 <Warning size={16} style={{ marginRight: "0.25rem" }} />
                 <FormattedMessage

@@ -87,9 +87,9 @@ public interface BioSampleService extends BaseObjectService<BioSample, Integer> 
     BioSample createForSampleItem(SampleItem sampleItem, BioSample bioSample);
 
     /**
-     * Return an existing BioSample for a stored SampleItem, creating a minimal STORED
-     * extension when the specimen is physically assigned in storage but has no
-     * BioSample row yet.
+     * Return an existing BioSample for a stored SampleItem, creating a minimal
+     * STORED extension when the specimen is physically assigned in storage but has
+     * no BioSample row yet.
      *
      * @param sampleItem the persisted sample item
      * @param sysUserId  optional audit user id

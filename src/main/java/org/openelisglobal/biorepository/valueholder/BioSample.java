@@ -193,7 +193,8 @@ public class BioSample extends BaseObject<Integer> {
 
     /**
      * Owning department ({@code test_section.id}) for department isolation. Project
-     * metadata may help with labels and filters, but this field is the data boundary.
+     * metadata may help with labels and filters, but this field is the data
+     * boundary.
      */
     @Column(name = "department_test_section_id")
     private Integer departmentTestSectionId;

@@ -585,11 +585,9 @@ public class BioSampleRestControllerManifestImportTest extends BaseWebContextSen
         samples.add(createValidSampleDTO(duplicateBarcode));
         request.setSamples(samples);
 
-        MvcResult result = mockMvc
-                .perform(post("/rest/biorepository/sample/register-bulk").contentType(MediaType.APPLICATION_JSON)
-                        .sessionAttr("userSessionData", userSessionData)
-                        .content(objectMapper.writeValueAsString(request)))
-                .andExpect(status().isOk()).andReturn();
+        MvcResult result = mockMvc.perform(post("/rest/biorepository/sample/register-bulk")
+                .contentType(MediaType.APPLICATION_JSON).sessionAttr("userSessionData", userSessionData)
+                .content(objectMapper.writeValueAsString(request))).andExpect(status().isOk()).andReturn();
 
         JsonNode response = objectMapper.readTree(result.getResponse().getContentAsString());
 
@@ -616,11 +614,9 @@ public class BioSampleRestControllerManifestImportTest extends BaseWebContextSen
         request.setSamples(samples);
         request.setDuplicateResolution(duplicateResolution);
 
-        MvcResult result = mockMvc
-                .perform(post("/rest/biorepository/sample/register-bulk").contentType(MediaType.APPLICATION_JSON)
-                        .sessionAttr("userSessionData", userSessionData)
-                        .content(objectMapper.writeValueAsString(request)))
-                .andExpect(status().isOk()).andReturn();
+        MvcResult result = mockMvc.perform(post("/rest/biorepository/sample/register-bulk")
+                .contentType(MediaType.APPLICATION_JSON).sessionAttr("userSessionData", userSessionData)
+                .content(objectMapper.writeValueAsString(request))).andExpect(status().isOk()).andReturn();
 
         JsonNode response = objectMapper.readTree(result.getResponse().getContentAsString());
 

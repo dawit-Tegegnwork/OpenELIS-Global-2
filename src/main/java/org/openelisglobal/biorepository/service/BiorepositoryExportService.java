@@ -135,4 +135,9 @@ public interface BiorepositoryExportService {
      * Export QC inspection records for a specific QC batch.
      */
     byte[] exportQcBatchToPDF(String qcBatchId) throws IOException;
+
+    /**
+     * Export blank printable QC worksheet for a generated batch manifest.
+     */
+    byte[] exportQcWorksheetToPDF(String qcBatchId) throws IOException;
 }

@@ -1,6 +1,5 @@
 package org.openelisglobal.biorepository.service;
 
-import jakarta.servlet.http.HttpServletRequest;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
 import com.itextpdf.text.Document;
@@ -13,6 +12,7 @@ import com.itextpdf.text.Phrase;
 import com.itextpdf.text.pdf.PdfPCell;
 import com.itextpdf.text.pdf.PdfPTable;
 import com.itextpdf.text.pdf.PdfWriter;
+import jakarta.servlet.http.HttpServletRequest;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.OutputStreamWriter;
@@ -29,9 +29,9 @@ import org.apache.poi.ss.usermodel.Row;
 import org.apache.poi.ss.usermodel.Sheet;
 import org.apache.poi.ss.usermodel.Workbook;
 import org.apache.poi.xssf.usermodel.XSSFWorkbook;
+import org.openelisglobal.biorepository.valueholder.BiorepositoryQCInspection;
 import org.openelisglobal.biorepository.valueholder.ChainOfCustodyLog;
 import org.openelisglobal.biorepository.valueholder.ChainOfCustodyLog.CustodyAction;
-import org.openelisglobal.biorepository.valueholder.BiorepositoryQCInspection;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -52,6 +52,9 @@ public class BiorepositoryExportServiceImpl implements BiorepositoryExportServic
 
     @Autowired
     private BiorepositoryQCInspectionService qcInspectionService;
+
+    @Autowired
+    private BiorepositoryQcRoundService qcRoundService;
 
     private static final String CSV_SEPARATOR = ",";
     private static final String CSV_QUOTE = "\"";
@@ -223,30 +226,30 @@ public class BiorepositoryExportServiceImpl implements BiorepositoryExportServic
             Map<String, Object> qc = castMap(dashboardData.get("qcCompliance"));
             Map<String, Object> retrieval = castMap(dashboardData.get("retrievalStats"));
 
-            addMetricTable(document, "Storage Capacity", capacity, bodyFont, sectionFont, List.of(
-                    metricRow("Total Devices", capacity.get("totalDevices")),
-                    metricRow("Total Samples Stored", capacity.get("totalSamplesStored")),
-                    metricRow("Pending Storage", capacity.get("pendingStorage")),
-                    metricRow("Average Utilization %", capacity.get("averageUtilization"))));
+            addMetricTable(document, "Storage Capacity", capacity, bodyFont, sectionFont,
+                    List.of(metricRow("Total Devices", capacity.get("totalDevices")),
+                            metricRow("Total Samples Stored", capacity.get("totalSamplesStored")),
+                            metricRow("Pending Storage", capacity.get("pendingStorage")),
+                            metricRow("Average Utilization %", capacity.get("averageUtilization"))));
 
-            addMetricTable(document, "Sample Aging", aging, bodyFont, sectionFont, List.of(
-                    metricRow("Total Active Samples", aging.get("total")),
-                    metricRow("Expiring within 30 days", aging.get("expiring30Days")),
-                    metricRow("Expiring within 60 days", aging.get("expiring60Days")),
-                    metricRow("Expiring within 90 days", aging.get("expiring90Days")),
-                    metricRow("Expired Samples", aging.get("expired"))));
+            addMetricTable(document, "Sample Aging", aging, bodyFont, sectionFont,
+                    List.of(metricRow("Total Active Samples", aging.get("total")),
+                            metricRow("Expiring within 30 days", aging.get("expiring30Days")),
+                            metricRow("Expiring within 60 days", aging.get("expiring60Days")),
+                            metricRow("Expiring within 90 days", aging.get("expiring90Days")),
+                            metricRow("Expired Samples", aging.get("expired"))));
 
-            addMetricTable(document, "QC Compliance", qc, bodyFont, sectionFont, List.of(
-                    metricRow("Total Inspections", qc.get("totalInspections")),
-                    metricRow("Passed Inspections", qc.get("passedInspections")),
-                    metricRow("Failed Inspections", qc.get("failedInspections")),
-                    metricRow("Compliance Rate %", qc.get("complianceRate"))));
+            addMetricTable(document, "QC Compliance", qc, bodyFont, sectionFont,
+                    List.of(metricRow("Total Inspections", qc.get("totalInspections")),
+                            metricRow("Passed Inspections", qc.get("passedInspections")),
+                            metricRow("Failed Inspections", qc.get("failedInspections")),
+                            metricRow("Compliance Rate %", qc.get("complianceRate"))));
 
-            addMetricTable(document, "Retrieval Statistics", retrieval, bodyFont, sectionFont, List.of(
-                    metricRow("Total Requests", retrieval.get("totalRequests")),
-                    metricRow("Pending Requests", retrieval.get("pendingRequests")),
-                    metricRow("Rejected Requests", retrieval.get("rejectedRequests")),
-                    metricRow("Completed Requests", retrieval.get("completedRequests"))));
+            addMetricTable(document, "Retrieval Statistics", retrieval, bodyFont, sectionFont,
+                    List.of(metricRow("Total Requests", retrieval.get("totalRequests")),
+                            metricRow("Pending Requests", retrieval.get("pendingRequests")),
+                            metricRow("Rejected Requests", retrieval.get("rejectedRequests")),
+                            metricRow("Completed Requests", retrieval.get("completedRequests"))));
 
             document.close();
             return baos.toByteArray();
@@ -468,7 +471,8 @@ public class BiorepositoryExportServiceImpl implements BiorepositoryExportServic
             addHeaderCell(table, "Notes", headerFont);
 
             for (ChainOfCustodyLog log : logs) {
-                addBodyCell(table, log.getActionTimestamp() != null ? log.getActionTimestamp().toString() : "", bodyFont);
+                addBodyCell(table, log.getActionTimestamp() != null ? log.getActionTimestamp().toString() : "",
+                        bodyFont);
                 addBodyCell(table,
                         log.getSampleItem() != null && log.getSampleItem().getExternalId() != null
                                 ? log.getSampleItem().getExternalId()
@@ -509,15 +513,13 @@ public class BiorepositoryExportServiceImpl implements BiorepositoryExportServic
         writer.println(
                 "QC Batch ID,Inspection ID,Date Time,Technician ID,Inspector Name,BioSample ID,Accession Number,Expected Coordinate,Observed Status,QC Outcome,Comment");
         for (BiorepositoryQCInspection inspection : inspections) {
-            writer.println(String.join(CSV_SEPARATOR,
-                    escapeCSV(safe(inspection.getQcBatchId())),
+            writer.println(String.join(CSV_SEPARATOR, escapeCSV(safe(inspection.getQcBatchId())),
                     escapeCSV(String.valueOf(inspection.getId())),
                     escapeCSV(inspection.getInspectionDate() != null ? inspection.getInspectionDate().toString() : ""),
-                    escapeCSV(safe(inspection.getSysUserId())),
-                    escapeCSV(safe(inspection.getInspectorName())),
-                    escapeCSV(inspection.getBioSample() != null ? String.valueOf(inspection.getBioSample().getId()) : ""),
-                    escapeCSV(getAccessionNumber(inspection)),
-                    escapeCSV(buildExpectedCoordinate(inspection)),
+                    escapeCSV(safe(inspection.getSysUserId())), escapeCSV(safe(inspection.getInspectorName())),
+                    escapeCSV(
+                            inspection.getBioSample() != null ? String.valueOf(inspection.getBioSample().getId()) : ""),
+                    escapeCSV(getAccessionNumber(inspection)), escapeCSV(buildExpectedCoordinate(inspection)),
                     escapeCSV(buildObservedStatus(inspection)),
                     escapeCSV(inspection.getQcResult() != null ? inspection.getQcResult().name() : ""),
                     escapeCSV(safe(inspection.getRemarks()))));
@@ -553,10 +555,12 @@ public class BiorepositoryExportServiceImpl implements BiorepositoryExportServic
             Row row = sheet.createRow(rowNum++);
             createCell(row, 0, safe(inspection.getQcBatchId()), null);
             createCell(row, 1, String.valueOf(inspection.getId()), null);
-            createCell(row, 2, inspection.getInspectionDate() != null ? inspection.getInspectionDate().toString() : "", null);
+            createCell(row, 2, inspection.getInspectionDate() != null ? inspection.getInspectionDate().toString() : "",
+                    null);
             createCell(row, 3, safe(inspection.getSysUserId()), null);
             createCell(row, 4, safe(inspection.getInspectorName()), null);
-            createCell(row, 5, inspection.getBioSample() != null ? String.valueOf(inspection.getBioSample().getId()) : "", null);
+            createCell(row, 5,
+                    inspection.getBioSample() != null ? String.valueOf(inspection.getBioSample().getId()) : "", null);
             createCell(row, 6, getAccessionNumber(inspection), null);
             createCell(row, 7, buildExpectedCoordinate(inspection), null);
             createCell(row, 8, buildObservedStatus(inspection), null);
@@ -581,7 +585,8 @@ public class BiorepositoryExportServiceImpl implements BiorepositoryExportServic
             Map<String, Object> row = new HashMap<>();
             row.put("qcBatchId", inspection.getQcBatchId());
             row.put("inspectionId", inspection.getId());
-            row.put("inspectionDateTime", inspection.getInspectionDate() != null ? inspection.getInspectionDate().toString() : null);
+            row.put("inspectionDateTime",
+                    inspection.getInspectionDate() != null ? inspection.getInspectionDate().toString() : null);
             row.put("technicianId", inspection.getSysUserId());
             row.put("inspectorName", inspection.getInspectorName());
             row.put("bioSampleId", inspection.getBioSample() != null ? inspection.getBioSample().getId() : null);
@@ -605,47 +610,133 @@ public class BiorepositoryExportServiceImpl implements BiorepositoryExportServic
     @Transactional(readOnly = true)
     public byte[] exportQcBatchToPDF(String qcBatchId) throws IOException {
         List<BiorepositoryQCInspection> inspections = qcInspectionService.getByQcBatchId(qcBatchId);
+        List<Map<String, Object>> manifest = qcRoundService.getRoundSampleManifest(qcBatchId);
+        Map<Integer, BiorepositoryQCInspection> inspectionByBioSampleId = new HashMap<>();
+        for (BiorepositoryQCInspection inspection : inspections) {
+            if (inspection.getBioSample() != null && inspection.getBioSample().getId() != null) {
+                inspectionByBioSampleId.putIfAbsent(inspection.getBioSample().getId(), inspection);
+            }
+        }
+
         try (ByteArrayOutputStream baos = new ByteArrayOutputStream()) {
             Document document = new Document(PageSize.A4.rotate(), 24, 24, 24, 24);
             PdfWriter.getInstance(document, baos);
             document.open();
             Font titleFont = new Font(Font.FontFamily.HELVETICA, 14, Font.BOLD);
-            Font headerFont = new Font(Font.FontFamily.HELVETICA, 8, Font.BOLD);
-            Font bodyFont = new Font(Font.FontFamily.HELVETICA, 7, Font.NORMAL);
-            Paragraph title = new Paragraph("Biorepository QC Batch Report: " + qcBatchId, titleFont);
+            Font headerFont = new Font(Font.FontFamily.HELVETICA, 7, Font.BOLD);
+            Font bodyFont = new Font(Font.FontFamily.HELVETICA, 6, Font.NORMAL);
+            Paragraph title = new Paragraph("Biorepository QC Completed Report: " + qcBatchId, titleFont);
             title.setAlignment(Element.ALIGN_CENTER);
             title.setSpacingAfter(8f);
             document.add(title);
-            document.add(new Paragraph("Records: " + inspections.size(), bodyFont));
+            document.add(new Paragraph("Inspection records: " + inspections.size(), bodyFont));
             document.add(new Paragraph("Generated: " + Timestamp.valueOf(java.time.LocalDateTime.now()), bodyFont));
             document.add(new Paragraph(" ", bodyFont));
-            PdfPTable table = new PdfPTable(new float[] { 1.3f, 1.8f, 1.8f, 1.1f, 1.2f, 2.4f, 1.6f, 1.6f, 2.0f });
+
+            PdfPTable table = new PdfPTable(
+                    new float[] { 1.0f, 1.0f, 2.0f, 0.7f, 0.7f, 0.7f, 0.7f, 0.7f, 0.8f, 1.0f, 1.0f, 1.2f });
             table.setWidthPercentage(100f);
-            addHeaderCell(table, "Inspection ID", headerFont);
-            addHeaderCell(table, "Date Time", headerFont);
-            addHeaderCell(table, "Technician", headerFont);
-            addHeaderCell(table, "BioSample", headerFont);
             addHeaderCell(table, "Accession", headerFont);
-            addHeaderCell(table, "Expected Coordinate", headerFont);
-            addHeaderCell(table, "Observed Status", headerFont);
-            addHeaderCell(table, "QC Outcome", headerFont);
-            addHeaderCell(table, "Comment", headerFont);
-            for (BiorepositoryQCInspection inspection : inspections) {
-                addBodyCell(table, String.valueOf(inspection.getId()), bodyFont);
-                addBodyCell(table, inspection.getInspectionDate() != null ? inspection.getInspectionDate().toString() : "", bodyFont);
-                addBodyCell(table, safe(inspection.getSysUserId()), bodyFont);
-                addBodyCell(table, inspection.getBioSample() != null ? String.valueOf(inspection.getBioSample().getId()) : "", bodyFont);
-                addBodyCell(table, getAccessionNumber(inspection), bodyFont);
-                addBodyCell(table, buildExpectedCoordinate(inspection), bodyFont);
-                addBodyCell(table, buildObservedStatus(inspection), bodyFont);
-                addBodyCell(table, inspection.getQcResult() != null ? inspection.getQcResult().name() : "", bodyFont);
-                addBodyCell(table, safe(inspection.getRemarks()), bodyFont);
+            addHeaderCell(table, "Sample ID", headerFont);
+            addHeaderCell(table, "Location", headerFont);
+            addHeaderCell(table, "Present", headerFont);
+            addHeaderCell(table, "Label", headerFont);
+            addHeaderCell(table, "Container", headerFont);
+            addHeaderCell(table, "Volume", headerFont);
+            addHeaderCell(table, "Position", headerFont);
+            addHeaderCell(table, "Outcome", headerFont);
+            addHeaderCell(table, "Discrepancy", headerFont);
+            addHeaderCell(table, "Inspector", headerFont);
+            addHeaderCell(table, "Remarks", headerFont);
+
+            if (!manifest.isEmpty()) {
+                for (Map<String, Object> sample : manifest) {
+                    Integer bioSampleId = toInteger(sample.get("bioSampleId"));
+                    BiorepositoryQCInspection inspection = bioSampleId != null
+                            ? inspectionByBioSampleId.get(bioSampleId)
+                            : null;
+                    addCompletedReportRow(table, sample, inspection, bodyFont);
+                }
+            } else {
+                for (BiorepositoryQCInspection inspection : inspections) {
+                    addCompletedReportRow(table, Map.of(), inspection, bodyFont);
+                }
             }
+
             document.add(table);
             document.close();
             return baos.toByteArray();
         } catch (DocumentException e) {
             throw new IOException("Failed to generate QC batch PDF export", e);
+        }
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public byte[] exportQcWorksheetToPDF(String qcBatchId) throws IOException {
+        List<Map<String, Object>> manifest = qcRoundService.getRoundSampleManifest(qcBatchId);
+        if (manifest.isEmpty()) {
+            throw new IOException("No QC round manifest found for batch: " + qcBatchId);
+        }
+
+        try (ByteArrayOutputStream baos = new ByteArrayOutputStream()) {
+            Document document = new Document(PageSize.A4.rotate(), 24, 24, 24, 24);
+            PdfWriter.getInstance(document, baos);
+            document.open();
+            Font titleFont = new Font(Font.FontFamily.HELVETICA, 14, Font.BOLD);
+            Font headerFont = new Font(Font.FontFamily.HELVETICA, 7, Font.BOLD);
+            Font bodyFont = new Font(Font.FontFamily.HELVETICA, 6, Font.NORMAL);
+            Paragraph title = new Paragraph("Biorepository QC Inspection Worksheet: " + qcBatchId, titleFont);
+            title.setAlignment(Element.ALIGN_CENTER);
+            title.setSpacingAfter(8f);
+            document.add(title);
+            document.add(new Paragraph("Samples in round: " + manifest.size(), bodyFont));
+            document.add(new Paragraph("Generated: " + Timestamp.valueOf(java.time.LocalDateTime.now()), bodyFont));
+            document.add(new Paragraph(
+                    "Instructions: Verify each sample at the listed coordinate. Mark checklist boxes and record discrepancies.",
+                    bodyFont));
+            document.add(new Paragraph(" ", bodyFont));
+
+            PdfPTable table = new PdfPTable(
+                    new float[] { 0.8f, 0.9f, 2.0f, 0.5f, 0.5f, 0.5f, 0.5f, 0.5f, 0.5f, 1.0f, 1.0f, 1.2f });
+            table.setWidthPercentage(100f);
+            addHeaderCell(table, "Accession", headerFont);
+            addHeaderCell(table, "Sample ID", headerFont);
+            addHeaderCell(table, "Location Path", headerFont);
+            addHeaderCell(table, "Position", headerFont);
+            addHeaderCell(table, "Present", headerFont);
+            addHeaderCell(table, "Label", headerFont);
+            addHeaderCell(table, "Container", headerFont);
+            addHeaderCell(table, "Volume", headerFont);
+            addHeaderCell(table, "Pos OK", headerFont);
+            addHeaderCell(table, "Discrepancy", headerFont);
+            addHeaderCell(table, "Corrective Action", headerFont);
+            addHeaderCell(table, "Remarks", headerFont);
+
+            for (Map<String, Object> sample : manifest) {
+                addBodyCell(table, safe(asString(sample.get("accessionNumber"))), bodyFont);
+                addBodyCell(table, safe(resolveManifestSampleId(sample)), bodyFont);
+                addBodyCell(table, buildManifestLocation(sample), bodyFont);
+                addBodyCell(table, safe(asString(sample.get("positionCoordinate"))), bodyFont);
+                addBodyCell(table, "[ ]", bodyFont);
+                addBodyCell(table, "[ ]", bodyFont);
+                addBodyCell(table, "[ ]", bodyFont);
+                addBodyCell(table, "[ ]", bodyFont);
+                addBodyCell(table, "[ ]", bodyFont);
+                addBodyCell(table, "", bodyFont);
+                addBodyCell(table, "", bodyFont);
+                addBodyCell(table, "", bodyFont);
+            }
+
+            document.add(table);
+            document.add(new Paragraph(" ", bodyFont));
+            document.add(new Paragraph("Inspector Name: __________________________    Date: __________________________",
+                    bodyFont));
+            document.add(new Paragraph("Signature: ________________________________", bodyFont));
+            document.close();
+            return baos.toByteArray();
+        } catch (DocumentException e) {
+            throw new IOException("Failed to generate QC worksheet PDF export", e);
         }
     }
 
@@ -687,6 +778,94 @@ public class BiorepositoryExportServiceImpl implements BiorepositoryExportServic
             return "PASS";
         }
         return "FAIL" + (inspection.getDiscrepancyType() != null ? " - " + inspection.getDiscrepancyType().name() : "");
+    }
+
+    private void addCompletedReportRow(PdfPTable table, Map<String, Object> sample,
+            BiorepositoryQCInspection inspection, Font bodyFont) {
+        String accession = inspection != null ? getAccessionNumber(inspection)
+                : asString(sample.get("accessionNumber"));
+        String sampleId = inspection != null ? resolveInspectionSampleId(inspection) : resolveManifestSampleId(sample);
+        String location = inspection != null ? buildExpectedCoordinate(inspection) : buildManifestLocation(sample);
+        if (inspection == null) {
+            addBodyCell(table, safe(accession), bodyFont);
+            addBodyCell(table, safe(sampleId), bodyFont);
+            addBodyCell(table, safe(location), bodyFont);
+            addBodyCell(table, "-", bodyFont);
+            addBodyCell(table, "-", bodyFont);
+            addBodyCell(table, "-", bodyFont);
+            addBodyCell(table, "-", bodyFont);
+            addBodyCell(table, "-", bodyFont);
+            addBodyCell(table, "PENDING", bodyFont);
+            addBodyCell(table, "", bodyFont);
+            addBodyCell(table, "", bodyFont);
+            addBodyCell(table, "", bodyFont);
+            return;
+        }
+        addBodyCell(table, safe(accession), bodyFont);
+        addBodyCell(table, safe(sampleId), bodyFont);
+        addBodyCell(table, safe(location), bodyFont);
+        addBodyCell(table, checklistMark(inspection.isSamplePresent()), bodyFont);
+        addBodyCell(table, checklistMark(inspection.isLabelIntegrity()), bodyFont);
+        addBodyCell(table, checklistMark(inspection.isContainerIntegrity()), bodyFont);
+        addBodyCell(table, checklistMark(inspection.isVolumeAppearanceAcceptable()), bodyFont);
+        addBodyCell(table, checklistMark(inspection.isCorrectPosition()), bodyFont);
+        addBodyCell(table, inspection.getQcResult() != null ? inspection.getQcResult().name() : "", bodyFont);
+        addBodyCell(table, inspection.getDiscrepancyType() != null ? inspection.getDiscrepancyType().name() : "",
+                bodyFont);
+        addBodyCell(table, safe(inspection.getInspectorName()), bodyFont);
+        addBodyCell(table, safe(inspection.getRemarks()), bodyFont);
+    }
+
+    private String checklistMark(boolean passed) {
+        return passed ? "PASS" : "FAIL";
+    }
+
+    private String buildManifestLocation(Map<String, Object> sample) {
+        String locationPath = asString(sample.get("locationPath"));
+        if (locationPath != null && !locationPath.isBlank()) {
+            return locationPath;
+        }
+        String position = asString(sample.get("positionCoordinate"));
+        return safe(asString(sample.get("freezer"))) + " > " + safe(asString(sample.get("shelf"))) + " > "
+                + safe(asString(sample.get("rack"))) + " > " + safe(asString(sample.get("box")));
+    }
+
+    private String resolveManifestSampleId(Map<String, Object> sample) {
+        String externalId = asString(sample.get("externalId"));
+        if (externalId != null && !externalId.isBlank()) {
+            return externalId;
+        }
+        return asString(sample.get("sampleItemId"));
+    }
+
+    private String resolveInspectionSampleId(BiorepositoryQCInspection inspection) {
+        if (inspection == null || inspection.getBioSample() == null
+                || inspection.getBioSample().getSampleItem() == null) {
+            return "";
+        }
+        String externalId = inspection.getBioSample().getSampleItem().getExternalId();
+        if (externalId != null && !externalId.isBlank()) {
+            return externalId;
+        }
+        return inspection.getBioSample().getSampleItem().getId();
+    }
+
+    private String asString(Object value) {
+        return value == null ? null : String.valueOf(value);
+    }
+
+    private Integer toInteger(Object value) {
+        if (value == null) {
+            return null;
+        }
+        if (value instanceof Number number) {
+            return number.intValue();
+        }
+        try {
+            return Integer.parseInt(String.valueOf(value));
+        } catch (NumberFormatException e) {
+            return null;
+        }
     }
 
     /**

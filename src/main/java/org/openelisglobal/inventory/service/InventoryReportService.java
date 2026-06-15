@@ -7,12 +7,19 @@ public interface InventoryReportService {
     default GeneratedReport generateReport(String reportType, String exportFormat, String startDate, String endDate,
             boolean includeInactive, boolean includeExpired, boolean groupByType, boolean groupByLocation) {
         return generateReport(reportType, exportFormat, startDate, endDate, includeInactive, includeExpired,
-                groupByType, groupByLocation, null);
+                groupByType, groupByLocation, null, null);
+    }
+
+    default GeneratedReport generateReport(String reportType, String exportFormat, String startDate, String endDate,
+            boolean includeInactive, boolean includeExpired, boolean groupByType, boolean groupByLocation,
+            HttpServletRequest request) {
+        return generateReport(reportType, exportFormat, startDate, endDate, includeInactive, includeExpired,
+                groupByType, groupByLocation, request, null);
     }
 
     GeneratedReport generateReport(String reportType, String exportFormat, String startDate, String endDate,
             boolean includeInactive, boolean includeExpired, boolean groupByType, boolean groupByLocation,
-            HttpServletRequest request);
+            HttpServletRequest request, Integer departmentId);
 
     class GeneratedReport {
         private final byte[] content;

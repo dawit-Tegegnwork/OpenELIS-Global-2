@@ -399,7 +399,9 @@ function BacteriologySampleRetrievalDisposalPage({
         (nbResponse) => {
           if (nbResponse && nbResponse.pages) {
             const postAnalysisPage = nbResponse.pages.find(
-              (p) => (p.pageOrder || p.order) === 6,
+              (p) =>
+                (p.pageOrder || p.order) === 7 ||
+                (p.title || "").toLowerCase().includes("post-analysis"),
             );
             if (postAnalysisPage && postAnalysisPage.id) {
               getFromOpenElisServer(

@@ -49,6 +49,11 @@ import {
   isDeviceSelectionRequired,
   validateRoundCapacity,
 } from "./biorepositoryQcScopeHelpers";
+import {
+  ALL_OPTION,
+  buildQcFilterOptionItems,
+  shouldDisableChildFilter,
+} from "./biorepositoryQcFilterHelpers";
 import { buildBiorepositoryStorageUrl } from "./biorepositoryStorageHelpers";
 
 /**
@@ -128,13 +133,42 @@ const CORRECTION_ACTIONS = [
   },
 ];
 
-const ALL_OPTION = "__ALL__";
+const parseInspectionDateValue = (value) => {
+  if (!value) {
+    return null;
+  }
+  const direct = new Date(value);
+  if (!Number.isNaN(direct.getTime())) {
+    return direct;
+  }
+  const match = String(value).match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})/);
+  if (!match) {
+    return null;
+  }
+  return new Date(
+    Number(match[1]),
+    Number(match[2]) - 1,
+    Number(match[3]),
+    Number(match[4]),
+    Number(match[5]),
+  );
+};
+
+const isBulkApplySuccessResponse = (response) =>
+  Boolean(
+    response &&
+      typeof response === "object" &&
+      !response.error &&
+      !(response.statusCode >= 400) &&
+      !(response.status >= 400),
+  );
 
 export const normalizeLastQCInspection = (inspection) => {
   if (!inspection || typeof inspection !== "object") {
     return null;
   }
-  const inspectionDate = inspection.inspectionDate || inspection.lastQCDate || null;
+  const inspectionDate =
+    inspection.inspectionDate || inspection.lastQCDate || null;
   return {
     ...inspection,
     inspectionDate,
@@ -142,7 +176,12 @@ export const normalizeLastQCInspection = (inspection) => {
   };
 };
 
-const buildStorageOverviewQuery = (filters, includeInspected, notebookId, options = {}) => {
+const buildStorageOverviewQuery = (
+  filters,
+  includeInspected,
+  notebookId,
+  options = {},
+) => {
   const params = new URLSearchParams();
   ["freezer", "shelf", "rack", "box"].forEach((key) => {
     const value = filters?.[key];
@@ -243,10 +282,12 @@ function BiorepositoryQCInspectionPage({
   const [generatedRoundCriteria, setGeneratedRoundCriteria] = useState(null);
   const [availableBoxes, setAvailableBoxes] = useState([]);
   const [loadingBoxes, setLoadingBoxes] = useState(false);
+  const [pdfDownloading, setPdfDownloading] = useState(null);
 
   // Bulk apply modal state
   const [bulkApplyModalOpen, setBulkApplyModalOpen] = useState(false);
   const [isBulkApplying, setIsBulkApplying] = useState(false);
+  const [bulkApplyError, setBulkApplyError] = useState(null);
   const [selectedForBulkApply, setSelectedForBulkApply] = useState([]); // Capture selection when modal opens
   const [generatedRoundSampleIds, setGeneratedRoundSampleIds] = useState([]);
   /** Snapshot of generate-round API `samples` so the checklist and table stay fixed until you exit round mode. */
@@ -283,30 +324,27 @@ function BiorepositoryQCInspectionPage({
       ? `/rest/biorepository/qc-inspection/samples?notebookId=${encodeURIComponent(notebookId)}`
       : `/rest/biorepository/qc-inspection/samples`;
 
-    getFromOpenElisServer(
-      samplesUrl,
-      (response) => {
-        setLoading(false);
-        if (response && Array.isArray(response)) {
-          // Transform API response to component state
-          const transformedSamples = response.map((sample) => ({
-            id: sample.bioSampleId,
-            sampleItemId: sample.sampleItemId,
-            externalId: sample.externalId || "-",
-            accessionNumber: sample.accessionNumber || "-",
-            sampleType: sample.sampleType || "-",
-            locationPath: sample.locationPath || "Not Assigned",
-            storageLocation: sample.storageLocation, // Full location object
-            biosafetyLevel: sample.biosafetyLevel || "-",
-            workflowStatus: sample.workflowStatus,
-            lastQCInspection: normalizeLastQCInspection(sample.lastQCInspection), // Most recent inspection record
-          }));
-          setSamples(transformedSamples);
-        } else {
-          setSamples([]);
-        }
-      },
-    );
+    getFromOpenElisServer(samplesUrl, (response) => {
+      setLoading(false);
+      if (response && Array.isArray(response)) {
+        // Transform API response to component state
+        const transformedSamples = response.map((sample) => ({
+          id: sample.bioSampleId,
+          sampleItemId: sample.sampleItemId,
+          externalId: sample.externalId || "-",
+          accessionNumber: sample.accessionNumber || "-",
+          sampleType: sample.sampleType || "-",
+          locationPath: sample.locationPath || "Not Assigned",
+          storageLocation: sample.storageLocation, // Full location object
+          biosafetyLevel: sample.biosafetyLevel || "-",
+          workflowStatus: sample.workflowStatus,
+          lastQCInspection: normalizeLastQCInspection(sample.lastQCInspection), // Most recent inspection record
+        }));
+        setSamples(transformedSamples);
+      } else {
+        setSamples([]);
+      }
+    });
   }, [notebookId]);
 
   // Stored samples are loaded after the initial storage overview succeeds,
@@ -352,54 +390,62 @@ function BiorepositoryQCInspectionPage({
     );
   }, []);
 
-  const loadStorageOverview = useCallback((filters, includeInspected, options = {}) => {
-    setLoadingStorageOverview(true);
-    const query = buildStorageOverviewQuery(filters, includeInspected, notebookId, options);
-    getFromOpenElisServer(
-      `/rest/biorepository/qc-inspection/storage-overview${query}`,
-      (response) => {
-        setLoadingStorageOverview(false);
-        if (!response || response.error) {
-          setError(
-            response?.error ||
-              intl.formatMessage({
-                id: "biorepository.qc.storageOverviewError",
-                defaultMessage:
-                  "Unable to load QC storage overview. The request may have timed out. Please try again or narrow the device filter.",
-              }),
-          );
-          return;
-        }
-        setError(null);
-        setStorageOverviewData({
-          counts: response.counts || {
-            freezers: 0,
-            shelves: 0,
-            racks: 0,
-            boxes: 0,
-            eligibleSamples: 0,
-          },
-          filters: response.filters || {
-            freezers: [],
-            shelves: [],
-            racks: [],
-            boxes: [],
-          },
-          eligibleSamples: Array.isArray(response.eligibleSamples)
-            ? response.eligibleSamples
-            : [],
-          qcExclusionWindow: response.qcExclusionWindow || null,
-          scopeStats: response.scopeStats || null,
-          diagnostics: response.diagnostics || null,
-        });
-        // After the first successful overview load, populate the samples table once.
-        // Subsequent filter changes will continue to refresh overview only.
-        if (samples.length === 0) {
-          loadStoredSamples();
-        }
-      },
-    );
-  }, [notebookId, intl, loadStoredSamples, samples.length]);
+  const loadStorageOverview = useCallback(
+    (filters, includeInspected, options = {}) => {
+      setLoadingStorageOverview(true);
+      const query = buildStorageOverviewQuery(
+        filters,
+        includeInspected,
+        notebookId,
+        options,
+      );
+      getFromOpenElisServer(
+        `/rest/biorepository/qc-inspection/storage-overview${query}`,
+        (response) => {
+          setLoadingStorageOverview(false);
+          if (!response || response.error) {
+            setError(
+              response?.error ||
+                intl.formatMessage({
+                  id: "biorepository.qc.storageOverviewError",
+                  defaultMessage:
+                    "Unable to load QC storage overview. The request may have timed out. Please try again or narrow the device filter.",
+                }),
+            );
+            return;
+          }
+          setError(null);
+          setStorageOverviewData({
+            counts: response.counts || {
+              freezers: 0,
+              shelves: 0,
+              racks: 0,
+              boxes: 0,
+              eligibleSamples: 0,
+            },
+            filters: response.filters || {
+              freezers: [],
+              shelves: [],
+              racks: [],
+              boxes: [],
+            },
+            eligibleSamples: Array.isArray(response.eligibleSamples)
+              ? response.eligibleSamples
+              : [],
+            qcExclusionWindow: response.qcExclusionWindow || null,
+            scopeStats: response.scopeStats || null,
+            diagnostics: response.diagnostics || null,
+          });
+          // After the first successful overview load, populate the samples table once.
+          // Subsequent filter changes will continue to refresh overview only.
+          if (samples.length === 0) {
+            loadStoredSamples();
+          }
+        },
+      );
+    },
+    [notebookId, intl, loadStoredSamples, samples.length],
+  );
 
   const deviceCount = (storageOverviewData.filters.freezers || []).length;
   const requiresDeviceSelection = isDeviceSelectionRequired(
@@ -408,6 +454,28 @@ function BiorepositoryQCInspectionPage({
   );
   const deviceSelected =
     storageFilters.freezer && storageFilters.freezer !== ALL_OPTION;
+  const shelfSelected =
+    storageFilters.shelf && storageFilters.shelf !== ALL_OPTION;
+  const rackSelected =
+    storageFilters.rack && storageFilters.rack !== ALL_OPTION;
+
+  const filterOptionItems = useMemo(
+    () =>
+      buildQcFilterOptionItems(storageOverviewData.filters, {
+        requiresDeviceSelection,
+        hasMultipleDevices: deviceCount > 1,
+        deviceSelected,
+        shelfSelected,
+        rackSelected,
+      }),
+    [
+      storageOverviewData.filters,
+      requiresDeviceSelection,
+      deviceSelected,
+      shelfSelected,
+      rackSelected,
+    ],
+  );
 
   const fetchBatchEscalation = useCallback((qcBatchId) => {
     if (!qcBatchId) {
@@ -439,7 +507,10 @@ function BiorepositoryQCInspectionPage({
     }
     setLoadingBoxes(true);
     getFromOpenElisServer(
-      buildBiorepositoryStorageUrl("/rest/storage/boxes?active=true", notebookId),
+      buildBiorepositoryStorageUrl(
+        "/rest/storage/boxes?active=true",
+        notebookId,
+      ),
       (response) => {
         setLoadingBoxes(false);
         if (!Array.isArray(response)) {
@@ -460,32 +531,58 @@ function BiorepositoryQCInspectionPage({
     );
   }, [notebookId]);
 
-  const filterOptionItems = useMemo(() => {
-    const toItems = (set, allLabel) => [
-      { id: ALL_OPTION, label: allLabel },
-      ...Array.from(set || [])
-        .sort((a, b) => a.localeCompare(b))
-        .map((value) => ({ id: value, label: value })),
-    ];
+  const batchInspectionCount = batchEscalation?.inspectionCount || 0;
 
-    const freezerOptions = requiresDeviceSelection
-      ? (storageOverviewData.filters.freezers || [])
-          .sort((a, b) => a.localeCompare(b))
-          .map((value) => ({ id: value, label: value }))
-      : toItems(storageOverviewData.filters.freezers, "All devices");
-
-    return {
-      freezer: freezerOptions,
-      shelf: toItems(storageOverviewData.filters.shelves, "All shelves"),
-      rack: toItems(storageOverviewData.filters.racks, "All racks"),
-      box: toItems(storageOverviewData.filters.boxes, "All boxes"),
-    };
-  }, [storageOverviewData.filters, requiresDeviceSelection]);
+  const downloadQcPdf = useCallback(async (url, filename) => {
+    setPdfDownloading(filename);
+    setError(null);
+    try {
+      const response = await fetch(url, { credentials: "include" });
+      if (!response.ok) {
+        let message = "Export failed";
+        try {
+          const data = await response.json();
+          if (data?.error) {
+            message = data.error;
+          }
+        } catch {
+          // not JSON
+        }
+        throw new Error(message);
+      }
+      const blob = await response.blob();
+      const downloadUrl = window.URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = downloadUrl;
+      link.download = filename;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(downloadUrl);
+    } catch (err) {
+      setError(err.message || "Failed to export PDF");
+    } finally {
+      setPdfDownloading(null);
+    }
+  }, []);
 
   const eligibleSampleCount = storageOverviewData.counts.eligibleSamples || 0;
 
+  const childFilterState = {
+    hasMultipleDevices: deviceCount > 1,
+    deviceSelected,
+    shelfSelected,
+    rackSelected,
+  };
+
   const hasStoredSamplesOutsideScope =
     samples.length > 0 && eligibleSampleCount === 0;
+
+  const showGenerateRoundPrompt =
+    !hasGeneratedRound &&
+    eligibleSampleCount > 0 &&
+    !loading &&
+    !loadingStorageOverview;
 
   const selectedSamplesForBulkApply = useMemo(
     () =>
@@ -539,7 +636,9 @@ function BiorepositoryQCInspectionPage({
     // During an active round, keep the same batch in the table. Do not re-apply
     // the current eligible pool: after an inspection, "exclude this quarter" can
     // drop rows from the pool and would make the batch disappear.
-    return samples.filter((sample) => generatedRoundSampleSet.has(String(sample.id)));
+    return samples.filter((sample) =>
+      generatedRoundSampleSet.has(String(sample.id)),
+    );
   }, [samples, hasGeneratedRound, generatedRoundSampleSet]);
 
   const sampleByBioSampleId = useMemo(
@@ -685,9 +784,15 @@ function BiorepositoryQCInspectionPage({
       JSON.stringify(payload),
       (response) => {
         setIsGeneratingRound(false);
-        if (!response || response.error) {
+        if (
+          !response ||
+          typeof response === "string" ||
+          response.error ||
+          (response.statusCode && response.statusCode >= 400)
+        ) {
           setError(
-            response?.error ||
+            (typeof response === "string" ? response : null) ||
+              response?.error ||
               intl.formatMessage({
                 id: "biorepository.qc.error.generateRoundFailed",
                 defaultMessage: "Failed to generate QC round.",
@@ -783,10 +888,18 @@ function BiorepositoryQCInspectionPage({
           shelf: sample.shelf || "Unknown",
           rack: sample.rack || "Unknown",
           box: sample.box || "Unknown",
-          position: sample.positionCoordinate || "-",
+          position:
+            sample.positionCoordinate ||
+            linkedSample?.storageLocation?.positionCoordinate ||
+            "-",
           sampleNumber:
             linkedSample?.accessionNumber || sample.accessionNumber || "-",
-          sampleId: linkedSample?.externalId || "-",
+          sampleId:
+            sample.externalId ||
+            linkedSample?.externalId ||
+            sample.sampleItemId ||
+            linkedSample?.sampleItemId ||
+            "-",
         };
       }),
     [generatedRoundSamples, sampleByBioSampleId],
@@ -815,6 +928,7 @@ function BiorepositoryQCInspectionPage({
       }
 
       setSelectedForBulkApply(sampleIds);
+      setBulkApplyError(null);
       resetBulkApplyValues();
       setBulkApplyModalOpen(true);
     },
@@ -871,8 +985,7 @@ function BiorepositoryQCInspectionPage({
         ...prev,
         qcChecklist: newChecklist,
         qcResult: autoResult,
-        discrepancyType:
-          autoResult === "VERIFIED" ? "" : suggestedDiscrepancy,
+        discrepancyType: autoResult === "VERIFIED" ? "" : suggestedDiscrepancy,
         correctiveAction:
           autoResult === "VERIFIED" ? "" : prev.correctiveAction,
         correctionActionType:
@@ -918,8 +1031,17 @@ function BiorepositoryQCInspectionPage({
 
   // Handle bulk apply
   const handleBulkApply = useCallback(() => {
+    if (isBulkApplying) {
+      return;
+    }
+
+    const reportBulkApplyError = (message) => {
+      setBulkApplyError(message);
+      setError(message);
+    };
+
     if (selectedForBulkApply.length === 0) {
-      setError(
+      reportBulkApplyError(
         intl.formatMessage({
           id: "biorepository.qc.error.noSelection",
           defaultMessage: "Please select samples to apply QC to.",
@@ -930,7 +1052,7 @@ function BiorepositoryQCInspectionPage({
 
     // Validate: Inspector name required
     if (!bulkApplyValues.inspectorName.trim()) {
-      setError(
+      reportBulkApplyError(
         intl.formatMessage({
           id: "biorepository.qc.error.noInspector",
           defaultMessage: "Please enter inspector name.",
@@ -941,7 +1063,7 @@ function BiorepositoryQCInspectionPage({
 
     // Validate: QC result must be set
     if (!bulkApplyValues.qcResult) {
-      setError(
+      reportBulkApplyError(
         intl.formatMessage({
           id: "biorepository.qc.error.noResult",
           defaultMessage:
@@ -954,7 +1076,7 @@ function BiorepositoryQCInspectionPage({
     // Validate: If discrepancy found, must have discrepancy type and corrective action
     if (bulkApplyValues.qcResult === "DISCREPANCY_FOUND") {
       if (!bulkApplyValues.discrepancyType) {
-        setError(
+        reportBulkApplyError(
           intl.formatMessage({
             id: "biorepository.qc.error.noDiscrepancyType",
             defaultMessage: "Please select a discrepancy type.",
@@ -963,7 +1085,7 @@ function BiorepositoryQCInspectionPage({
         return;
       }
       if (!bulkApplyValues.correctiveAction.trim()) {
-        setError(
+        reportBulkApplyError(
           intl.formatMessage({
             id: "biorepository.qc.error.noCorrectiveAction",
             defaultMessage: "Please describe the corrective action taken.",
@@ -972,7 +1094,7 @@ function BiorepositoryQCInspectionPage({
         return;
       }
       if (!bulkApplyValues.remarks.trim()) {
-        setError(
+        reportBulkApplyError(
           intl.formatMessage({
             id: "biorepository.qc.error.noRemarks",
             defaultMessage:
@@ -986,7 +1108,7 @@ function BiorepositoryQCInspectionPage({
         selectedForBulkApply.length === 1 &&
         !bulkApplyValues.correctionActionType
       ) {
-        setError(
+        reportBulkApplyError(
           intl.formatMessage({
             id: "biorepository.qc.error.noCorrectionAction",
             defaultMessage:
@@ -1000,7 +1122,7 @@ function BiorepositoryQCInspectionPage({
         bulkApplyValues.correctionActionType &&
         selectedForBulkApply.length !== 1
       ) {
-        setError(
+        reportBulkApplyError(
           intl.formatMessage({
             id: "biorepository.qc.error.correctionSingleOnly",
             defaultMessage:
@@ -1016,7 +1138,7 @@ function BiorepositoryQCInspectionPage({
         ) &&
         !bulkApplyValues.correctionBoxId
       ) {
-        setError(
+        reportBulkApplyError(
           intl.formatMessage({
             id: "biorepository.qc.error.noCorrectionLocation",
             defaultMessage:
@@ -1030,7 +1152,7 @@ function BiorepositoryQCInspectionPage({
         bulkApplyValues.correctionActionType === "REASSIGN_POSITION" &&
         !bulkApplyValues.correctionPositionCoordinate.trim()
       ) {
-        setError(
+        reportBulkApplyError(
           intl.formatMessage({
             id: "biorepository.qc.error.noCorrectionPosition",
             defaultMessage:
@@ -1041,11 +1163,11 @@ function BiorepositoryQCInspectionPage({
       }
     }
 
-    const parsedInspectionDate = bulkApplyValues.inspectionDate
-      ? new Date(bulkApplyValues.inspectionDate)
-      : null;
-    if (!parsedInspectionDate || Number.isNaN(parsedInspectionDate.getTime())) {
-      setError(
+    const parsedInspectionDate = parseInspectionDateValue(
+      bulkApplyValues.inspectionDate,
+    );
+    if (!parsedInspectionDate) {
+      reportBulkApplyError(
         intl.formatMessage({
           id: "biorepository.qc.error.invalidInspectionDate",
           defaultMessage:
@@ -1056,6 +1178,7 @@ function BiorepositoryQCInspectionPage({
     }
 
     setIsBulkApplying(true);
+    setBulkApplyError(null);
     setError(null);
 
     const getFriendlyBulkApplyError = (response) => {
@@ -1120,6 +1243,14 @@ function BiorepositoryQCInspectionPage({
           id: "biorepository.qc.error.noCorrectionLocation",
           defaultMessage:
             "Select a target storage box for update/reassign correction.",
+        });
+      }
+
+      if (normalized.includes("already has a qc inspection in batch")) {
+        return intl.formatMessage({
+          id: "biorepository.qc.error.alreadyInspectedInBatch",
+          defaultMessage:
+            "One or more selected samples were already verified for this QC round. Refresh the page to see saved results.",
         });
       }
 
@@ -1193,7 +1324,7 @@ function BiorepositoryQCInspectionPage({
       JSON.stringify(payload),
       (response) => {
         setIsBulkApplying(false);
-        if (response && !response.error) {
+        if (isBulkApplySuccessResponse(response)) {
           const count = response.count || selectedForBulkApply.length;
           setSuccessMessage(
             intl.formatMessage(
@@ -1205,10 +1336,14 @@ function BiorepositoryQCInspectionPage({
               { count },
             ),
           );
+          setBulkApplyError(null);
           setBulkApplyModalOpen(false);
           resetBulkApplyValues();
           setSelectedForBulkApply([]); // Clear captured selection
-          if (Array.isArray(response.inspections) && response.inspections.length > 0) {
+          if (
+            Array.isArray(response.inspections) &&
+            response.inspections.length > 0
+          ) {
             const inspectionByBioSampleId = new Map(
               response.inspections.map((inspection) => [
                 String(inspection.bioSampleId),
@@ -1217,7 +1352,9 @@ function BiorepositoryQCInspectionPage({
             );
             setSamples((prev) =>
               prev.map((sample) => {
-                const updatedInspection = inspectionByBioSampleId.get(String(sample.id));
+                const updatedInspection = inspectionByBioSampleId.get(
+                  String(sample.id),
+                );
                 if (!updatedInspection) {
                   return sample;
                 }
@@ -1237,13 +1374,16 @@ function BiorepositoryQCInspectionPage({
             onProgressUpdate();
           }
         } else {
-          setError(getFriendlyBulkApplyError(response));
+          const message = getFriendlyBulkApplyError(response);
+          setBulkApplyError(message);
+          setError(message);
         }
       },
     );
   }, [
     selectedForBulkApply,
     bulkApplyValues,
+    isBulkApplying,
     intl,
     loadStoredSamples,
     loadStorageOverview,
@@ -1361,6 +1501,13 @@ function BiorepositoryQCInspectionPage({
       }),
     },
     {
+      key: "sampleId",
+      header: intl.formatMessage({
+        id: "biorepository.sample.externalId",
+        defaultMessage: "Sample ID",
+      }),
+    },
+    {
       key: "sampleType",
       header: intl.formatMessage({
         id: "biorepository.sample.type",
@@ -1372,6 +1519,13 @@ function BiorepositoryQCInspectionPage({
       header: intl.formatMessage({
         id: "biorepository.sample.storageLocation",
         defaultMessage: "Storage Location",
+      }),
+    },
+    {
+      key: "position",
+      header: intl.formatMessage({
+        id: "biorepository.sample.position",
+        defaultMessage: "Position",
       }),
     },
     {
@@ -1513,9 +1667,11 @@ function BiorepositoryQCInspectionPage({
                     "Active stored items in biorepository scope: {activeInScope}. QC pool rows: {qcPoolTotal}. Lazy BioSample links: {bioSamplesLazyLinked}. Excluded (not in scope): {excludedNotInScope}. Excluded (could not link BioSample): {excludedNoBioSample}.",
                 },
                 {
-                  activeInScope: poolDiagnostics.storageManagementActiveInScope ?? 0,
+                  activeInScope:
+                    poolDiagnostics.storageManagementActiveInScope ?? 0,
                   qcPoolTotal: poolDiagnostics.qcPoolTotal ?? 0,
-                  bioSamplesLazyLinked: poolDiagnostics.bioSamplesLazyLinked ?? 0,
+                  bioSamplesLazyLinked:
+                    poolDiagnostics.bioSamplesLazyLinked ?? 0,
                   excludedNotInScope: poolDiagnostics.excludedNotInScope ?? 0,
                   excludedNoBioSample: poolDiagnostics.excludedNoBioSample ?? 0,
                 },
@@ -1637,21 +1793,39 @@ function BiorepositoryQCInspectionPage({
       )}
 
       {roundInfo?.qcBatchId && (
-        <div style={{ marginTop: "0.75rem" }}>
+        <div style={{ marginTop: "0.75rem", display: "flex", gap: "0.5rem" }}>
           <Button
             kind="secondary"
             size="sm"
             renderIcon={DocumentPdf}
-            onClick={() => {
-              window.open(
-                `${config.serverBaseUrl}/rest/biorepository/qc/export/pdf?qcBatchId=${encodeURIComponent(roundInfo.qcBatchId)}`,
-                "_blank",
-              );
-            }}
+            disabled={Boolean(pdfDownloading)}
+            onClick={() =>
+              downloadQcPdf(
+                `${config.serverBaseUrl}/rest/biorepository/qc/export/worksheet/pdf?qcBatchId=${encodeURIComponent(roundInfo.qcBatchId)}`,
+                `biorepository_qc_worksheet_${roundInfo.qcBatchId}.pdf`,
+              )
+            }
           >
             <FormattedMessage
-              id="biorepository.qc.printInspection"
-              defaultMessage="Print QC Inspection PDF"
+              id="biorepository.qc.printBlankWorksheet"
+              defaultMessage="Print Blank QC Worksheet"
+            />
+          </Button>
+          <Button
+            kind="tertiary"
+            size="sm"
+            renderIcon={DocumentPdf}
+            disabled={Boolean(pdfDownloading) || batchInspectionCount <= 0}
+            onClick={() =>
+              downloadQcPdf(
+                `${config.serverBaseUrl}/rest/biorepository/qc/export/pdf?qcBatchId=${encodeURIComponent(roundInfo.qcBatchId)}`,
+                `biorepository_qc_report_${roundInfo.qcBatchId}.pdf`,
+              )
+            }
+          >
+            <FormattedMessage
+              id="biorepository.qc.printCompletedReport"
+              defaultMessage="Print Completed QC Report"
             />
           </Button>
         </div>
@@ -1732,7 +1906,10 @@ function BiorepositoryQCInspectionPage({
                 box: ALL_OPTION,
               }))
             }
-            disabled={loadingStorageOverview}
+            disabled={
+              loadingStorageOverview ||
+              shouldDisableChildFilter("shelf", childFilterState)
+            }
           />
         </Column>
         <Column lg={4} md={4} sm={4}>
@@ -1753,7 +1930,10 @@ function BiorepositoryQCInspectionPage({
                 box: ALL_OPTION,
               }))
             }
-            disabled={loadingStorageOverview}
+            disabled={
+              loadingStorageOverview ||
+              shouldDisableChildFilter("rack", childFilterState)
+            }
           />
         </Column>
         <Column lg={4} md={4} sm={4}>
@@ -1773,7 +1953,10 @@ function BiorepositoryQCInspectionPage({
                 box: selectedItem?.id || ALL_OPTION,
               }))
             }
-            disabled={loadingStorageOverview}
+            disabled={
+              loadingStorageOverview ||
+              shouldDisableChildFilter("box", childFilterState)
+            }
           />
         </Column>
         <Column
@@ -1880,11 +2063,7 @@ function BiorepositoryQCInspectionPage({
             Generate Random QC Round
           </Button>
           {hasGeneratedRound && (
-            <Button
-              kind="ghost"
-              size="sm"
-              onClick={clearGeneratedRound}
-            >
+            <Button kind="ghost" size="sm" onClick={clearGeneratedRound}>
               Clear Round
             </Button>
           )}
@@ -1948,15 +2127,30 @@ function BiorepositoryQCInspectionPage({
         ) : visibleSamples.length === 0 ? (
           <InlineNotification
             kind="info"
-            title={intl.formatMessage({
-              id: "biorepository.qc.noSamples",
-              defaultMessage: "No Stored Samples",
-            })}
-            subtitle={intl.formatMessage({
-              id: "biorepository.qc.noSamples.message",
-              defaultMessage:
-                "No active stored sample-items in Biorepository scope are available for QC inspection. Confirm Storage Management shows assigned items for this notebook department, then refresh.",
-            })}
+            title={intl.formatMessage(
+              showGenerateRoundPrompt
+                ? {
+                    id: "biorepository.qc.generateRoundPrompt.title",
+                    defaultMessage: "Ready for QC round",
+                  }
+                : {
+                    id: "biorepository.qc.noSamples",
+                    defaultMessage: "No Stored Samples",
+                  },
+            )}
+            subtitle={intl.formatMessage(
+              showGenerateRoundPrompt
+                ? {
+                    id: "biorepository.qc.generateRoundPrompt.message",
+                    defaultMessage:
+                      "Select a device, set boxes and samples per round, then click Generate Random QC Round to inspect samples.",
+                  }
+                : {
+                    id: "biorepository.qc.noSamples.message",
+                    defaultMessage:
+                      "No active stored sample-items in Biorepository scope are available for QC inspection. Confirm Storage Management shows assigned items for this notebook department, then refresh.",
+                  },
+            )}
             lowContrast
             hideCloseButton
           />
@@ -1966,8 +2160,13 @@ function BiorepositoryQCInspectionPage({
               id: sample.id.toString(),
               accessionNumber: sample.accessionNumber,
               sampleItemId: sample.sampleItemId ?? "-",
+              sampleId: sample.externalId || sample.sampleItemId || "-",
               sampleType: sample.sampleType,
               locationPath: sample.locationPath,
+              position:
+                sample.storageLocation?.positionCoordinate ||
+                sample.storageLocation?.position ||
+                "-",
               biosafetyLevel: sample.biosafetyLevel,
               lastQCInspection: sample.lastQCInspection,
               sampleDetails: sample.id.toString(),
@@ -2236,7 +2435,12 @@ function BiorepositoryQCInspectionPage({
       {/* Bulk Apply QC Modal */}
       <Modal
         open={bulkApplyModalOpen}
-        onRequestClose={() => setBulkApplyModalOpen(false)}
+        onRequestClose={() => {
+          if (!isBulkApplying) {
+            setBulkApplyModalOpen(false);
+            setBulkApplyError(null);
+          }
+        }}
         modalHeading={intl.formatMessage({
           id:
             selectedForBulkApply.length === 1
@@ -2273,12 +2477,27 @@ function BiorepositoryQCInspectionPage({
           defaultMessage: "Cancel",
         })}
         onRequestSubmit={handleBulkApply}
-        onSecondarySubmit={() => setBulkApplyModalOpen(false)}
+        onSecondarySubmit={() => {
+          if (!isBulkApplying) {
+            setBulkApplyModalOpen(false);
+            setBulkApplyError(null);
+          }
+        }}
         size="md"
         primaryButtonDisabled={isBulkApplying || !bulkApplyValues.qcResult}
         danger={bulkApplyValues.qcResult === "DISCREPANCY_FOUND"}
       >
         <div className="qc-bulk-apply-modal">
+          {bulkApplyError && (
+            <InlineNotification
+              kind="error"
+              title={bulkApplyError}
+              onClose={() => setBulkApplyError(null)}
+              lowContrast
+              hideCloseButton={false}
+              style={{ marginBottom: "1rem" }}
+            />
+          )}
           <p className="modal-description">
             {selectedForBulkApply.length === 1 &&
             selectedSamplesForBulkApply[0] ? (

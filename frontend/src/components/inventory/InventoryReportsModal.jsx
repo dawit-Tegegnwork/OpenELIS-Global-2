@@ -14,9 +14,20 @@ import {
 import { Download } from "@carbon/icons-react";
 import { FormattedMessage, useIntl } from "react-intl";
 import { ReportsAPI } from "./InventoryService";
+import { usePermissions } from "../../hooks/usePermissions";
+import { useInventoryReportDepartmentFilter } from "./inventoryReportDepartmentFilter";
 
 const InventoryReportsModal = ({ open, onClose }) => {
   const intl = useIntl();
+  const { userSessionDetails } = usePermissions();
+  const {
+    showDepartmentDropdown,
+    departmentDropdownItems,
+    selectedDepartmentItem,
+    setDepartmentFilter,
+    departmentIdForApi,
+    scopedDepartmentLabel,
+  } = useInventoryReportDepartmentFilter(userSessionDetails);
 
   const reportTypes = [
     {
@@ -148,6 +159,7 @@ const InventoryReportsModal = ({ open, onClose }) => {
         includeExpired: formData.includeExpired,
         groupByType: formData.groupByType,
         groupByLocation: formData.groupByLocation,
+        departmentId: departmentIdForApi,
       };
 
       const response = await ReportsAPI.generate(reportParams);
@@ -246,6 +258,46 @@ const InventoryReportsModal = ({ open, onClose }) => {
             handleChange("exportFormat", selectedItem)
           }
         />
+
+        {showDepartmentDropdown ? (
+          <Dropdown
+            id="reportDepartmentModal"
+            titleText={intl.formatMessage({
+              id: "inventory.reports.department.label",
+              defaultMessage: "Department (lab unit)",
+            })}
+            label={intl.formatMessage({
+              id: "inventory.reports.department.placeholder",
+              defaultMessage: "Select department",
+            })}
+            items={departmentDropdownItems}
+            itemToString={(item) => (item ? item.text : "")}
+            selectedItem={selectedDepartmentItem}
+            onChange={({ selectedItem }) =>
+              setDepartmentFilter(selectedItem?.id || "ALL")
+            }
+          />
+        ) : (
+          scopedDepartmentLabel && (
+            <InlineNotification
+              kind="info"
+              title={intl.formatMessage({
+                id: "inventory.reports.department.scoped.title",
+                defaultMessage: "Department scope",
+              })}
+              subtitle={intl.formatMessage(
+                {
+                  id: "inventory.reports.department.scoped.message",
+                  defaultMessage:
+                    "Reports include inventory for {department} only.",
+                },
+                { department: scopedDepartmentLabel },
+              )}
+              hideCloseButton
+              lowContrast
+            />
+          )
+        )}
 
         {/* Date Range */}
         <div>

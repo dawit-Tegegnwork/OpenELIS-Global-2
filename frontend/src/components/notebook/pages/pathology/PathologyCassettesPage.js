@@ -1,4 +1,10 @@
-import React, { useState, useEffect, useRef, useCallback, useMemo } from "react";
+import React, {
+  useState,
+  useEffect,
+  useRef,
+  useCallback,
+  useMemo,
+} from "react";
 import {
   Grid,
   Column,
@@ -454,7 +460,8 @@ function PathologyCassettesPage({
       (sample.cassetteLabels || []).forEach((label, index) => {
         rows.push({
           id: `${sample.id}-${index}`,
-          parentSpecimen: sample.externalId || sample.accessionNumber || sample.id,
+          parentSpecimen:
+            sample.externalId || sample.accessionNumber || sample.id,
           childCassette: label,
           parentStatus: sample.status || "PENDING",
           cassetteColor: sample.cassetteColor || "—",

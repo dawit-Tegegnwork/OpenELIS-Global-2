@@ -4,7 +4,6 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -20,10 +19,10 @@ import org.openelisglobal.common.rest.BaseRestController;
 import org.openelisglobal.department.service.DepartmentIsolationService;
 import org.openelisglobal.login.dao.UserModuleService;
 import org.openelisglobal.login.valueholder.UserSessionData;
+import org.openelisglobal.notebook.bean.NoteBookDisplayBean;
 import org.openelisglobal.notebook.service.NoteBookService;
 import org.openelisglobal.notebook.service.NotebookDepartmentScopeService;
 import org.openelisglobal.notebook.service.NotebookSecurityService;
-import org.openelisglobal.notebook.bean.NoteBookDisplayBean;
 import org.openelisglobal.notebook.valueholder.NoteBook;
 import org.openelisglobal.rbac.RbacAction;
 import org.openelisglobal.rbac.RbacPermissionService;
@@ -157,9 +156,8 @@ public class StorageLocationRestController extends BaseRestController {
             TestSection linkedDepartment = selectPrimaryLinkedDepartment(template, title);
             Integer linkedDepartmentId = parseDepartmentId(linkedDepartment);
             if (linkedDepartmentId != null) {
-                departments.putIfAbsent(linkedDepartmentId, title != null && !title.isBlank()
-                        ? title.trim()
-                        : resolveTestSectionLabel(linkedDepartment));
+                departments.putIfAbsent(linkedDepartmentId,
+                        title != null && !title.isBlank() ? title.trim() : resolveTestSectionLabel(linkedDepartment));
                 continue;
             }
             TestSection exactMatch = resolveTestSectionByTemplateTitle(title);
@@ -175,8 +173,8 @@ public class StorageLocationRestController extends BaseRestController {
         if (template == null || template.getDepartments() == null || template.getDepartments().isEmpty()) {
             return null;
         }
-        List<TestSection> linkedDepartments = template.getDepartments().stream().filter(Objects::nonNull)
-                .sorted((left, right) -> resolveTestSectionLabel(left).compareToIgnoreCase(resolveTestSectionLabel(right)))
+        List<TestSection> linkedDepartments = template.getDepartments().stream().filter(Objects::nonNull).sorted(
+                (left, right) -> resolveTestSectionLabel(left).compareToIgnoreCase(resolveTestSectionLabel(right)))
                 .toList();
         for (TestSection department : linkedDepartments) {
             if (templateTitleMatchesDepartment(notebookTitle, department)) {
@@ -199,8 +197,8 @@ public class StorageLocationRestController extends BaseRestController {
         if (activeSections == null || activeSections.isEmpty()) {
             return null;
         }
-        return activeSections.stream().filter(section -> templateTitleMatchesDepartment(notebookTitle, section)).findFirst()
-                .orElse(null);
+        return activeSections.stream().filter(section -> templateTitleMatchesDepartment(notebookTitle, section))
+                .findFirst().orElse(null);
     }
 
     private Integer parseDepartmentId(TestSection department) {
@@ -252,7 +250,8 @@ public class StorageLocationRestController extends BaseRestController {
         return sections;
     }
 
-    private List<Map<String, String>> buildDepartmentRows(List<TestSection> sections, Map<Integer, String> workflowDepartments) {
+    private List<Map<String, String>> buildDepartmentRows(List<TestSection> sections,
+            Map<Integer, String> workflowDepartments) {
         if (sections == null || sections.isEmpty()) {
             return List.of();
         }
@@ -368,8 +367,7 @@ public class StorageLocationRestController extends BaseRestController {
             if (departmentId == null) {
                 Set<Integer> selectable = departmentIsolationService.getSelectableUserTestSectionIds(request);
                 if (selectable.isEmpty()) {
-                    return ResponseEntity.status(HttpStatus.FORBIDDEN)
-                            .body(Map.of("error", "select department first"));
+                    return ResponseEntity.status(HttpStatus.FORBIDDEN).body(Map.of("error", "select department first"));
                 }
                 return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(Map.of("error", "select department first"));
             }
@@ -1401,8 +1399,7 @@ public class StorageLocationRestController extends BaseRestController {
     public ResponseEntity<List<Map<String, Object>>> getRacks(@RequestParam(required = false) String shelfId,
             @RequestParam(required = false) String deviceId, @RequestParam(required = false) String roomId,
             @RequestParam(required = false) String status, @RequestParam(required = false) Boolean biorepositoryOnly,
-            @RequestParam(required = false) Integer notebookId,
-            HttpServletRequest request) {
+            @RequestParam(required = false) Integer notebookId, HttpServletRequest request) {
         try {
             List<Map<String, Object>> response;
             if (shelfId != null || deviceId != null || roomId != null || status != null) {
@@ -1741,8 +1738,7 @@ public class StorageLocationRestController extends BaseRestController {
     public ResponseEntity<List<StorageBoxResponse>> getBoxes(@RequestParam(required = false) String rackId,
             @RequestParam(required = false) Integer shelfId, @RequestParam(required = false) Boolean active,
             @RequestParam(required = false) Boolean occupied, @RequestParam(required = false) Boolean biorepositoryOnly,
-            @RequestParam(required = false) Integer notebookId,
-            HttpServletRequest request) {
+            @RequestParam(required = false) Integer notebookId, HttpServletRequest request) {
         try {
             List<StorageBox> boxes;
             if (rackId != null) {

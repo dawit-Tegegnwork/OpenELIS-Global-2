@@ -4,6 +4,7 @@ import React, {
   useRef,
   useCallback,
   useMemo,
+  useContext,
 } from "react";
 import {
   Grid,
@@ -42,6 +43,13 @@ import {
 } from "../../../esignature";
 import PermissionGate from "../../../security/PermissionGate";
 import useStagePersonas from "../../../../hooks/useStagePersonas";
+import { NotificationContext } from "../../../layout/Layout";
+import { NotificationKinds } from "../../../common/CustomNotification";
+import ModalSaveErrorNotification from "./ModalSaveErrorNotification";
+import {
+  extractApiErrorMessage,
+  reportModalSaveFailure,
+} from "./mntdModalErrorHelpers";
 
 /**
  * MNTDTestAssignmentPage - Page 7 of the MNTD workflow.
@@ -83,6 +91,8 @@ function MNTDTestAssignmentPage({
   const intl = useIntl();
   const stageEditRoles = useStagePersonas("mntd", pageData);
   const componentMounted = useRef(false);
+  const { addNotification, setNotificationVisible } =
+    useContext(NotificationContext);
 
   // E-signature: pending action ref for shared AUTHORED hook
   const pendingAction = useRef(null);
@@ -100,6 +110,7 @@ function MNTDTestAssignmentPage({
 
   // Test assignment modal state
   const [showAssignmentModal, setShowAssignmentModal] = useState(false);
+  const [assignmentModalError, setAssignmentModalError] = useState(null);
   const [assignmentData, setAssignmentData] = useState({
     experimentCategory: "",
     experimentCategoryOther: "",
@@ -111,6 +122,7 @@ function MNTDTestAssignmentPage({
 
   // Machine scheduling modal state
   const [showSchedulingModal, setShowSchedulingModal] = useState(false);
+  const [schedulingModalError, setSchedulingModalError] = useState(null);
   const [schedulingData, setSchedulingData] = useState({
     instrument: "",
     instrumentId: "", // Physical instrument ID/serial number
@@ -481,6 +493,45 @@ function MNTDTestAssignmentPage({
   const hasRealPageId =
     pageData?.id && !String(pageData.id).startsWith("default-");
 
+  const notifyError = useCallback(
+    (message) => {
+      addNotification({
+        kind: NotificationKinds.error,
+        title: intl.formatMessage({
+          id: "notification.error",
+          defaultMessage: "Error",
+        }),
+        message,
+      });
+      setNotificationVisible(true);
+    },
+    [addNotification, intl, setNotificationVisible],
+  );
+
+  const reportAssignmentFailure = useCallback(
+    (message) => {
+      reportModalSaveFailure({
+        message,
+        reopenModal: () => setShowAssignmentModal(true),
+        setModalError: setAssignmentModalError,
+        notifyError,
+      });
+    },
+    [notifyError],
+  );
+
+  const reportSchedulingFailure = useCallback(
+    (message) => {
+      reportModalSaveFailure({
+        message,
+        reopenModal: () => setShowSchedulingModal(true),
+        setModalError: setSchedulingModalError,
+        notifyError,
+      });
+    },
+    [notifyError],
+  );
+
   // Calculate stats
   const stats = useMemo(() => {
     const assigned = samples.filter((s) => s.experimentCategory).length;
@@ -505,13 +556,14 @@ function MNTDTestAssignmentPage({
       );
       return;
     }
+    setAssignmentModalError(null);
     setShowAssignmentModal(true);
   }, [selectedIds, intl]);
 
   // Handle saving test assignment data
   const handleSaveAssignmentData = useCallback(() => {
     if (!assignmentData.experimentCategory) {
-      setError(
+      reportAssignmentFailure(
         intl.formatMessage({
           id: "notebook.mntd.testassignment.categoryRequired",
           defaultMessage: "Experiment category is required.",
@@ -524,7 +576,7 @@ function MNTDTestAssignmentPage({
       assignmentData.experimentCategory === "OTHER" &&
       !assignmentData.experimentCategoryOther?.trim()
     ) {
-      setError(
+      reportAssignmentFailure(
         intl.formatMessage({
           id: "notebook.mntd.testassignment.categoryOtherRequired",
           defaultMessage: "Please specify the experiment category.",
@@ -537,7 +589,7 @@ function MNTDTestAssignmentPage({
       assignmentData.subcategory === "OTHER" &&
       !assignmentData.subcategoryOther?.trim()
     ) {
-      setError(
+      reportAssignmentFailure(
         intl.formatMessage({
           id: "notebook.mntd.testassignment.subcategoryOtherRequired",
           defaultMessage: "Please specify the test type / subcategory.",
@@ -547,7 +599,9 @@ function MNTDTestAssignmentPage({
     }
 
     if (!hasRealPageId) {
-      setShowAssignmentModal(false);
+      reportAssignmentFailure(
+        "Cannot update samples: Page not properly initialized.",
+      );
       return;
     }
 
@@ -598,6 +652,7 @@ function MNTDTestAssignmentPage({
                   ),
                 );
                 setShowAssignmentModal(false);
+                setAssignmentModalError(null);
                 setSelectedIds([]);
                 // Reset form
                 setAssignmentData({
@@ -615,7 +670,12 @@ function MNTDTestAssignmentPage({
               },
             );
           } else {
-            setError(response?.error || "Failed to save test assignment.");
+            reportAssignmentFailure(
+              extractApiErrorMessage(
+                response,
+                "Failed to save test assignment.",
+              ),
+            );
           }
         }
       },
@@ -628,6 +688,7 @@ function MNTDTestAssignmentPage({
     loadPageSamples,
     onProgressUpdate,
     intl,
+    reportAssignmentFailure,
   ]);
 
   // Handle opening machine scheduling modal
@@ -641,13 +702,14 @@ function MNTDTestAssignmentPage({
       );
       return;
     }
+    setSchedulingModalError(null);
     setShowSchedulingModal(true);
   }, [selectedIds, intl]);
 
   // Handle saving machine scheduling data
   const handleSaveSchedulingData = useCallback(() => {
     if (!schedulingData.instrument) {
-      setError(
+      reportSchedulingFailure(
         intl.formatMessage({
           id: "notebook.mntd.testassignment.instrumentRequired",
           defaultMessage: "Instrument selection is required.",
@@ -657,7 +719,7 @@ function MNTDTestAssignmentPage({
     }
 
     if (!schedulingData.scheduledDate) {
-      setError(
+      reportSchedulingFailure(
         intl.formatMessage({
           id: "notebook.mntd.testassignment.dateRequired",
           defaultMessage: "Scheduled date is required.",
@@ -667,7 +729,7 @@ function MNTDTestAssignmentPage({
     }
 
     if (!schedulingData.timeSlot) {
-      setError(
+      reportSchedulingFailure(
         intl.formatMessage({
           id: "notebook.mntd.testassignment.timeSlotRequired",
           defaultMessage: "Time slot is required.",
@@ -681,7 +743,7 @@ function MNTDTestAssignmentPage({
       schedulingData.timeSlot === "SLOT_CUSTOM" &&
       (!schedulingData.startTime || !schedulingData.endTime)
     ) {
-      setError(
+      reportSchedulingFailure(
         intl.formatMessage({
           id: "notebook.mntd.testassignment.customTimeRequired",
           defaultMessage:
@@ -692,7 +754,9 @@ function MNTDTestAssignmentPage({
     }
 
     if (!hasRealPageId) {
-      setShowSchedulingModal(false);
+      reportSchedulingFailure(
+        "Cannot update samples: Page not properly initialized.",
+      );
       return;
     }
 
@@ -756,6 +820,7 @@ function MNTDTestAssignmentPage({
               ),
             );
             setShowSchedulingModal(false);
+            setSchedulingModalError(null);
             setSelectedIds([]);
             // Reset form
             setSchedulingData({
@@ -771,7 +836,12 @@ function MNTDTestAssignmentPage({
               onProgressUpdate();
             }
           } else {
-            setError(response?.error || "Failed to save machine scheduling.");
+            reportSchedulingFailure(
+              extractApiErrorMessage(
+                response,
+                "Failed to save machine scheduling.",
+              ),
+            );
           }
         }
       },
@@ -784,6 +854,8 @@ function MNTDTestAssignmentPage({
     loadPageSamples,
     onProgressUpdate,
     intl,
+    instruments,
+    reportSchedulingFailure,
   ]);
 
   // Handle status change
@@ -1295,7 +1367,10 @@ function MNTDTestAssignmentPage({
           id: "label.cancel",
           defaultMessage: "Cancel",
         })}
-        onRequestClose={() => setShowAssignmentModal(false)}
+        onRequestClose={() => {
+          setShowAssignmentModal(false);
+          setAssignmentModalError(null);
+        }}
         onRequestSubmit={() =>
           triggerEsigForSave(handleSaveAssignmentData, () =>
             setShowAssignmentModal(true),
@@ -1304,6 +1379,10 @@ function MNTDTestAssignmentPage({
         size="md"
       >
         <div style={{ marginBottom: "1rem" }}>
+          <ModalSaveErrorNotification
+            message={assignmentModalError}
+            onClose={() => setAssignmentModalError(null)}
+          />
           <p style={{ color: "#525252", marginBottom: "1rem" }}>
             <FormattedMessage
               id="notebook.mntd.testassignment.modal.assignmentDescription"
@@ -1479,7 +1558,10 @@ function MNTDTestAssignmentPage({
           id: "label.cancel",
           defaultMessage: "Cancel",
         })}
-        onRequestClose={() => setShowSchedulingModal(false)}
+        onRequestClose={() => {
+          setShowSchedulingModal(false);
+          setSchedulingModalError(null);
+        }}
         onRequestSubmit={() =>
           triggerEsigForSave(handleSaveSchedulingData, () =>
             setShowSchedulingModal(true),
@@ -1488,6 +1570,10 @@ function MNTDTestAssignmentPage({
         size="lg"
       >
         <div style={{ marginBottom: "1rem" }}>
+          <ModalSaveErrorNotification
+            message={schedulingModalError}
+            onClose={() => setSchedulingModalError(null)}
+          />
           <p style={{ color: "#525252", marginBottom: "1rem" }}>
             <FormattedMessage
               id="notebook.mntd.testassignment.modal.schedulingDescription"

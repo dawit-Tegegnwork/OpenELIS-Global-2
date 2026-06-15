@@ -159,7 +159,10 @@ export const normalizeCellValue = (value) => {
     return "";
   }
   const normalizedDate = normalizeDateValue(trimmed, true);
-  if (normalizedDate !== trimmed && isSupportedDateValue(normalizedDate, true)) {
+  if (
+    normalizedDate !== trimmed &&
+    isSupportedDateValue(normalizedDate, true)
+  ) {
     return normalizedDate;
   }
   return trimmed;
@@ -238,8 +241,14 @@ export const mergeMappedRowValues = (rawHeaders, values) => {
     row._storageNotes = storageParts.join(" | ");
   }
 
-  if (row.storageTemperaturePreset && !row.requiredTempMin && !row.requiredTempMax) {
-    const presetRange = resolveStorageTemperaturePreset(row.storageTemperaturePreset);
+  if (
+    row.storageTemperaturePreset &&
+    !row.requiredTempMin &&
+    !row.requiredTempMax
+  ) {
+    const presetRange = resolveStorageTemperaturePreset(
+      row.storageTemperaturePreset,
+    );
     if (presetRange) {
       row.requiredTempMin = presetRange.min;
       row.requiredTempMax = presetRange.max;
@@ -501,7 +510,9 @@ export const getDuplicateIssueType = (duplicateIssue, messages = []) => {
     return DUPLICATE_ISSUE.NONE;
   }
   const manifestMessage = messages.find((message) =>
-    String(message).toLowerCase().startsWith("duplicate sample id in manifest:"),
+    String(message)
+      .toLowerCase()
+      .startsWith("duplicate sample id in manifest:"),
   );
   if (manifestMessage) {
     return DUPLICATE_ISSUE.IN_MANIFEST;

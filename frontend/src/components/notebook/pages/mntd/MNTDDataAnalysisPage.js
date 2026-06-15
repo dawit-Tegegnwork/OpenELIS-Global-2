@@ -1,4 +1,10 @@
-import React, { useState, useEffect, useRef, useCallback } from "react";
+import React, {
+  useState,
+  useEffect,
+  useRef,
+  useCallback,
+  useContext,
+} from "react";
 import {
   Grid,
   Column,
@@ -36,6 +42,9 @@ import {
   SignatureMeaning,
   useESign,
 } from "../../../esignature";
+import { NotificationContext } from "../../../layout/Layout";
+import { NotificationKinds } from "../../../common/CustomNotification";
+import ModalSaveErrorNotification from "./ModalSaveErrorNotification";
 
 /**
  * MNTDDataAnalysisPage - Page 10: Data Analysis & Export
@@ -66,11 +75,14 @@ function MNTDDataAnalysisPage({
 }) {
   const intl = useIntl();
   const componentMounted = useRef(true);
+  const { addNotification, setNotificationVisible } =
+    useContext(NotificationContext);
 
   // State
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [success, setSuccess] = useState(null);
+  const [deliveryError, setDeliveryError] = useState(null);
 
   // Validation summary (counts only - no sample table)
   const [validationSummary, setValidationSummary] = useState({
@@ -95,6 +107,29 @@ function MNTDDataAnalysisPage({
 
   const hasRealPageId =
     pageData?.id && !String(pageData.id).startsWith("default-");
+
+  const notifyError = useCallback(
+    (message) => {
+      addNotification({
+        kind: NotificationKinds.error,
+        title: intl.formatMessage({
+          id: "notification.error",
+          defaultMessage: "Error",
+        }),
+        message,
+      });
+      setNotificationVisible(true);
+    },
+    [addNotification, intl, setNotificationVisible],
+  );
+
+  const reportDeliveryFailure = useCallback(
+    (message) => {
+      setDeliveryError(message);
+      notifyError(message);
+    },
+    [notifyError],
+  );
 
   // Load notebook ID from entry if not provided
   useEffect(() => {
@@ -260,7 +295,7 @@ function MNTDDataAnalysisPage({
   // Handle delivery
   const handleRecordDelivery = async () => {
     if (!notebookId || !recipientName.trim()) {
-      setError(
+      reportDeliveryFailure(
         intl.formatMessage({
           id: "notebook.mntd.analysis.error.recipientRequired",
           defaultMessage: "Recipient name is required",
@@ -270,7 +305,7 @@ function MNTDDataAnalysisPage({
     }
 
     setDelivering(true);
-    setError(null);
+    setDeliveryError(null);
 
     try {
       const response = await fetch(
@@ -300,9 +335,10 @@ function MNTDDataAnalysisPage({
         );
         setRecipientName("");
         setRecipientEmail("");
+        setDeliveryError(null);
         loadDeliveryHistory();
       } else {
-        setError(
+        reportDeliveryFailure(
           data.error ||
             intl.formatMessage({
               id: "notebook.mntd.analysis.error.deliveryFailed",
@@ -312,7 +348,7 @@ function MNTDDataAnalysisPage({
       }
     } catch (err) {
       console.error("Delivery error:", err);
-      setError(
+      reportDeliveryFailure(
         intl.formatMessage({
           id: "notebook.mntd.analysis.error.network",
           defaultMessage: "Network error",
@@ -574,6 +610,10 @@ function MNTDDataAnalysisPage({
                   defaultMessage="Record when results are delivered to recipients for audit trail purposes."
                 />
               </p>
+              <ModalSaveErrorNotification
+                message={deliveryError}
+                onClose={() => setDeliveryError(null)}
+              />
               <Grid narrow>
                 <Column lg={5} md={4} sm={4}>
                   <TextInput

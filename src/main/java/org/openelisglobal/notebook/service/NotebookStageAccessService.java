@@ -6,11 +6,13 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 import java.util.stream.Collectors;
+import org.hibernate.Hibernate;
 import org.openelisglobal.common.constants.Constants;
 import org.openelisglobal.common.constants.rbac.AHRIRoleCatalog;
 import org.openelisglobal.department.service.DepartmentIsolationService;
 import org.openelisglobal.notebook.valueholder.NoteBook;
 import org.openelisglobal.notebook.valueholder.NoteBookPage;
+import org.openelisglobal.notebook.valueholder.NotebookEntry;
 import org.openelisglobal.notebook.valueholder.NotebookStageAction;
 import org.openelisglobal.role.service.RoleService;
 import org.openelisglobal.role.valueholder.Role;
@@ -71,6 +73,37 @@ public class NotebookStageAccessService {
         assertStageAccess(request, notebook, page, action);
     }
 
+    /**
+     * MNTD manifest import guard: resolve intake page (order 1) from effective
+     * pages (child instances inherit template pages) then enforce stage EDIT
+     * access.
+     */
+    @Transactional(readOnly = true)
+    public void assertMntdManifestIntakeEdit(HttpServletRequest request, NotebookEntry entry) {
+        if (entry == null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Notebook entry is required");
+        }
+        NoteBook notebook = entry.getNotebook();
+        if (notebook == null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Notebook entry has no notebook");
+        }
+        Hibernate.initialize(notebook);
+        Hibernate.initialize(notebook.getPages());
+        if (notebook.isChildInstance() && notebook.getParentNotebook() != null) {
+            Hibernate.initialize(notebook.getParentNotebook());
+            Hibernate.initialize(notebook.getParentNotebook().getPages());
+        }
+
+        java.util.List<NoteBookPage> pages = notebook.getEffectivePages();
+        NoteBookPage intakePage = pages == null ? null
+                : pages.stream().filter(page -> page.getOrder() != null && page.getOrder() == 1).findFirst()
+                        .orElse(null);
+        if (intakePage == null || intakePage.getId() == null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "MNTD intake page not found");
+        }
+        assertStageAccessForPageId(request, intakePage.getId(), NotebookStageAction.EDIT);
+    }
+
     @Transactional(readOnly = true)
     public void assertPersonaForPage(HttpServletRequest request, NoteBook notebook, Integer pageId) {
         NoteBookPage page = requirePage(pageId);
@@ -105,11 +138,10 @@ public class NotebookStageAccessService {
         if (userPersonas.contains(AHRIRoleCatalog.normalizeRoleName(Constants.ROLE_LAB_MANAGER))) {
             return;
         }
-        boolean allowed = allowedPersonas.stream().anyMatch(
-                persona -> userPersonas.contains(AHRIRoleCatalog.normalizeRoleName(persona)));
+        boolean allowed = allowedPersonas.stream()
+                .anyMatch(persona -> userPersonas.contains(AHRIRoleCatalog.normalizeRoleName(persona)));
         if (!allowed) {
-            throw new ResponseStatusException(HttpStatus.FORBIDDEN,
-                    "Insufficient lab role for this workflow stage");
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Insufficient lab role for this workflow stage");
         }
     }
 
@@ -160,7 +192,8 @@ public class NotebookStageAccessService {
                 continue;
             }
             String mapped = map.getLabUnit().trim();
-            // AllLabUnits is for admin role assignment only — not an owning department scope.
+            // AllLabUnits is for admin role assignment only — not an owning department
+            // scope.
             if ("AllLabUnits".equalsIgnoreCase(mapped)) {
                 continue;
             }

@@ -31,7 +31,8 @@ public class InventoryReportRestController {
             @RequestParam(defaultValue = "false") boolean includeInactive,
             @RequestParam(defaultValue = "true") boolean includeExpired,
             @RequestParam(defaultValue = "false") boolean groupByType,
-            @RequestParam(defaultValue = "false") boolean groupByLocation, HttpServletRequest request,
+            @RequestParam(defaultValue = "false") boolean groupByLocation,
+            @RequestParam(required = false) Integer departmentId, HttpServletRequest request,
             HttpServletResponse response) throws IOException {
         try {
             if (!rbacPermissionService.hasPermission(request, RbacAction.GENERATE_REPORTS)) {
@@ -39,7 +40,7 @@ public class InventoryReportRestController {
                 return;
             }
             GeneratedReport report = inventoryReportService.generateReport(reportType, exportFormat, startDate, endDate,
-                    includeInactive, includeExpired, groupByType, groupByLocation, request);
+                    includeInactive, includeExpired, groupByType, groupByLocation, request, departmentId);
 
             response.setStatus(HttpStatus.OK.value());
             response.setContentType(report.getContentType());

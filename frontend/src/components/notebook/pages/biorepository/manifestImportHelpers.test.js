@@ -58,14 +58,7 @@ describe("manifestImportHelpers", () => {
         "Sample_ID",
         "Transfer_Date",
       ],
-      [
-        "02/09/2026",
-        "Bacteriology",
-        "HIEPV",
-        "DNA",
-        "H-0001",
-        "11.02.2026",
-      ],
+      ["02/09/2026", "Bacteriology", "HIEPV", "DNA", "H-0001", "11.02.2026"],
     ];
 
     const converted = convertLegacyWorksheetRows(rows, "HIEPVBacteriology");

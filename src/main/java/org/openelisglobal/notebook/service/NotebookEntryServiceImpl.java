@@ -148,6 +148,14 @@ public class NotebookEntryServiceImpl extends AuditableBaseObjectServiceImpl<Not
     private void initializeLazyRelationships(NotebookEntry entry) {
         if (entry != null) {
             Hibernate.initialize(entry.getNotebook());
+            if (entry.getNotebook() != null) {
+                NoteBook notebook = entry.getNotebook();
+                Hibernate.initialize(notebook.getPages());
+                if (notebook.isChildInstance() && notebook.getParentNotebook() != null) {
+                    Hibernate.initialize(notebook.getParentNotebook());
+                    Hibernate.initialize(notebook.getParentNotebook().getPages());
+                }
+            }
             Hibernate.initialize(entry.getTechnician());
             Hibernate.initialize(entry.getCreator());
             Hibernate.initialize(entry.getOrganization());

@@ -14,17 +14,17 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
 import org.apache.commons.lang3.StringUtils;
-import org.openelisglobal.common.constants.Constants;
-import org.openelisglobal.common.services.DisplayListService;
-import org.openelisglobal.common.util.IdValuePair;
 import org.openelisglobal.analysis.service.AnalysisService;
 import org.openelisglobal.analysis.valueholder.Analysis;
+import org.openelisglobal.common.constants.Constants;
 import org.openelisglobal.common.log.LogEvent;
+import org.openelisglobal.common.services.DisplayListService;
 import org.openelisglobal.common.services.IStatusService;
 import org.openelisglobal.common.services.StatusService.AnalysisStatus;
 import org.openelisglobal.common.services.StatusService.ExternalOrderStatus;
 import org.openelisglobal.common.services.StatusService.SampleStatus;
 import org.openelisglobal.common.util.DateUtil;
+import org.openelisglobal.common.util.IdValuePair;
 import org.openelisglobal.dataexchange.order.valueholder.ElectronicOrder;
 import org.openelisglobal.dataexchange.order.valueholder.ElectronicOrderType;
 import org.openelisglobal.dataexchange.service.order.ElectronicOrderService;
@@ -43,6 +43,7 @@ import org.openelisglobal.result.service.ResultService;
 import org.openelisglobal.result.valueholder.Result;
 import org.openelisglobal.resultlimit.service.ResultLimitService;
 import org.openelisglobal.resultlimits.valueholder.ResultLimit;
+import org.openelisglobal.role.service.RoleService;
 import org.openelisglobal.sample.service.SampleService;
 import org.openelisglobal.sample.valueholder.OrderPriority;
 import org.openelisglobal.sample.valueholder.Sample;
@@ -51,14 +52,13 @@ import org.openelisglobal.samplehuman.valueholder.SampleHuman;
 import org.openelisglobal.sampleitem.service.SampleItemService;
 import org.openelisglobal.sampleitem.valueholder.SampleItem;
 import org.openelisglobal.spring.util.SpringContext;
-import org.openelisglobal.role.service.RoleService;
-import org.openelisglobal.userrole.service.UserRoleService;
 import org.openelisglobal.systemuser.service.UserService;
 import org.openelisglobal.test.service.TestService;
 import org.openelisglobal.test.service.TestServiceImpl;
 import org.openelisglobal.test.valueholder.Test;
 import org.openelisglobal.typeofsample.service.TypeOfSampleService;
 import org.openelisglobal.typeofsample.valueholder.TypeOfSample;
+import org.openelisglobal.userrole.service.UserRoleService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -525,8 +525,8 @@ public class MedLabPatientOrderServiceImpl implements MedLabPatientOrderService 
 
     @Override
     @Transactional
-    public Map<String, Object> linkSamplesToPatient(List<Integer> sampleItemIds, String patientId, Integer notebookPageId,
-            String sysUserId) {
+    public Map<String, Object> linkSamplesToPatient(List<Integer> sampleItemIds, String patientId,
+            Integer notebookPageId, String sysUserId) {
 
         Map<String, Object> result = new HashMap<>();
 
@@ -586,9 +586,8 @@ public class MedLabPatientOrderServiceImpl implements MedLabPatientOrderService 
 
                 linkedCount++;
             } catch (Exception e) {
-                LogEvent.logError(this.getClass().getSimpleName(), "linkSamplesToPatient",
-                        "Error linking sample item " + sampleItemId + " to patient " + patientId + ": "
-                                + e.getMessage());
+                LogEvent.logError(this.getClass().getSimpleName(), "linkSamplesToPatient", "Error linking sample item "
+                        + sampleItemId + " to patient " + patientId + ": " + e.getMessage());
                 errors.add("Error linking sample item " + sampleItemId + ": " + e.getMessage());
             }
         }
@@ -831,14 +830,11 @@ public class MedLabPatientOrderServiceImpl implements MedLabPatientOrderService 
 
         List<MedLabTestRequirements> requirements = medLabTestRequirementsService.getActiveRequirements();
         if (requirements != null && !requirements.isEmpty()) {
-            Set<String> configuredTestIds = requirements.stream()
-                    .map(req -> String.valueOf(req.getTestId()))
+            Set<String> configuredTestIds = requirements.stream().map(req -> String.valueOf(req.getTestId()))
                     .collect(Collectors.toCollection(LinkedHashSet::new));
             List<IdValuePair> configuredTests = DisplayListService.getInstance()
-                    .getList(DisplayListService.ListType.ORDERABLE_TESTS)
-                    .stream()
-                    .filter(test -> configuredTestIds.contains(test.getId()))
-                    .collect(Collectors.toList());
+                    .getList(DisplayListService.ListType.ORDERABLE_TESTS).stream()
+                    .filter(test -> configuredTestIds.contains(test.getId())).collect(Collectors.toList());
             if (!configuredTests.isEmpty()) {
                 return configuredTests;
             }
@@ -852,8 +848,7 @@ public class MedLabPatientOrderServiceImpl implements MedLabPatientOrderService 
             return List.of();
         }
 
-        List<Integer> sectionIds = testSections.stream()
-                .map(section -> Integer.valueOf(section.getId()))
+        List<Integer> sectionIds = testSections.stream().map(section -> Integer.valueOf(section.getId()))
                 .collect(Collectors.toList());
         List<Test> tests = testService.getTestsByTestSectionIds(sectionIds);
         if (tests == null || tests.isEmpty()) {
@@ -887,9 +882,8 @@ public class MedLabPatientOrderServiceImpl implements MedLabPatientOrderService 
             }
         }
 
-        throw new RuntimeException(
-                "Unable to reserve a unique lab number for prefix '" + normalizedPrefix + "' after "
-                        + MAX_LAB_NUMBER_RESERVATION_ATTEMPTS + " attempts");
+        throw new RuntimeException("Unable to reserve a unique lab number for prefix '" + normalizedPrefix + "' after "
+                + MAX_LAB_NUMBER_RESERVATION_ATTEMPTS + " attempts");
     }
 
     private boolean labNumberExists(String labNo) {

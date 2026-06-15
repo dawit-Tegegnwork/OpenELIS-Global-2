@@ -1,6 +1,5 @@
 package org.openelisglobal.notebook.controller.rest;
 
-import jakarta.servlet.http.HttpServletResponse;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import java.io.IOException;
@@ -18,11 +17,7 @@ import org.openelisglobal.notebook.service.MNTDManifestImportService.ParseError;
 import org.openelisglobal.notebook.service.MNTDManifestImportService.ParsedManifest;
 import org.openelisglobal.notebook.service.NotebookEntryService;
 import org.openelisglobal.notebook.service.NotebookStageAccessService;
-import org.openelisglobal.notebook.valueholder.NoteBook;
-import org.openelisglobal.notebook.valueholder.NoteBookPage;
 import org.openelisglobal.notebook.valueholder.NotebookEntry;
-import org.openelisglobal.notebook.valueholder.NotebookStageAction;
-import org.hibernate.Hibernate;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.core.io.ClassPathResource;
 import org.springframework.http.MediaType;
@@ -70,13 +65,12 @@ public class MNTDManifestImportController extends BaseRestController {
             @RequestPart("file") MultipartFile file, @RequestPart("mapping") MNTDManifestImportForm form,
             HttpServletRequest httpRequest) {
 
-        // Verify entry exists
-        java.util.Optional<NotebookEntry> optEntry = notebookEntryService.getMatch("id", entryId);
-        if (optEntry.isEmpty()) {
+        NotebookEntry entry = notebookEntryService.getWithRelationships(entryId);
+        if (entry == null) {
             return ResponseEntity.notFound().build();
         }
 
-        assertMntdIntakeEdit(httpRequest, optEntry.get());
+        notebookStageAccessService.assertMntdManifestIntakeEdit(httpRequest, entry);
 
         try (InputStream inputStream = file.getInputStream()) {
             // Parse the CSV
@@ -146,10 +140,8 @@ public class MNTDManifestImportController extends BaseRestController {
             @RequestParam(value = "manifestDescription", required = false) String manifestDescription,
             HttpServletRequest httpRequest) {
 
-        // Verify entry exists
-        java.util.Optional<org.openelisglobal.notebook.valueholder.NotebookEntry> optEntry = notebookEntryService
-                .getMatch("id", entryId);
-        if (optEntry.isEmpty()) {
+        NotebookEntry entry = notebookEntryService.getWithRelationships(entryId);
+        if (entry == null) {
             return ResponseEntity.notFound().build();
         }
 
@@ -160,7 +152,7 @@ public class MNTDManifestImportController extends BaseRestController {
             return ResponseEntity.status(401).body(error);
         }
 
-        assertMntdIntakeEdit(httpRequest, optEntry.get());
+        notebookStageAccessService.assertMntdManifestIntakeEdit(httpRequest, entry);
 
         try (InputStream inputStream = file.getInputStream()) {
             // Parse the CSV
@@ -287,21 +279,4 @@ public class MNTDManifestImportController extends BaseRestController {
         return String.valueOf(usd.getSystemUserId());
     }
 
-    private void assertMntdIntakeEdit(HttpServletRequest request, NotebookEntry entry) {
-        NoteBook notebook = entry.getNotebook();
-        if (notebook == null) {
-            throw new org.springframework.web.server.ResponseStatusException(
-                    org.springframework.http.HttpStatus.BAD_REQUEST, "Notebook entry has no notebook");
-        }
-        Hibernate.initialize(notebook.getPages());
-        NoteBookPage intakePage = notebook.getPages().stream()
-                .filter(page -> page.getOrder() != null && page.getOrder() == 1)
-                .findFirst()
-                .orElse(null);
-        if (intakePage == null || intakePage.getId() == null) {
-            throw new org.springframework.web.server.ResponseStatusException(
-                    org.springframework.http.HttpStatus.BAD_REQUEST, "MNTD intake page not found");
-        }
-        notebookStageAccessService.assertStageAccessForPageId(request, intakePage.getId(), NotebookStageAction.EDIT);
-    }
 }

@@ -403,6 +403,8 @@ export const ReportsAPI = {
       queryParams.append("groupByType", params.groupByType);
     if (params.groupByLocation !== undefined)
       queryParams.append("groupByLocation", params.groupByLocation);
+    if (params.departmentId)
+      queryParams.append("departmentId", params.departmentId);
 
     const query = queryParams.toString();
     const endpoint = `${BASE_PATH}/reports/generate${query ? `?${query}` : ""}`;

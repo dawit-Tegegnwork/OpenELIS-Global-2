@@ -4,6 +4,7 @@ import React, {
   useRef,
   useCallback,
   useMemo,
+  useContext,
 } from "react";
 import {
   Grid,
@@ -64,6 +65,13 @@ import {
   getExistingStorageLocation,
   mapMntdSamplesForBiorepositoryTransfer,
 } from "./mntdStorageHelpers";
+import { NotificationContext } from "../../../layout/Layout";
+import { NotificationKinds } from "../../../common/CustomNotification";
+import ModalSaveErrorNotification from "./ModalSaveErrorNotification";
+import {
+  extractApiErrorMessage,
+  reportModalSaveFailure,
+} from "./mntdModalErrorHelpers";
 
 /**
  * MNTDSampleArchivingPage - Page 9 of the MNTD workflow.
@@ -101,6 +109,8 @@ function MNTDSampleArchivingPage({
 }) {
   const intl = useIntl();
   const componentMounted = useRef(false);
+  const { addNotification, setNotificationVisible } =
+    useContext(NotificationContext);
 
   // State for samples
   const [samples, setSamples] = useState([]);
@@ -112,6 +122,7 @@ function MNTDSampleArchivingPage({
 
   // Archive modal state
   const [archiveModalOpen, setArchiveModalOpen] = useState(false);
+  const [archiveModalError, setArchiveModalError] = useState(null);
   const [archiveType, setArchiveType] = useState("RETENTION");
   const [retentionLocationMode, setRetentionLocationMode] = useState("NEW");
   const [bioTransferModalOpen, setBioTransferModalOpen] = useState(false);
@@ -151,6 +162,33 @@ function MNTDSampleArchivingPage({
     { id: "BIOHAZARD_WASTE", text: "Biohazard Waste Container" },
     { id: "OTHER", text: "Other" },
   ];
+
+  const notifyError = useCallback(
+    (message) => {
+      addNotification({
+        kind: NotificationKinds.error,
+        title: intl.formatMessage({
+          id: "notification.error",
+          defaultMessage: "Error",
+        }),
+        message,
+      });
+      setNotificationVisible(true);
+    },
+    [addNotification, intl, setNotificationVisible],
+  );
+
+  const reportArchiveFailure = useCallback(
+    (message) => {
+      reportModalSaveFailure({
+        message,
+        reopenModal: () => setArchiveModalOpen(true),
+        setModalError: setArchiveModalError,
+        notifyError,
+      });
+    },
+    [notifyError],
+  );
 
   // Load samples for this page
   useEffect(() => {
@@ -431,13 +469,16 @@ function MNTDSampleArchivingPage({
     });
     setWellAssignments({});
     setBoxLayout({});
+    setArchiveModalError(null);
     setArchiveModalOpen(true);
   };
 
   // Handle archive submission
   const handleArchiveSamples = useCallback(() => {
     if (!hasRealPageId) {
-      setArchiveModalOpen(false);
+      reportArchiveFailure(
+        "Cannot update samples: Page not properly initialized.",
+      );
       return;
     }
 
@@ -451,7 +492,7 @@ function MNTDSampleArchivingPage({
     if (archiveType === "RETENTION") {
       if (useExistingLocation) {
         if (!allSelectedHaveExistingStorage(samples, selectedSampleIds)) {
-          setError(
+          reportArchiveFailure(
             intl.formatMessage({
               id: "notebook.mntd.archiving.missingExistingStorage",
               defaultMessage:
@@ -461,7 +502,7 @@ function MNTDSampleArchivingPage({
           return;
         }
       } else if (!storageSelection.box?.id) {
-        setError(
+        reportArchiveFailure(
           intl.formatMessage({
             id: "notebook.mntd.archiving.selectStorage",
             defaultMessage:
@@ -474,7 +515,7 @@ function MNTDSampleArchivingPage({
           (id) => !wellAssignments[id],
         ).length;
         if (unassignedCount > 0) {
-          setError(
+          reportArchiveFailure(
             intl.formatMessage(
               {
                 id: "notebook.mntd.archiving.assignAllWells",
@@ -490,7 +531,7 @@ function MNTDSampleArchivingPage({
     }
 
     setIsArchiving(true);
-    setError(null);
+    setArchiveModalError(null);
 
     const numericIds = selectedSampleIds.map((id) => parseInt(id, 10));
 
@@ -498,7 +539,9 @@ function MNTDSampleArchivingPage({
     let storagePath = "";
     if (archiveType === "RETENTION") {
       if (useExistingLocation && selectedSamples.length > 0) {
-        storagePath = getExistingStorageLocation(selectedSamples[0]).storagePath;
+        storagePath = getExistingStorageLocation(
+          selectedSamples[0],
+        ).storagePath;
       } else if (storageSelection.box) {
         const parts = [];
         if (storageSelection.room) parts.push(storageSelection.room.name);
@@ -557,7 +600,7 @@ function MNTDSampleArchivingPage({
 
     const showStorageAssignmentErrors = (response) => {
       if (response?.errors?.length > 0) {
-        setError(response.errors.join(" "));
+        reportArchiveFailure(response.errors.join(" "));
       }
     };
 
@@ -597,15 +640,18 @@ function MNTDSampleArchivingPage({
                       ),
                     );
                     setArchiveModalOpen(false);
+                    setArchiveModalError(null);
                     setSelectedSampleIds([]);
                     loadPageSamples();
                     if (onProgressUpdate) {
                       onProgressUpdate();
                     }
                   } else {
-                    setError(
-                      statusResponse?.error ||
+                    reportArchiveFailure(
+                      extractApiErrorMessage(
+                        statusResponse,
                         "Failed to update sample status.",
+                      ),
                     );
                   }
                 }
@@ -632,12 +678,14 @@ function MNTDSampleArchivingPage({
                   reassign: true,
                   data: {
                     storageRoom:
-                      storageSelection.room?.label || storageSelection.room?.name,
+                      storageSelection.room?.label ||
+                      storageSelection.room?.name,
                     storageFreezer:
                       storageSelection.device?.label ||
                       storageSelection.device?.name,
                     storageRack:
-                      storageSelection.rack?.label || storageSelection.rack?.name,
+                      storageSelection.rack?.label ||
+                      storageSelection.rack?.name,
                     storageBox:
                       storageSelection.box?.label || storageSelection.box?.name,
                     storagePath: assignStoragePath,
@@ -651,7 +699,9 @@ function MNTDSampleArchivingPage({
             }
           } else {
             setIsArchiving(false);
-            setError(response?.error || "Failed to archive samples.");
+            reportArchiveFailure(
+              extractApiErrorMessage(response, "Failed to archive samples."),
+            );
           }
         }
       },
@@ -670,6 +720,7 @@ function MNTDSampleArchivingPage({
     loadPageSamples,
     onProgressUpdate,
     intl,
+    reportArchiveFailure,
   ]);
 
   const bioTransferSamples = useMemo(
@@ -871,10 +922,7 @@ function MNTDSampleArchivingPage({
     if (sample.archiveType === "RETENTION") {
       const storageLocation = coerceDisplayValue(sample.storageLocation, "");
       const storageWell = coerceDisplayValue(sample.storageWell, "");
-      const retentionEndDate = coerceDisplayValue(
-        sample.retentionEndDate,
-        "",
-      );
+      const retentionEndDate = coerceDisplayValue(sample.retentionEndDate, "");
 
       return (
         <div style={{ fontSize: "12px" }}>
@@ -1302,12 +1350,19 @@ function MNTDSampleArchivingPage({
           id: "label.cancel",
           defaultMessage: "Cancel",
         })}
-        onRequestClose={() => setArchiveModalOpen(false)}
+        onRequestClose={() => {
+          setArchiveModalOpen(false);
+          setArchiveModalError(null);
+        }}
         onRequestSubmit={openArchiveSignatureModal}
         primaryButtonDisabled={isArchiving}
         size="lg"
       >
         <div style={{ marginBottom: "1rem" }}>
+          <ModalSaveErrorNotification
+            message={archiveModalError}
+            onClose={() => setArchiveModalError(null)}
+          />
           <p style={{ color: "#525252", marginBottom: "1rem" }}>
             <FormattedMessage
               id="notebook.mntd.archiving.modal.description"
@@ -1413,10 +1468,7 @@ function MNTDSampleArchivingPage({
                   })}
                   value="EXISTING"
                   disabled={
-                    !allSelectedHaveExistingStorage(
-                      samples,
-                      selectedSampleIds,
-                    )
+                    !allSelectedHaveExistingStorage(samples, selectedSampleIds)
                   }
                 />
                 <RadioButton
@@ -1447,82 +1499,82 @@ function MNTDSampleArchivingPage({
 
               {retentionLocationMode === "NEW" && (
                 <>
-              {/* Storage Location Selection */}
-              <h6 style={{ marginBottom: "0.5rem", marginTop: "1rem" }}>
-                <FormattedMessage
-                  id="notebook.mntd.archiving.selectStorage"
-                  defaultMessage="Select Storage Location"
-                />
-              </h6>
+                  {/* Storage Location Selection */}
+                  <h6 style={{ marginBottom: "0.5rem", marginTop: "1rem" }}>
+                    <FormattedMessage
+                      id="notebook.mntd.archiving.selectStorage"
+                      defaultMessage="Select Storage Location"
+                    />
+                  </h6>
 
-              <StorageHierarchySelector
-                onSelectionChange={handleStorageSelectionChange}
-                entryId={entryId}
-                notebookId={notebookId}
-                selectedBox={storageSelection.box}
-                storageType="archival"
-              />
-
-              {/* Box Layout Viewer */}
-              {storageSelection.box?.id && (
-                <div style={{ marginTop: "1rem" }}>
-                  <div
-                    style={{
-                      display: "flex",
-                      justifyContent: "space-between",
-                      alignItems: "center",
-                      marginBottom: "0.5rem",
-                    }}
-                  >
-                    <h6>
-                      <FormattedMessage
-                        id="notebook.mntd.archiving.assignWells"
-                        defaultMessage="Click wells to assign samples ({assigned}/{total})"
-                        values={{
-                          assigned: Object.keys(wellAssignments).length,
-                          total: selectedSampleIds.length,
-                        }}
-                      />
-                    </h6>
-                    <Button
-                      kind="tertiary"
-                      size="sm"
-                      renderIcon={Automatic}
-                      onClick={handleAutoPopulate}
-                      disabled={selectedSampleIds.length === 0}
-                    >
-                      <FormattedMessage
-                        id="notebook.mntd.storage.autoPopulate"
-                        defaultMessage="Auto-Populate"
-                      />
-                    </Button>
-                  </div>
-                  <BoxLayoutViewer
-                    boxId={storageSelection.box.id}
-                    layout={getCombinedLayout()}
-                    rows={storageSelection.box.rows || 8}
-                    columns={storageSelection.box.columns || 12}
-                    onWellClick={handleWellClick}
+                  <StorageHierarchySelector
+                    onSelectionChange={handleStorageSelectionChange}
+                    entryId={entryId}
+                    notebookId={notebookId}
+                    selectedBox={storageSelection.box}
+                    storageType="archival"
                   />
-                </div>
-              )}
 
-              <TextArea
-                id="storage-notes"
-                labelText={intl.formatMessage({
-                  id: "notebook.mntd.archiving.storageNotes",
-                  defaultMessage: "Storage Notes",
-                })}
-                value={retentionData.storageNotes}
-                onChange={(e) =>
-                  setRetentionData((prev) => ({
-                    ...prev,
-                    storageNotes: e.target.value,
-                  }))
-                }
-                rows={2}
-                style={{ marginTop: "1rem" }}
-              />
+                  {/* Box Layout Viewer */}
+                  {storageSelection.box?.id && (
+                    <div style={{ marginTop: "1rem" }}>
+                      <div
+                        style={{
+                          display: "flex",
+                          justifyContent: "space-between",
+                          alignItems: "center",
+                          marginBottom: "0.5rem",
+                        }}
+                      >
+                        <h6>
+                          <FormattedMessage
+                            id="notebook.mntd.archiving.assignWells"
+                            defaultMessage="Click wells to assign samples ({assigned}/{total})"
+                            values={{
+                              assigned: Object.keys(wellAssignments).length,
+                              total: selectedSampleIds.length,
+                            }}
+                          />
+                        </h6>
+                        <Button
+                          kind="tertiary"
+                          size="sm"
+                          renderIcon={Automatic}
+                          onClick={handleAutoPopulate}
+                          disabled={selectedSampleIds.length === 0}
+                        >
+                          <FormattedMessage
+                            id="notebook.mntd.storage.autoPopulate"
+                            defaultMessage="Auto-Populate"
+                          />
+                        </Button>
+                      </div>
+                      <BoxLayoutViewer
+                        boxId={storageSelection.box.id}
+                        layout={getCombinedLayout()}
+                        rows={storageSelection.box.rows || 8}
+                        columns={storageSelection.box.columns || 12}
+                        onWellClick={handleWellClick}
+                      />
+                    </div>
+                  )}
+
+                  <TextArea
+                    id="storage-notes"
+                    labelText={intl.formatMessage({
+                      id: "notebook.mntd.archiving.storageNotes",
+                      defaultMessage: "Storage Notes",
+                    })}
+                    value={retentionData.storageNotes}
+                    onChange={(e) =>
+                      setRetentionData((prev) => ({
+                        ...prev,
+                        storageNotes: e.target.value,
+                      }))
+                    }
+                    rows={2}
+                    style={{ marginTop: "1rem" }}
+                  />
                 </>
               )}
             </div>

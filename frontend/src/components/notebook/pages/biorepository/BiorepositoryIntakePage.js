@@ -29,9 +29,7 @@ import {
 import { Checkmark, Renew, Barcode, ArrowRight } from "@carbon/icons-react";
 import { FormattedMessage, useIntl } from "react-intl";
 import PropTypes from "prop-types";
-import {
-  getFromOpenElisServer,
-} from "../../../utils/Utils";
+import { getFromOpenElisServer } from "../../../utils/Utils";
 import ShipmentReceptionForm from "./ShipmentReceptionForm";
 import ShipmentListTable from "./ShipmentListTable";
 import SampleIntakeForm from "./SampleIntakeForm";
@@ -397,8 +395,7 @@ function BiorepositoryIntakePage({
             }),
             subtitle: intl.formatMessage({
               id: "biorepository.inventory.advance.noStoragePage.message",
-              defaultMessage:
-                "Storage Assignment page not found in notebook.",
+              defaultMessage: "Storage Assignment page not found in notebook.",
             }),
           });
           return;
@@ -473,7 +470,8 @@ function BiorepositoryIntakePage({
           subtitle += ` ${intl.formatMessage(
             {
               id: "biorepository.inventory.advance.alreadyOnPage",
-              defaultMessage: "{count} were already on the Storage Assignment page.",
+              defaultMessage:
+                "{count} were already on the Storage Assignment page.",
             },
             { count: alreadyOnPage },
           )}`;
@@ -521,13 +519,7 @@ function BiorepositoryIntakePage({
         setAdvancingToStorage(false);
       }
     },
-    [
-      allBioSamples,
-      notebookId,
-      intl,
-      loadAllBioSamples,
-      onProgressUpdate,
-    ],
+    [allBioSamples, notebookId, intl, loadAllBioSamples, onProgressUpdate],
   );
 
   const getDocStatusLabel = (status) => {
@@ -934,7 +926,10 @@ function BiorepositoryIntakePage({
                               )
                             : "-",
                           biosafetyLevel: sample.biosafetyLevel || "-",
-                          status: sample.workflowStatus || sample.status || "REGISTERED",
+                          status:
+                            sample.workflowStatus ||
+                            sample.status ||
+                            "REGISTERED",
                           documentationStatus:
                             sample.documentationStatus || "PENDING",
                           actions: "",

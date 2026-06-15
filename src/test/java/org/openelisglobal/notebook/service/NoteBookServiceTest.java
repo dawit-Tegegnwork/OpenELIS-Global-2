@@ -271,13 +271,9 @@ public class NoteBookServiceTest extends BaseWebContextSensitiveTest {
         assertEquals(2, updated.getPages().size());
 
         NoteBookPage updatedPageOne = updated.getPages().stream()
-                .filter(page -> "sample-creation".equals(page.getPageId()))
-                .findFirst()
-                .orElse(null);
-        NoteBookPage updatedPageTwo = updated.getPages().stream()
-                .filter(page -> "sample-qc".equals(page.getPageId()))
-                .findFirst()
-                .orElse(null);
+                .filter(page -> "sample-creation".equals(page.getPageId())).findFirst().orElse(null);
+        NoteBookPage updatedPageTwo = updated.getPages().stream().filter(page -> "sample-qc".equals(page.getPageId()))
+                .findFirst().orElse(null);
 
         assertNotNull(updatedPageOne);
         assertNotNull(updatedPageTwo);
@@ -287,11 +283,10 @@ public class NoteBookServiceTest extends BaseWebContextSensitiveTest {
         assertEquals("Updated Content 1", updatedPageOne.getContent());
         assertTrue(updatedPageOne.getCompleted());
         assertEquals("histopathology", updatedPageOne.getData().get("workflow"));
-        assertEquals(Integer.valueOf(1),
-                jdbcTemplate.queryForObject("SELECT COUNT(*) FROM clinlims.notebook_page_sample WHERE notebook_page_id = 101",
-                        Integer.class));
-        assertEquals(Integer.valueOf(0),
-                jdbcTemplate.queryForObject("SELECT COUNT(*) FROM clinlims.notebook_page WHERE id = 103", Integer.class));
+        assertEquals(Integer.valueOf(1), jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM clinlims.notebook_page_sample WHERE notebook_page_id = 101", Integer.class));
+        assertEquals(Integer.valueOf(0), jdbcTemplate
+                .queryForObject("SELECT COUNT(*) FROM clinlims.notebook_page WHERE id = 103", Integer.class));
     }
 
     @Test
@@ -388,8 +383,8 @@ public class NoteBookServiceTest extends BaseWebContextSensitiveTest {
         NoteBook child = noteBookService.createChildInstance(7, "Child Without Own Instruments", "1");
         assertNotNull(child.getId());
 
-        jdbcTemplate.execute("DELETE FROM clinlims.notebook_inventory_instruments WHERE notebook_id = "
-                + child.getId());
+        jdbcTemplate
+                .execute("DELETE FROM clinlims.notebook_inventory_instruments WHERE notebook_id = " + child.getId());
 
         NoteBookFullDisplayBean fullDisplayBean = noteBookService.convertToFullDisplayBean(child.getId());
 

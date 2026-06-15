@@ -1,4 +1,10 @@
-import React, { useState, useEffect, useRef, useCallback, useMemo } from "react";
+import React, {
+  useState,
+  useEffect,
+  useRef,
+  useCallback,
+  useMemo,
+} from "react";
 import {
   Grid,
   Column,
@@ -332,8 +338,7 @@ function BiorepositoryStorageAssignmentPage({
                 bioData.retentionPolicyName || sample.retentionPolicyName,
               retentionExpiryDate:
                 bioData.retentionExpiryDate || sample.retentionExpiryDate,
-              biosafetyLevel:
-                bioData.biosafetyLevel || sample.biosafetyLevel,
+              biosafetyLevel: bioData.biosafetyLevel || sample.biosafetyLevel,
             };
           }
           return sample;
@@ -423,7 +428,9 @@ function BiorepositoryStorageAssignmentPage({
         throw new Error(loadErrorMessage);
       }
 
-      const totalCount = Number(firstBatch.totalCount ?? firstBatch.samples.length);
+      const totalCount = Number(
+        firstBatch.totalCount ?? firstBatch.samples.length,
+      );
       const firstTransformed = firstBatch.samples.map(transformPageSample);
 
       if (!componentMounted.current) {
@@ -503,12 +510,7 @@ function BiorepositoryStorageAssignmentPage({
         setLoadProgress(null);
       }
     }
-  }, [
-    pageData?.id,
-    fetchBioSampleRetentionData,
-    transformPageSample,
-    intl,
-  ]);
+  }, [pageData?.id, fetchBioSampleRetentionData, transformPageSample, intl]);
 
   // Load box occupancy from storage API
   const loadBoxOccupancy = useCallback((boxId) => {
@@ -951,11 +953,7 @@ function BiorepositoryStorageAssignmentPage({
 
     if (sample.status === "COMPLETED" && hasStorage) {
       return (
-        <Tag
-          type="green"
-          renderIcon={Checkmark}
-          title={storageLocation}
-        >
+        <Tag type="green" renderIcon={Checkmark} title={storageLocation}>
           {storageLocation} (
           <FormattedMessage
             id="notebook.status.sentToNext"
@@ -967,11 +965,7 @@ function BiorepositoryStorageAssignmentPage({
     }
     if (hasStorage) {
       return (
-        <Tag
-          type="cyan"
-          renderIcon={Archive}
-          title={storageLocation}
-        >
+        <Tag type="cyan" renderIcon={Archive} title={storageLocation}>
           {storageLocation} (
           <FormattedMessage
             id="notebook.status.inProgress"
@@ -1483,17 +1477,17 @@ function BiorepositoryStorageAssignmentPage({
                 </div>
 
                 <div id="storage-box-print-area">
-                <BoxLayoutViewer
-                  boxId={storageSelection.box.id}
-                  layout={getCombinedLayout()}
-                  rows={storageSelection.box.rows || 9}
-                  columns={storageSelection.box.columns || 9}
-                  positionSchemaHint={
-                    storageSelection.box.positionSchemaHint || "number-number"
-                  }
-                  showSampleIdInWell
-                  onWellClick={handleWellClick}
-                />
+                  <BoxLayoutViewer
+                    boxId={storageSelection.box.id}
+                    layout={getCombinedLayout()}
+                    rows={storageSelection.box.rows || 9}
+                    columns={storageSelection.box.columns || 9}
+                    positionSchemaHint={
+                      storageSelection.box.positionSchemaHint || "number-number"
+                    }
+                    showSampleIdInWell
+                    onWellClick={handleWellClick}
+                  />
                 </div>
 
                 <div
