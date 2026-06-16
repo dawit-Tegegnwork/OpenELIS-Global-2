@@ -249,9 +249,9 @@ function NoteBookDashBoard() {
     if (refreshTreeRef.current) {
       refreshTreeRef.current();
     }
-    // Open the persisted project directly in workflow edit mode (no manual Save step)
+    // Open persisted project on Details tab; Workflow creates sample entry on demand
     if (newInstance && newInstance.id) {
-      window.location.href = `/NoteBookInstanceEditForm/${newInstance.id}?mode=edit&tab=workflow`;
+      window.location.href = `/NoteBookInstanceEditForm/${newInstance.id}?mode=edit`;
     }
   };
 

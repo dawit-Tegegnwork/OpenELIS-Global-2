@@ -43,7 +43,9 @@ import {
 } from "../utils/Utils";
 import NotebookAuditLogViewer from "./NotebookAuditLogViewer";
 import { resolveWorkflowTabComponent } from "./workflow/workflowRouting";
-import { buildLinkedEquipmentInstrumentsUrl } from "./notebookLinkedEquipment";
+import {
+  buildLinkedEquipmentInstrumentsUrl,
+} from "./notebookLinkedEquipment";
 import {
   loadNotebookEquipmentOptions,
   mergeInventoryOptionsWithLinkedSelections,
@@ -419,30 +421,26 @@ const NoteBookInstanceEntryForm = () => {
     setNewComment("");
   };
 
-  const applyInstrumentList = useCallback(
-    (response) => {
-      const departmentInstruments = mergeInventoryOptionsWithLinkedSelections(
-        response,
-        noteBookData.analyzers || [],
-        intl.formatMessage({
-          id: "notebook.equipment.picker.missingSelection",
-          defaultMessage:
-            "Linked instrument is not currently available in department inventory.",
-        }),
-      );
-      setAnalyzerList(departmentInstruments);
-      setNoteBookData((previous) => ({
-        ...previous,
-        analyzers: (previous.analyzers || []).map((instrument) => {
-          const resolvedMatch = departmentInstruments.find(
-            (option) => String(option.id) === String(instrument.id),
-          );
-          return resolvedMatch || instrument;
-        }),
-      }));
-    },
-    [intl, noteBookData.analyzers],
-  );
+  const applyInstrumentList = useCallback((response) => {
+    const departmentInstruments = mergeInventoryOptionsWithLinkedSelections(
+      response,
+      noteBookData.analyzers || [],
+      intl.formatMessage({
+        id: "notebook.equipment.picker.missingSelection",
+        defaultMessage: "Linked instrument is not currently available in department inventory.",
+      }),
+    );
+    setAnalyzerList(departmentInstruments);
+    setNoteBookData((previous) => ({
+      ...previous,
+      analyzers: (previous.analyzers || []).map((instrument) => {
+        const resolvedMatch = departmentInstruments.find(
+          (option) => String(option.id) === String(instrument.id),
+        );
+        return resolvedMatch || instrument;
+      }),
+    }));
+  }, [intl, noteBookData.analyzers]);
 
   const loadNotebookInstruments = useCallback(
     (notebookId) => {
@@ -518,7 +516,7 @@ const NoteBookInstanceEntryForm = () => {
     }
 
     const redirectToPersistedProject = (projectId, tab) => {
-      const tabQuery = tab ? `&tab=${tab}` : "&tab=workflow";
+      const tabQuery = tab ? `&tab=${tab}` : "";
       window.location.href = `/NoteBookInstanceEditForm/${projectId}?mode=edit${tabQuery}`;
     };
 
@@ -533,7 +531,7 @@ const NoteBookInstanceEntryForm = () => {
             return;
           }
           if (response?.id) {
-            redirectToPersistedProject(response.id, "workflow");
+            redirectToPersistedProject(response.id, null);
             return;
           }
           setLoading(false);
@@ -581,7 +579,7 @@ const NoteBookInstanceEntryForm = () => {
       }
 
       if (data.id) {
-        redirectToPersistedProject(data.id, urlParams.get("tab") || "workflow");
+        redirectToPersistedProject(data.id, urlParams.get("tab"));
         return;
       }
 
@@ -1439,8 +1437,9 @@ const NoteBookInstanceEntryForm = () => {
                         const basePages = [...noteBookData.pages].sort(
                           (a, b) => (a.order || 0) - (b.order || 0),
                         );
-                        const isPathologyTemplate =
-                          isPathologyNotebook(noteBookData);
+                        const isPathologyTemplate = isPathologyNotebook(
+                          noteBookData,
+                        );
                         const hasProcessingStage = basePages.some((page) =>
                           String(page.title || "")
                             .toLowerCase()
