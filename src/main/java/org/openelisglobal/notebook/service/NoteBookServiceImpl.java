@@ -415,21 +415,24 @@ public class NoteBookServiceImpl extends AuditableBaseObjectServiceImpl<NoteBook
             Hibernate.initialize(noteBook.getInventoryInstrumentIds());
             Hibernate.initialize(noteBook.getSamples());
 
-            // For child instances, use effective pages (from parent template)
-            // For templates and entries, use own pages
+            // Pages must come from the concrete notebook record being edited/viewed.
+            //
+            // Child instances have their own copied `notebook_page` rows (with distinct IDs).
+            // Returning the parent template pages here causes the frontend to query
+            // `/rest/notebook/page/{pageId}/samples` using template page IDs, while the
+            // backend creates `notebook_page_sample` rows against the *instance* page IDs.
+            // That mismatch makes imported samples appear to "disappear" in the UI.
             List<NoteBookPage> effectivePages;
-            if (noteBook.isChildInstance()) {
+            Hibernate.initialize(noteBook.getPages());
+            effectivePages = noteBook.getPages();
+
+            // Fallback: if instance pages were not copied for some reason, use parent pages.
+            if ((effectivePages == null || effectivePages.isEmpty()) && noteBook.isChildInstance()) {
                 NoteBook parentTemplate = noteBook.getParentNotebook();
                 if (parentTemplate != null) {
                     Hibernate.initialize(parentTemplate.getPages());
                     effectivePages = parentTemplate.getPages();
-                } else {
-                    Hibernate.initialize(noteBook.getPages());
-                    effectivePages = noteBook.getPages();
                 }
-            } else {
-                Hibernate.initialize(noteBook.getPages());
-                effectivePages = noteBook.getPages();
             }
 
             // Initialize panels, tests, and allowedRoles for each page (LAZY to avoid
@@ -646,7 +649,8 @@ public class NoteBookServiceImpl extends AuditableBaseObjectServiceImpl<NoteBook
         }
         if (!GenericValidator.isBlankOrNull(form.getWorkflowType())) {
             String normalizedPathologyType = PathologyWorkflowTypeConfig.normalizeWorkflowType(form.getWorkflowType());
-            noteBook.setWorkflowType(normalizedPathologyType != null ? normalizedPathologyType : form.getWorkflowType());
+            noteBook.setWorkflowType(
+                    normalizedPathologyType != null ? normalizedPathologyType : form.getWorkflowType());
         }
         if (!GenericValidator.isBlankOrNull(form.getObjective())) {
             noteBook.setObjective(form.getObjective());
@@ -730,8 +734,7 @@ public class NoteBookServiceImpl extends AuditableBaseObjectServiceImpl<NoteBook
                     noteBook.getSamples().add(sampleItemService.get(sampleId.toString()));
                 } catch (Exception e) {
                     LogEvent.logWarn(this.getClass().getSimpleName(), "createNoteBookFromForm",
-                            "Ignoring invalid sampleId=" + sampleId + " while saving notebook id="
-                                    + noteBook.getId());
+                            "Ignoring invalid sampleId=" + sampleId + " while saving notebook id=" + noteBook.getId());
                 }
             }
         }
@@ -749,8 +752,10 @@ public class NoteBookServiceImpl extends AuditableBaseObjectServiceImpl<NoteBook
             }
         }
 
-        // Handle pages by reconciling submitted rows against persisted rows without clear()+addAll().
-        // This avoids orphanRemoval deleting notebook_page rows (and cascading into notebook_page_sample)
+        // Handle pages by reconciling submitted rows against persisted rows without
+        // clear()+addAll().
+        // This avoids orphanRemoval deleting notebook_page rows (and cascading into
+        // notebook_page_sample)
         // when the client is updating an existing workflow entry in place.
         if (form.getPages() != null) {
             Map<Integer, NoteBookPage> existingPagesById = new HashMap<>();
@@ -773,11 +778,12 @@ public class NoteBookServiceImpl extends AuditableBaseObjectServiceImpl<NoteBook
                 }
             }
 
-            // Remove only pages that the payload clearly omitted. If the client sends no usable
+            // Remove only pages that the payload clearly omitted. If the client sends no
+            // usable
             // identifiers, do not risk wiping persisted workflow pages.
             if (!matchedExistingIds.isEmpty()) {
-                noteBook.getPages().removeIf(
-                        page -> page.getId() != null && !matchedExistingIds.contains(page.getId()));
+                noteBook.getPages()
+                        .removeIf(page -> page.getId() != null && !matchedExistingIds.contains(page.getId()));
             }
 
             existingPagesById.clear();
@@ -1186,8 +1192,7 @@ public class NoteBookServiceImpl extends AuditableBaseObjectServiceImpl<NoteBook
         }
 
         String workflowType = getEffectiveWorkflowType(notebook);
-        NoteBookPage nextPage = pages.stream()
-                .filter(p -> isStageApplicableForWorkflow(workflowType, p))
+        NoteBookPage nextPage = pages.stream().filter(p -> isStageApplicableForWorkflow(workflowType, p))
                 .filter(p -> getWorkflowStageOrder(p) != null && getWorkflowStageOrder(p) > currentOrder)
                 .min((p1, p2) -> getWorkflowStageOrder(p1).compareTo(getWorkflowStageOrder(p2))).orElse(null);
 
@@ -1323,7 +1328,8 @@ public class NoteBookServiceImpl extends AuditableBaseObjectServiceImpl<NoteBook
         }
 
         // Only BRANCHING pages require SampleRouting before T150 advance.
-        // CHILD_SAMPLE_CREATION is for linear child-creation pages (isolates, slides, aliquots).
+        // CHILD_SAMPLE_CREATION is for linear child-creation pages (isolates, slides,
+        // aliquots).
         String pageType = StringUtils.trimToEmpty(page.getPageType());
         return StringUtils.equalsIgnoreCase(pageType, "BRANCHING");
     }
