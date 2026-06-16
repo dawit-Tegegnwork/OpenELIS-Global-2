@@ -249,9 +249,17 @@ function NoteBookDashBoard() {
     if (refreshTreeRef.current) {
       refreshTreeRef.current();
     }
-    // Open persisted project on Details tab; Workflow creates sample entry on demand
+    // Stay on dashboard: select the new instance so user can create/select entry from the tree/list.
     if (newInstance && newInstance.id) {
-      window.location.href = `/NoteBookInstanceEditForm/${newInstance.id}?mode=edit`;
+      // The refresh is async; select after a short delay so the node exists.
+      setTimeout(() => {
+        handleTreeSelect(newInstance.id, false, {
+          id: newInstance.id,
+          title: newInstance.title,
+          isChildInstance: true,
+          parentNotebookId: newInstance.parentNotebookId,
+        });
+      }, 300);
     }
   };
 
