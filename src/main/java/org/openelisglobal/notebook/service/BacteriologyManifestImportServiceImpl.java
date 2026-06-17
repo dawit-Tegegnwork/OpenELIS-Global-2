@@ -283,7 +283,7 @@ public class BacteriologyManifestImportServiceImpl implements BacteriologyManife
 
     @Override
     public String generateExternalId(String barcode, int sequenceNumber) {
-        return String.format("%s-%03d", barcode, sequenceNumber);
+        return barcode != null ? barcode.trim() : null;
     }
 
     @Override
