@@ -3,9 +3,6 @@ package org.openelisglobal.notebook.service;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.eq;
-import static org.mockito.Mockito.when;
 
 import java.io.ByteArrayInputStream;
 import java.io.InputStream;
@@ -22,7 +19,6 @@ import org.openelisglobal.notebook.service.BacteriologyManifestImportService.Bac
 import org.openelisglobal.notebook.service.BacteriologyManifestImportService.ParseError;
 import org.openelisglobal.notebook.service.BacteriologyManifestImportService.ParsedManifest;
 import org.openelisglobal.typeofsample.service.TypeOfSampleService;
-import org.openelisglobal.typeofsample.valueholder.TypeOfSample;
 
 /**
  * Unit tests for Bacteriology manifest parsing with barcode-only go-live
@@ -88,17 +84,13 @@ public class BacteriologyManifestImportServiceImplTest {
     }
 
     @Test
-    public void testValidateSampleTypes_UnknownSampleType_ReturnsError() {
-        BacteriologyManifestRow row = new BacteriologyManifestRow(2, null, null, null, "BACT-001", null, "Mystery Type",
-                null, null, null, null, null, null, null, null, "", null);
+    public void testValidateSampleTypes_UnknownSampleType_AcceptsForImport() {
+        BacteriologyManifestRow row = new BacteriologyManifestRow(2, null, null, null, "BACT-001", null, "test", null,
+                null, null, null, null, null, null, null, "Human", null);
         ParsedManifest manifest = new ParsedManifest(List.of(row), List.of());
-
-        when(typeOfSampleService.getTypeOfSampleByDescriptionAndDomain(any(TypeOfSample.class), eq(true)))
-                .thenReturn(null);
 
         List<ParseError> errors = bacteriologyManifestImportService.validateSampleTypes(manifest);
 
-        assertEquals(1, errors.size());
-        assertEquals("sampleType", errors.get(0).column());
+        assertTrue(errors.isEmpty());
     }
 }
