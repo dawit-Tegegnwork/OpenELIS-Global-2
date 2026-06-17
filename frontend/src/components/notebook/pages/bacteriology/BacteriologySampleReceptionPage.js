@@ -96,8 +96,24 @@ function BacteriologySampleReceptionPage({
               externalId: sample.externalId,
               accessionNumber: sample.accessionNumber,
               sampleType: sample.sampleType || sample.typeOfSample?.description,
-              collectionDate: sample.collectionDate,
+              collectionDate:
+                sample.collectionDate ||
+                sample.data?.collectionDateTime ||
+                sample.collectionDateTime,
               status: sample.pageStatus || "PENDING",
+              sampleCategory:
+                sample.sampleCategory ||
+                sample.data?.sampleCategory ||
+                sample.data?.sampleOrigin,
+              sourceFacility:
+                sample.sourceFacility ||
+                sample.data?.sourceFacility ||
+                sample.data?.sourceLocationFacility,
+              receivedDate:
+                sample.receivedDate ||
+                sample.receivedDateTime ||
+                sample.data?.receivedDateTime ||
+                sample.data?.sampleReceivedDate,
               // Bacteriology specific fields from data
               projectName: sample.data?.projectName,
               studyId: sample.data?.studyId,
