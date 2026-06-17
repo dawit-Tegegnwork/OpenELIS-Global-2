@@ -112,6 +112,8 @@ const NoteBookEntryForm = () => {
   // Check if user can create/edit notebook templates
   const canEditTemplate = hasAnyRole(Permissions.CREATE_OR_EDIT_NOTEBOOK);
 
+  const [noteBookData, setNoteBookData] = useState(NoteBookInitialData);
+
   const resolveEntryAllowedRoles = (data) => {
     if (!data?.allowedRoles) {
       return [];
@@ -136,7 +138,6 @@ const NoteBookEntryForm = () => {
   const [questionnaires, setQuestionnaires] = useState([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [noteBookData, setNoteBookData] = useState(NoteBookInitialData);
   const [noteBookForm, setNoteBookForm] = useState(NoteBookFormValues);
   const [analyzerList, setAnalyzerList] = useState([]);
   const [uploadedFiles, setUploadedFiles] = useState([]);
