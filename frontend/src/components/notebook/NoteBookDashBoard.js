@@ -174,15 +174,28 @@ function NoteBookDashBoard() {
     if (!selectedNoteBook?.id || isParentTemplate) {
       return;
     }
-    window.location.href = `/NoteBookInstanceEditForm/${selectedNoteBook.id}?mode=edit&tab=workflow`;
+    window.location.href = `/NoteBookInstanceEditForm/${selectedNoteBook.id}?mode=edit&tab=workflow&newEntry=1`;
   };
 
-  const openNoteBookInstanceView = (id) => {
-    window.location.href = "/NoteBookInstanceEditForm/" + id + "?mode=view";
+  const isWorkflowEntry = (entry) =>
+    entry?.workflowEntryId != null && entry?.instanceNotebookId != null;
+
+  const openNoteBookInstanceView = (entry) => {
+    if (isWorkflowEntry(entry)) {
+      window.location.href = `/NoteBookInstanceEditForm/${entry.instanceNotebookId}?mode=view&tab=workflow&entryId=${entry.workflowEntryId}`;
+      return;
+    }
+    window.location.href =
+      "/NoteBookInstanceEditForm/" + entry.id + "?mode=view";
   };
 
-  const openNoteBookInstanceEdit = (id) => {
-    window.location.href = "/NoteBookInstanceEditForm/" + id + "?mode=edit";
+  const openNoteBookInstanceEdit = (entry) => {
+    if (isWorkflowEntry(entry)) {
+      window.location.href = `/NoteBookInstanceEditForm/${entry.instanceNotebookId}?mode=edit&tab=workflow&entryId=${entry.workflowEntryId}`;
+      return;
+    }
+    window.location.href =
+      "/NoteBookInstanceEditForm/" + entry.id + "?mode=edit";
   };
 
   useEffect(() => {
@@ -659,7 +672,7 @@ function NoteBookDashBoard() {
                                 // Otherwise disabled
                                 return true;
                               })()}
-                              onClick={() => openNoteBookInstanceView(entry.id)}
+                              onClick={() => openNoteBookInstanceView(entry)}
                             >
                               <View size={13} />
                               <FormattedMessage id="notebook.button.view" />
@@ -720,9 +733,7 @@ function NoteBookDashBoard() {
                                       "You need permission to create or edit notebook entries",
                                   });
                                 })()}
-                                onClick={() =>
-                                  openNoteBookInstanceEdit(entry.id)
-                                }
+                                onClick={() => openNoteBookInstanceEdit(entry)}
                               >
                                 <Edit size={13} />
                                 <FormattedMessage id="notebook.button.edit" />

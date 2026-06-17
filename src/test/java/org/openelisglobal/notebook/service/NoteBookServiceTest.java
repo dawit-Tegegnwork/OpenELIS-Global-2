@@ -21,12 +21,16 @@ import org.openelisglobal.notebook.form.NoteBookForm;
 import org.openelisglobal.notebook.valueholder.NoteBook;
 import org.openelisglobal.notebook.valueholder.NoteBook.NoteBookStatus;
 import org.openelisglobal.notebook.valueholder.NoteBookPage;
+import org.openelisglobal.notebook.valueholder.NotebookEntry;
 import org.springframework.beans.factory.annotation.Autowired;
 
 public class NoteBookServiceTest extends BaseWebContextSensitiveTest {
 
     @Autowired
     private NoteBookService noteBookService;
+
+    @Autowired
+    private NotebookEntryService notebookEntryService;
 
     @Before
     public void setUp() throws Exception {
@@ -39,6 +43,7 @@ public class NoteBookServiceTest extends BaseWebContextSensitiveTest {
         // Reset sequences to avoid ID conflicts (test data uses IDs 1-12)
         jdbcTemplate.execute("SELECT setval('clinlims.notebook_seq', 100, false)");
         jdbcTemplate.execute("SELECT setval('clinlims.notebook_page_seq', 100, false)");
+        jdbcTemplate.execute("SELECT setval('clinlims.notebook_entry_seq', 100, false)");
 
         // Insert notebook_entries join table data (no PK, can't use DBUnit XML)
         // Link notebook 2 as an entry of template 1
@@ -271,13 +276,9 @@ public class NoteBookServiceTest extends BaseWebContextSensitiveTest {
         assertEquals(2, updated.getPages().size());
 
         NoteBookPage updatedPageOne = updated.getPages().stream()
-                .filter(page -> "sample-creation".equals(page.getPageId()))
-                .findFirst()
-                .orElse(null);
-        NoteBookPage updatedPageTwo = updated.getPages().stream()
-                .filter(page -> "sample-qc".equals(page.getPageId()))
-                .findFirst()
-                .orElse(null);
+                .filter(page -> "sample-creation".equals(page.getPageId())).findFirst().orElse(null);
+        NoteBookPage updatedPageTwo = updated.getPages().stream().filter(page -> "sample-qc".equals(page.getPageId()))
+                .findFirst().orElse(null);
 
         assertNotNull(updatedPageOne);
         assertNotNull(updatedPageTwo);
@@ -287,11 +288,10 @@ public class NoteBookServiceTest extends BaseWebContextSensitiveTest {
         assertEquals("Updated Content 1", updatedPageOne.getContent());
         assertTrue(updatedPageOne.getCompleted());
         assertEquals("histopathology", updatedPageOne.getData().get("workflow"));
-        assertEquals(Integer.valueOf(1),
-                jdbcTemplate.queryForObject("SELECT COUNT(*) FROM clinlims.notebook_page_sample WHERE notebook_page_id = 101",
-                        Integer.class));
-        assertEquals(Integer.valueOf(0),
-                jdbcTemplate.queryForObject("SELECT COUNT(*) FROM clinlims.notebook_page WHERE id = 103", Integer.class));
+        assertEquals(Integer.valueOf(1), jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM clinlims.notebook_page_sample WHERE notebook_page_id = 101", Integer.class));
+        assertEquals(Integer.valueOf(0), jdbcTemplate
+                .queryForObject("SELECT COUNT(*) FROM clinlims.notebook_page WHERE id = 103", Integer.class));
     }
 
     @Test
@@ -388,8 +388,8 @@ public class NoteBookServiceTest extends BaseWebContextSensitiveTest {
         NoteBook child = noteBookService.createChildInstance(7, "Child Without Own Instruments", "1");
         assertNotNull(child.getId());
 
-        jdbcTemplate.execute("DELETE FROM clinlims.notebook_inventory_instruments WHERE notebook_id = "
-                + child.getId());
+        jdbcTemplate
+                .execute("DELETE FROM clinlims.notebook_inventory_instruments WHERE notebook_id = " + child.getId());
 
         NoteBookFullDisplayBean fullDisplayBean = noteBookService.convertToFullDisplayBean(child.getId());
 
@@ -518,6 +518,24 @@ public class NoteBookServiceTest extends BaseWebContextSensitiveTest {
         // Other non-template notebooks (3,4,5,6) are NOT linked to any parent
         assertEquals(1, entries.size());
         assertEquals(Integer.valueOf(2), entries.get(0).getId());
+    }
+
+    @Test
+    public void filterDashboardEntries_childInstanceWithWorkflowEntry_returnsWorkflowDisplayBean() {
+        NoteBook child = noteBookService.createChildInstance(1, "Dashboard Workflow Child", "1");
+        NotebookEntry workflowEntry = notebookEntryService.createEntry(child.getId(), "Workflow Entry", "1");
+
+        List<NoteBookDisplayBean> results = noteBookService.filterDashboardEntries(null, null, null, null, null,
+                child.getId(), false);
+
+        assertNotNull(results);
+        assertEquals(1, results.size());
+        NoteBookDisplayBean bean = results.get(0);
+        assertEquals(workflowEntry.getId(), bean.getWorkflowEntryId());
+        assertEquals(child.getId(), bean.getInstanceNotebookId());
+        assertEquals(child.getId(), bean.getId());
+        assertEquals("Dashboard Workflow Child", bean.getNotebookName());
+        assertEquals(Integer.valueOf(1), bean.getEntryNumber());
     }
 
     // ========== Sample Search ==========

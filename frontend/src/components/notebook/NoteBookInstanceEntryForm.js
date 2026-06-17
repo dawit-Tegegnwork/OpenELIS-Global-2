@@ -163,6 +163,11 @@ const NoteBookInstanceEntryForm = () => {
   // Get mode from query parameter
   const urlParams = new URLSearchParams(window.location.search);
   const viewModeParam = urlParams.get("mode"); // 'view' or 'edit'
+  const workflowEntryIdParam = urlParams.get("entryId");
+  const forceNewWorkflowEntry = urlParams.get("newEntry") === "1";
+  const parsedWorkflowEntryId = workflowEntryIdParam
+    ? Number(workflowEntryIdParam)
+    : null;
   const isViewMode = mode === MODES.VIEW; // Helper for read-only checks
 
   const { notificationVisible, setNotificationVisible, addNotification } =
@@ -517,9 +522,9 @@ const NoteBookInstanceEntryForm = () => {
       return;
     }
 
-    const redirectToPersistedProject = (projectId, tab) => {
-      const tabQuery = tab ? `&tab=${tab}` : "";
-      window.location.href = `/NoteBookInstanceEditForm/${projectId}?mode=edit${tabQuery}`;
+    const redirectToPersistedProject = (projectId) => {
+      const params = new URLSearchParams(window.location.search);
+      window.location.href = `/NoteBookInstanceEditForm/${projectId}?${params.toString()}`;
     };
 
     setLoading(true);
@@ -547,7 +552,7 @@ const NoteBookInstanceEntryForm = () => {
       }
 
       if (data.id) {
-        redirectToPersistedProject(data.id, urlParams.get("tab"));
+        redirectToPersistedProject(data.id);
         return;
       }
 
@@ -1349,20 +1354,6 @@ const NoteBookInstanceEntryForm = () => {
           <Column lg={16} md={8} sm={4}>
             {/* Use enhanced workflow view for notebook instances (non-templates) */}
             {/* Detect workflow type based on notebook title */}
-            {/*
-              IMPORTANT: Do NOT pass entryId to workflow tabs.
-
-              The notebookentryid from URL params is a NoteBook ID (from notebook table),
-              NOT a NotebookEntry ID (from notebook_entry table). These are different entities.
-
-              The workflow tabs have their own logic to:
-              1. Load notebook data using notebookId
-              2. Check for existing NotebookEntry via /rest/notebook-entry/by-notebook/{notebookId}
-              3. Create a new NotebookEntry if needed
-
-              Passing notebookentryid as entryId would cause 404 errors because the workflow
-              tabs would try to fetch /rest/notebook-entry/{notebookId} which doesn't exist.
-            */}
             {noteBookData?.isTemplate !== true &&
               noteBookData?.id &&
               (() => {
@@ -1370,6 +1361,8 @@ const NoteBookInstanceEntryForm = () => {
                 return (
                   <WorkflowTab
                     notebookId={noteBookData.id}
+                    entryId={parsedWorkflowEntryId || undefined}
+                    forceNewEntry={forceNewWorkflowEntry}
                     draftWorkflowType={noteBookData.workflowType}
                     linkedInstruments={noteBookData.analyzers}
                   />

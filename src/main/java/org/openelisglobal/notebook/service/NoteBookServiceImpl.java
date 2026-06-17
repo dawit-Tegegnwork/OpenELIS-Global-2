@@ -37,6 +37,8 @@ import org.openelisglobal.notebook.valueholder.NoteBook.NoteBookStatus;
 import org.openelisglobal.notebook.valueholder.NoteBookComment;
 import org.openelisglobal.notebook.valueholder.NoteBookFile;
 import org.openelisglobal.notebook.valueholder.NoteBookPage;
+import org.openelisglobal.notebook.valueholder.NotebookEntry;
+import org.openelisglobal.notebook.valueholder.NotebookEntry.EntryStatus;
 import org.openelisglobal.organization.service.OrganizationService;
 import org.openelisglobal.organization.valueholder.Organization;
 import org.openelisglobal.result.service.ResultService;
@@ -98,6 +100,9 @@ public class NoteBookServiceImpl extends AuditableBaseObjectServiceImpl<NoteBook
     @Autowired
     private NotebookAuditService notebookAuditService;
 
+    @Autowired
+    private NotebookEntryService notebookEntryService;
+
     public NoteBookServiceImpl() {
         super(NoteBook.class);
         this.auditTrailLog = true;
@@ -134,6 +139,217 @@ public class NoteBookServiceImpl extends AuditableBaseObjectServiceImpl<NoteBook
         }
 
         return baseObjectDAO.filterNoteBookEntries(statuses, types, tags, fromDate, toDate, entryIds);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<NoteBookDisplayBean> filterDashboardEntries(List<NoteBookStatus> statuses, List<String> types,
+            List<String> tags, Date fromDate, Date toDate, Integer noteBookId, Boolean orphanOnly) {
+        List<NoteBookDisplayBean> results = new ArrayList<>();
+
+        List<NoteBook> legacyEntries = filterNoteBookEntries(statuses, types, tags, fromDate, toDate, noteBookId,
+                orphanOnly);
+        for (NoteBook legacyEntry : legacyEntries) {
+            results.add(convertToDisplayBean(legacyEntry.getId()));
+        }
+
+        if (!Boolean.TRUE.equals(orphanOnly)) {
+            results.addAll(collectWorkflowEntryDisplayBeans(noteBookId, statuses, types, tags, fromDate, toDate));
+        }
+
+        return results;
+    }
+
+    private List<NoteBookDisplayBean> collectWorkflowEntryDisplayBeans(Integer noteBookId,
+            List<NoteBookStatus> statuses, List<String> types, List<String> tags, Date fromDate, Date toDate) {
+        if (noteBookId == null) {
+            return new ArrayList<>();
+        }
+
+        NoteBook notebook = get(noteBookId);
+        if (notebook == null) {
+            return new ArrayList<>();
+        }
+
+        List<NoteBook> instances = resolveInstancesForDashboard(notebook);
+        if (instances.isEmpty()) {
+            return new ArrayList<>();
+        }
+
+        List<NoteBookDisplayBean> beans = new ArrayList<>();
+        for (NoteBook instance : instances) {
+            List<NotebookEntry> workflowEntries = notebookEntryService.findByNotebookId(instance.getId());
+            if (workflowEntries == null || workflowEntries.isEmpty()) {
+                continue;
+            }
+
+            List<NotebookEntry> sortedEntries = workflowEntries.stream().sorted((e1, e2) -> {
+                if (e1.getDateCreated() == null && e2.getDateCreated() == null) {
+                    return Integer.compare(e1.getId(), e2.getId());
+                }
+                if (e1.getDateCreated() == null) {
+                    return 1;
+                }
+                if (e2.getDateCreated() == null) {
+                    return -1;
+                }
+                int byDate = e1.getDateCreated().compareTo(e2.getDateCreated());
+                return byDate != 0 ? byDate : Integer.compare(e1.getId(), e2.getId());
+            }).collect(Collectors.toList());
+
+            for (int i = 0; i < sortedEntries.size(); i++) {
+                NotebookEntry entry = sortedEntries.get(i);
+                if (!matchesWorkflowEntryFilters(entry, instance, statuses, types, tags, fromDate, toDate)) {
+                    continue;
+                }
+                beans.add(convertWorkflowEntryToDisplayBean(entry, instance, i + 1));
+            }
+        }
+        return beans;
+    }
+
+    private List<NoteBook> resolveInstancesForDashboard(NoteBook notebook) {
+        List<NoteBook> instances = new ArrayList<>();
+        Set<Integer> seen = new HashSet<>();
+
+        if (notebook.isChildInstance()) {
+            instances.add(notebook);
+            return instances;
+        }
+
+        if (!notebook.isParentTemplate()) {
+            return instances;
+        }
+
+        for (NoteBook child : baseObjectDAO.findChildrenByParentId(notebook.getId())) {
+            if (seen.add(child.getId())) {
+                instances.add(child);
+            }
+        }
+
+        Hibernate.initialize(notebook.getEntries());
+        if (notebook.getEntries() != null) {
+            for (NoteBook legacy : notebook.getEntries()) {
+                if (legacy == null || Boolean.TRUE.equals(legacy.getIsTemplate())) {
+                    continue;
+                }
+                Hibernate.initialize(legacy.getParentNotebook());
+                if (legacy.getParentNotebook() == null && seen.add(legacy.getId())) {
+                    instances.add(legacy);
+                }
+            }
+        }
+
+        return instances;
+    }
+
+    private boolean matchesWorkflowEntryFilters(NotebookEntry entry, NoteBook instance, List<NoteBookStatus> statuses,
+            List<String> types, List<String> tags, Date fromDate, Date toDate) {
+        NoteBookStatus entryStatus = mapWorkflowEntryStatus(entry.getStatus());
+        if (statuses != null && !statuses.isEmpty() && !statuses.contains(entryStatus)) {
+            return false;
+        }
+
+        if (types != null && !types.isEmpty()) {
+            if (instance.getType() == null || !types.contains(instance.getType().getId())) {
+                return false;
+            }
+        }
+
+        if (tags != null && !tags.isEmpty()) {
+            Hibernate.initialize(instance.getTags());
+            if (instance.getTags() == null || instance.getTags().stream().noneMatch(tags::contains)) {
+                return false;
+            }
+        }
+
+        if (fromDate != null && entry.getDateCreated() != null && entry.getDateCreated().before(fromDate)) {
+            return false;
+        }
+        if (toDate != null && entry.getDateCreated() != null && entry.getDateCreated().after(toDate)) {
+            return false;
+        }
+
+        return true;
+    }
+
+    private NoteBookStatus mapWorkflowEntryStatus(EntryStatus status) {
+        if (status == null) {
+            return NoteBookStatus.DRAFT;
+        }
+        return NoteBookStatus.valueOf(status.name());
+    }
+
+    private NoteBookDisplayBean convertWorkflowEntryToDisplayBean(NotebookEntry entry, NoteBook instance,
+            int entryNumber) {
+        NoteBookDisplayBean displayBean = new NoteBookDisplayBean();
+        displayBean.setWorkflowEntryId(entry.getId());
+        displayBean.setInstanceNotebookId(instance.getId());
+        displayBean.setId(instance.getId());
+        displayBean.setEntryNumber(entryNumber);
+        displayBean.setNotebookName(instance.getTitle());
+        displayBean.setTitle(StringUtils.isNotBlank(entry.getTitle()) ? entry.getTitle() : "Entry #" + entryNumber);
+        displayBean.setStatus(mapWorkflowEntryStatus(entry.getStatus()));
+        displayBean.setIsTemplate(false);
+        displayBean.setDateCreated(
+                entry.getDateCreated() != null ? DateUtil.formatDateAsText(entry.getDateCreated()) : null);
+        displayBean.setWorkflowType(getEffectiveWorkflowType(instance));
+
+        if (entry.getTechnician() != null) {
+            displayBean.setTechnicianId(Integer.valueOf(entry.getTechnician().getId()));
+        }
+
+        if (instance.getType() != null) {
+            displayBean.setType(Integer.valueOf(instance.getType().getId()));
+            displayBean.setTypeName(instance.getType().getDictEntry());
+        }
+
+        Hibernate.initialize(instance.getTags());
+        displayBean.setTags(instance.getTags() != null ? new ArrayList<>(instance.getTags()) : new ArrayList<>());
+
+        Hibernate.initialize(instance.getParentNotebook());
+        NoteBook parentTemplate = instance.getParentNotebook();
+        if (parentTemplate == null) {
+            parentTemplate = baseObjectDAO.findParentTemplate(instance.getId());
+        }
+        if (parentTemplate != null) {
+            Hibernate.initialize(parentTemplate.getAllowedRoles());
+            displayBean.setAllowedRoles(new HashSet<>(parentTemplate.getAllowedRoles()));
+            if (parentTemplate.getType() != null && displayBean.getTypeName() == null) {
+                displayBean.setTypeName(parentTemplate.getType().getDictEntry());
+            }
+        } else {
+            Hibernate.initialize(instance.getAllowedRoles());
+            displayBean.setAllowedRoles(
+                    instance.getAllowedRoles() != null ? new HashSet<>(instance.getAllowedRoles()) : new HashSet<>());
+        }
+
+        return displayBean;
+    }
+
+    private int countEntriesForInstance(Integer instanceId) {
+        Long workflowCount = notebookEntryService.countByNotebookId(instanceId);
+        int count = workflowCount != null ? workflowCount.intValue() : 0;
+        NoteBook instance = get(instanceId);
+        if (instance != null) {
+            Hibernate.initialize(instance.getEntries());
+            if (instance.getEntries() != null) {
+                count += instance.getEntries().size();
+            }
+        }
+        return count;
+    }
+
+    private NotebookHierarchyDTO buildChildHierarchyDTO(NoteBook parent, NoteBook child) {
+        NotebookHierarchyDTO childDTO = new NotebookHierarchyDTO();
+        childDTO.setId(child.getId());
+        childDTO.setTitle(child.getTitle());
+        childDTO.setParentTemplate(false);
+        childDTO.setChildInstance(true);
+        childDTO.setParentNotebookId(parent.getId());
+        childDTO.setParentNotebookTitle(parent.getTitle());
+        childDTO.setEntryCount(countEntriesForInstance(child.getId()));
+        return childDTO;
     }
 
     @Override
@@ -417,7 +633,8 @@ public class NoteBookServiceImpl extends AuditableBaseObjectServiceImpl<NoteBook
 
             // Pages must come from the concrete notebook record being edited/viewed.
             //
-            // Child instances have their own copied `notebook_page` rows (with distinct IDs).
+            // Child instances have their own copied `notebook_page` rows (with distinct
+            // IDs).
             // Returning the parent template pages here causes the frontend to query
             // `/rest/notebook/page/{pageId}/samples` using template page IDs, while the
             // backend creates `notebook_page_sample` rows against the *instance* page IDs.
@@ -426,7 +643,8 @@ public class NoteBookServiceImpl extends AuditableBaseObjectServiceImpl<NoteBook
             Hibernate.initialize(noteBook.getPages());
             effectivePages = noteBook.getPages();
 
-            // Fallback: if instance pages were not copied for some reason, use parent pages.
+            // Fallback: if instance pages were not copied for some reason, use parent
+            // pages.
             if ((effectivePages == null || effectivePages.isEmpty()) && noteBook.isChildInstance()) {
                 NoteBook parentTemplate = noteBook.getParentNotebook();
                 if (parentTemplate != null) {
@@ -1872,39 +2090,43 @@ public class NoteBookServiceImpl extends AuditableBaseObjectServiceImpl<NoteBook
             parentDTO.setParentTemplate(true);
             parentDTO.setChildInstance(false);
 
-            // Get children
+            // Get children linked via parent_notebook_id
             List<NoteBook> children = baseObjectDAO.findChildrenByParentId(parent.getId());
-            List<Integer> childIds = children.stream().map(NoteBook::getId).collect(Collectors.toList());
-
-            // Get entry counts for each child
-            Map<Integer, Long> entryCounts = baseObjectDAO.countEntriesForChildren(childIds);
-
+            Set<Integer> childIds = new HashSet<>();
             long totalEntries = 0;
             for (NoteBook child : children) {
-                NotebookHierarchyDTO childDTO = new NotebookHierarchyDTO();
-                childDTO.setId(child.getId());
-                childDTO.setTitle(child.getTitle());
-                childDTO.setParentTemplate(false);
-                childDTO.setChildInstance(true);
-                childDTO.setParentNotebookId(parent.getId());
-                childDTO.setParentNotebookTitle(parent.getTitle());
-
-                long childEntryCount = entryCounts.getOrDefault(child.getId(), 0L);
-                childDTO.setEntryCount((int) childEntryCount);
-                totalEntries += childEntryCount;
-
+                childIds.add(child.getId());
+                NotebookHierarchyDTO childDTO = buildChildHierarchyDTO(parent, child);
+                totalEntries += childDTO.getEntryCount();
                 parentDTO.addChild(childDTO);
             }
 
-            // Count entries directly on the parent (orphan/legacy entries not assigned to
-            // children)
+            // Legacy instances linked only via notebook_entries join table
             Hibernate.initialize(parent.getEntries());
-            int orphanEntries = parent.getEntries() != null ? parent.getEntries().size() : 0;
-            parentDTO.setOrphanEntryCount(orphanEntries);
-            parentDTO.setEntryCount(orphanEntries); // For backwards compatibility
+            int trueOrphanEntries = 0;
+            if (parent.getEntries() != null) {
+                for (NoteBook legacy : parent.getEntries()) {
+                    if (legacy == null) {
+                        continue;
+                    }
+                    Hibernate.initialize(legacy.getParentNotebook());
+                    if (!Boolean.TRUE.equals(legacy.getIsTemplate()) && legacy.getParentNotebook() == null) {
+                        if (childIds.add(legacy.getId())) {
+                            NotebookHierarchyDTO childDTO = buildChildHierarchyDTO(parent, legacy);
+                            totalEntries += childDTO.getEntryCount();
+                            parentDTO.addChild(childDTO);
+                        }
+                    } else {
+                        trueOrphanEntries++;
+                    }
+                }
+            }
+
+            parentDTO.setOrphanEntryCount(trueOrphanEntries);
+            parentDTO.setEntryCount(trueOrphanEntries); // For backwards compatibility
 
             // Total entries includes both children's entries and orphan entries
-            parentDTO.setTotalEntries((int) totalEntries + orphanEntries);
+            parentDTO.setTotalEntries((int) totalEntries + trueOrphanEntries);
 
             hierarchy.add(parentDTO);
         }
