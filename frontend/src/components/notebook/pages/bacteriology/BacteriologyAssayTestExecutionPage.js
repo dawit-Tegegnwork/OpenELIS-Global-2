@@ -2851,16 +2851,37 @@ function BacteriologyAssayTestExecutionPage({
    * @param {Function} reopenModal - Reopens the parent modal if the user cancels.
    * @param {string} meaning - SignatureMeaning.AUTHORED or SignatureMeaning.REJECTED.
    */
+  // Close workflow modals before e-sig so Carbon focus trap does not block password input.
+  const closeAllWorkflowModals = useCallback(() => {
+    setMicroscopyModalOpen(false);
+    setCultureModalOpen(false);
+    setBiochemModalOpen(false);
+    setColonyModalOpen(false);
+    setMediaReactionsModalOpen(false);
+    setMediaReactionDstModalOpen(false);
+    setDstModalOpen(false);
+    setAutomatedIdModalOpen(false);
+    setExtractionModalOpen(false);
+    setPcrModalOpen(false);
+    setWgsModalOpen(false);
+    setMolecularQcModalOpen(false);
+  }, []);
+
   const triggerEsigForSave = useCallback(
     (callback, reopenModal, meaning = SignatureMeaning.AUTHORED) => {
       pendingAction.current = { callback, reopenModal };
-      if (meaning === SignatureMeaning.REJECTED) {
-        openRejectedSignatureModal();
-      } else {
-        openAuthoredSignatureModal();
-      }
+      closeAllWorkflowModals();
+      const openModal =
+        meaning === SignatureMeaning.REJECTED
+          ? openRejectedSignatureModal
+          : openAuthoredSignatureModal;
+      window.setTimeout(openModal, 0);
     },
-    [openAuthoredSignatureModal, openRejectedSignatureModal],
+    [
+      closeAllWorkflowModals,
+      openAuthoredSignatureModal,
+      openRejectedSignatureModal,
+    ],
   );
 
   /**

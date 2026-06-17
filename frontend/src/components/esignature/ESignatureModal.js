@@ -359,6 +359,7 @@ const ESignatureModal = ({
         value={password}
         onChange={(e) => setPassword(e.target.value)}
         invalid={!!error && !password}
+        autoFocus
       />
     </Stack>
   );
