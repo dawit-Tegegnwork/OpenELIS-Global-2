@@ -350,6 +350,57 @@ function BacteriologySampleReceptionPage({
               onSelectionChange={setSelectedSampleIds}
               showSelection={true}
               loading={loading}
+              columns={[
+                {
+                  key: "externalId",
+                  header: intl.formatMessage({
+                    id: "notebook.grid.sampleId",
+                    defaultMessage: "Sample ID",
+                  }),
+                },
+                {
+                  key: "accessionNumber",
+                  header: intl.formatMessage({
+                    id: "notebook.sample.accessionNumber",
+                    defaultMessage: "Accession #",
+                  }),
+                },
+                {
+                  key: "sampleType",
+                  header: intl.formatMessage({
+                    id: "notebook.sample.type",
+                    defaultMessage: "Sample Type",
+                  }),
+                },
+                {
+                  key: "sourceFacility",
+                  header: intl.formatMessage({
+                    id: "notebook.sample.sourceFacility",
+                    defaultMessage: "Source",
+                  }),
+                },
+                {
+                  key: "collectionDate",
+                  header: intl.formatMessage({
+                    id: "notebook.sample.collectionDate",
+                    defaultMessage: "Collection Date",
+                  }),
+                },
+                {
+                  key: "receivedDate",
+                  header: intl.formatMessage({
+                    id: "notebook.sample.receivedDate",
+                    defaultMessage: "Received Date",
+                  }),
+                },
+                {
+                  key: "status",
+                  header: intl.formatMessage({
+                    id: "notebook.sample.status",
+                    defaultMessage: "Status",
+                  }),
+                },
+              ]}
               additionalColumns={[
                 {
                   key: "sampleOrigin",
@@ -435,6 +486,57 @@ function BacteriologySampleReceptionPage({
               samples={completedSamples}
               showSelection={false}
               loading={loading}
+              columns={[
+                {
+                  key: "externalId",
+                  header: intl.formatMessage({
+                    id: "notebook.grid.sampleId",
+                    defaultMessage: "Sample ID",
+                  }),
+                },
+                {
+                  key: "accessionNumber",
+                  header: intl.formatMessage({
+                    id: "notebook.sample.accessionNumber",
+                    defaultMessage: "Accession #",
+                  }),
+                },
+                {
+                  key: "sampleType",
+                  header: intl.formatMessage({
+                    id: "notebook.sample.type",
+                    defaultMessage: "Sample Type",
+                  }),
+                },
+                {
+                  key: "sourceFacility",
+                  header: intl.formatMessage({
+                    id: "notebook.sample.sourceFacility",
+                    defaultMessage: "Source",
+                  }),
+                },
+                {
+                  key: "collectionDate",
+                  header: intl.formatMessage({
+                    id: "notebook.sample.collectionDate",
+                    defaultMessage: "Collection Date",
+                  }),
+                },
+                {
+                  key: "receivedDate",
+                  header: intl.formatMessage({
+                    id: "notebook.sample.receivedDate",
+                    defaultMessage: "Received Date",
+                  }),
+                },
+                {
+                  key: "status",
+                  header: intl.formatMessage({
+                    id: "notebook.sample.status",
+                    defaultMessage: "Status",
+                  }),
+                },
+              ]}
               additionalColumns={[
                 {
                   key: "sampleOrigin",
