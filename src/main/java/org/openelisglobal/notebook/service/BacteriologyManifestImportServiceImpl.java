@@ -10,12 +10,16 @@ import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 import java.util.stream.Collectors;
 import org.openelisglobal.common.log.LogEvent;
+import org.openelisglobal.common.services.DisplayListService;
 import org.openelisglobal.common.services.IStatusService;
 import org.openelisglobal.common.services.StatusService.SampleStatus;
+import org.openelisglobal.localization.service.LocalizationService;
+import org.openelisglobal.localization.valueholder.Localization;
 import org.openelisglobal.notebook.form.BacteriologyManifestImportForm;
 import org.openelisglobal.notebook.valueholder.NotebookEntry;
 import org.openelisglobal.sample.dao.SampleDAO;
@@ -62,6 +66,9 @@ public class BacteriologyManifestImportServiceImpl implements BacteriologyManife
 
     @Autowired
     private TypeOfSampleService typeOfSampleService;
+
+    @Autowired
+    private LocalizationService localizationService;
 
     @Autowired
     private SampleService sampleService;
@@ -176,23 +183,9 @@ public class BacteriologyManifestImportServiceImpl implements BacteriologyManife
     @Override
     @Transactional(readOnly = true)
     public List<ParseError> validateSampleTypes(ParsedManifest manifest) {
-        List<ParseError> errors = new ArrayList<>();
-
-        for (BacteriologyManifestRow row : manifest.rows()) {
-            if (row.sampleType() == null || row.sampleType().isBlank()) {
-                continue;
-            }
-
-            TypeOfSample searchType = new TypeOfSample();
-            searchType.setDescription(row.sampleType());
-
-            TypeOfSample found = typeOfSampleService.getTypeOfSampleByDescriptionAndDomain(searchType, true);
-            if (found == null) {
-                errors.add(new ParseError(row.rowNumber(), "sampleType", "Unknown sample type: " + row.sampleType()));
-            }
-        }
-
-        return errors;
+        // Accept any sample type label at preview time; missing types are created on
+        // import.
+        return new ArrayList<>();
     }
 
     @Override
@@ -215,7 +208,7 @@ public class BacteriologyManifestImportServiceImpl implements BacteriologyManife
         int sequenceNumber = 1;
 
         for (BacteriologyManifestRow row : manifest.rows()) {
-            TypeOfSample sampleType = resolveBacteriologySampleType(row.sampleType());
+            TypeOfSample sampleType = resolveBacteriologySampleType(row, sysUserId);
 
             if (sampleType == null) {
                 errors.add(new ParseError(row.rowNumber(), "sampleType",
@@ -321,19 +314,12 @@ public class BacteriologyManifestImportServiceImpl implements BacteriologyManife
     }
 
     /**
-     * Resolve sample type for manifest import. When the CSV row omits sample type
-     * (barcode-only go-live imports), default to "Other animal specimen" if
-     * configured, otherwise the first active bacteriology type in the database.
+     * Resolve sample type for manifest import. Creates missing types on the fly so
+     * go-live manifests do not require a deployment for each new label.
      */
-    private TypeOfSample resolveBacteriologySampleType(String sampleTypeDescription) {
-        if (sampleTypeDescription != null && !sampleTypeDescription.isBlank()) {
-            TypeOfSample searchType = new TypeOfSample();
-            searchType.setDescription(sampleTypeDescription.trim());
-            TypeOfSample found = typeOfSampleService.getTypeOfSampleByDescriptionAndDomain(searchType, true);
-            if (found != null) {
-                return found;
-            }
-            return null;
+    private TypeOfSample resolveBacteriologySampleType(BacteriologyManifestRow row, String sysUserId) {
+        if (row.sampleType() != null && !row.sampleType().isBlank()) {
+            return findOrCreateBacteriologySampleType(row.sampleType().trim(), row.sampleOrigin(), sysUserId);
         }
 
         TypeOfSample preferredDefault = lookupSampleTypeByDescription("Other animal specimen");
@@ -347,6 +333,75 @@ public class BacteriologyManifestImportServiceImpl implements BacteriologyManife
         }
 
         return null;
+    }
+
+    private TypeOfSample findOrCreateBacteriologySampleType(String description, String sampleOrigin, String sysUserId) {
+        TypeOfSample existing = lookupSampleTypeByDescription(description);
+        if (existing != null) {
+            return existing;
+        }
+
+        String domain = determineDomainFromSampleOrigin(sampleOrigin);
+        String localAbbreviation = generateUniqueSampleTypeAbbreviation(description, domain);
+
+        Localization localization = new Localization();
+        localization.setEnglish(description);
+        localization.setFrench(description);
+        localization.setDescription("type of sample name");
+        localization.setSysUserId(sysUserId);
+        localization = localizationService.save(localization);
+
+        TypeOfSample sampleType = new TypeOfSample();
+        sampleType.setDescription(description);
+        sampleType.setDomain(domain);
+        sampleType.setLocalAbbreviation(localAbbreviation);
+        sampleType.setIsActive(true);
+        sampleType.setSortOrder(Integer.MAX_VALUE);
+        sampleType.setSysUserId(sysUserId);
+        sampleType.setNameKey("Sample.type." + description.replaceAll("[^A-Za-z0-9]+", "_"));
+        sampleType.setLocalization(localization);
+
+        TypeOfSample saved = typeOfSampleService.save(sampleType);
+        typeOfSampleService.clearCache();
+        refreshSampleTypeLists();
+        LogEvent.logInfo(this.getClass().getSimpleName(), "findOrCreateBacteriologySampleType",
+                "Created bacteriology sample type from manifest: " + description);
+        return saved;
+    }
+
+    private String determineDomainFromSampleOrigin(String sampleOrigin) {
+        if (sampleOrigin == null || sampleOrigin.isBlank()) {
+            return "H";
+        }
+        String normalized = sampleOrigin.trim().toLowerCase(Locale.ROOT);
+        if (normalized.contains("animal") || normalized.contains("veterinary")) {
+            return "A";
+        }
+        if (normalized.contains("environment") || normalized.contains("water") || normalized.contains("soil")) {
+            return "E";
+        }
+        return "H";
+    }
+
+    private String generateUniqueSampleTypeAbbreviation(String description, String domain) {
+        String cleaned = description.replaceAll("[^A-Za-z0-9]", "").toUpperCase(Locale.ROOT);
+        if (cleaned.isEmpty()) {
+            cleaned = "BACT";
+        }
+        String candidate = cleaned.substring(0, Math.min(10, cleaned.length()));
+        int suffix = 1;
+        while (typeOfSampleService.getTypeOfSampleByLocalAbbrevAndDomain(candidate, domain) != null) {
+            String suffixText = Integer.toString(suffix++);
+            int maxBaseLength = Math.max(1, 10 - suffixText.length());
+            candidate = cleaned.substring(0, Math.min(maxBaseLength, cleaned.length())) + suffixText;
+        }
+        return candidate;
+    }
+
+    private void refreshSampleTypeLists() {
+        DisplayListService.getInstance().refreshList(DisplayListService.ListType.SAMPLE_TYPE);
+        DisplayListService.getInstance().refreshList(DisplayListService.ListType.SAMPLE_TYPE_ACTIVE);
+        DisplayListService.getInstance().refreshList(DisplayListService.ListType.SAMPLE_TYPE_INACTIVE);
     }
 
     private TypeOfSample lookupSampleTypeByDescription(String description) {
