@@ -34,8 +34,6 @@ import org.openelisglobal.common.util.IdValuePair;
 import org.openelisglobal.dataexchange.fhir.FhirConfig;
 import org.openelisglobal.dataexchange.fhir.FhirUtil;
 import org.openelisglobal.department.service.DepartmentIsolationService;
-import org.openelisglobal.rbac.RbacAction;
-import org.openelisglobal.rbac.RbacPermissionService;
 import org.openelisglobal.login.valueholder.UserSessionData;
 import org.openelisglobal.notebook.bean.NoteBookDashboardMetrics;
 import org.openelisglobal.notebook.bean.NoteBookDisplayBean;
@@ -56,6 +54,8 @@ import org.openelisglobal.notebook.valueholder.NotebookPageSample.Status;
 import org.openelisglobal.notebook.valueholder.WorkflowPageTemplate;
 import org.openelisglobal.organization.service.OrganizationService;
 import org.openelisglobal.organization.valueholder.Organization;
+import org.openelisglobal.rbac.RbacAction;
+import org.openelisglobal.rbac.RbacPermissionService;
 import org.openelisglobal.role.service.RoleService;
 import org.openelisglobal.role.valueholder.Role;
 import org.openelisglobal.test.service.TestSectionService;
@@ -134,20 +134,24 @@ public class NoteBookRestController extends BaseRestController {
             }
         }
 
-        List<NoteBookDisplayBean> results = noteBookService.filterNoteBookEntries(statuses, types, tags,
-                getFormatedDate(fromDate), getFormatedDate(toDate), noteBookId, orphanOnly).stream().filter(entry -> {
+        List<NoteBookDisplayBean> results = noteBookService.filterDashboardEntries(statuses, types, tags,
+                getFormatedDate(fromDate), getFormatedDate(toDate), noteBookId, orphanOnly).stream().filter(bean -> {
+                    if (bean.getWorkflowEntryId() != null && bean.getInstanceNotebookId() != null) {
+                        NoteBook instance = noteBookService.get(bean.getInstanceNotebookId());
+                        if (instance != null && instance.isChildInstance() && instance.getParentNotebook() != null) {
+                            return notebookSecurityService.canViewTemplate(instance.getParentNotebook().getId(),
+                                    sysUserId, loginLabUnit);
+                        }
+                        return notebookSecurityService.canViewTemplate(bean.getInstanceNotebookId(), sysUserId,
+                                loginLabUnit);
+                    }
                     // Security Check: User must be able to view the parent template of the entry
-                    NoteBook parent = noteBookService.getParentTemplate(entry.getId());
+                    NoteBook parent = noteBookService.getParentTemplate(bean.getId());
                     if (parent != null) {
                         return notebookSecurityService.canViewTemplate(parent.getId(), sysUserId, loginLabUnit);
                     }
-                    // If no parent (standalone?), check the entry itself as if it were a
-                    // template/independent
-                    // But entries usually don't have depts/orgs set, so this might be open.
-                    // Assuming if no parent, we check the entry using the same rules (it might have
-                    // its own restrictions)
-                    return notebookSecurityService.canViewTemplate(entry.getId(), sysUserId, loginLabUnit);
-                }).map(e -> noteBookService.convertToDisplayBean(e.getId())).collect(Collectors.toList());
+                    return notebookSecurityService.canViewTemplate(bean.getId(), sysUserId, loginLabUnit);
+                }).collect(Collectors.toList());
         return ResponseEntity.ok(results);
     }
 
@@ -177,8 +181,8 @@ public class NoteBookRestController extends BaseRestController {
             return ResponseEntity.ok(new ArrayList<>());
         }
 
-        List<NoteBookDisplayBean> results = noteBookService.getNoteBookEntries(noteBookId).stream()
-                .map(e -> noteBookService.convertToDisplayBean(e.getId())).collect(Collectors.toList());
+        List<NoteBookDisplayBean> results = noteBookService.filterDashboardEntries(null, null, null, null, null,
+                noteBookId, false);
         return ResponseEntity.ok(results);
     }
 
@@ -369,8 +373,7 @@ public class NoteBookRestController extends BaseRestController {
         }
 
         if (!hasNotebookEditRbac(request)) {
-            return ResponseEntity.status(403)
-                    .body(Map.of("error", "Insufficient permission to update notebook data"));
+            return ResponseEntity.status(403).body(Map.of("error", "Insufficient permission to update notebook data"));
         }
 
         form.setSystemUserId(Integer.valueOf(sysUserId));
@@ -400,8 +403,7 @@ public class NoteBookRestController extends BaseRestController {
             return ResponseEntity.status(403)
                     .body(Map.of("error", "Insufficient permission to approve notebook entries"));
         }
-        if (!rbacPermissionService.hasPermission(request, RbacAction.SYSTEM_ADMIN)
-                && !hasNotebookEditRbac(request)) {
+        if (!rbacPermissionService.hasPermission(request, RbacAction.SYSTEM_ADMIN) && !hasNotebookEditRbac(request)) {
             return ResponseEntity.status(403)
                     .body(Map.of("error", "Insufficient permission to update notebook status"));
         }
@@ -1048,8 +1050,7 @@ public class NoteBookRestController extends BaseRestController {
             if (!rbacPermissionService.hasPermission(request, RbacAction.GENERATE_REPORTS)) {
                 response.setStatus(HttpServletResponse.SC_FORBIDDEN);
                 response.setContentType(MediaType.APPLICATION_JSON_VALUE);
-                response.getWriter()
-                        .write("{\"error\":\"Insufficient permission to generate reports\"}");
+                response.getWriter().write("{\"error\":\"Insufficient permission to generate reports\"}");
                 return;
             }
 

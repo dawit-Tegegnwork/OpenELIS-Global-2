@@ -15,8 +15,8 @@ import {
 } from "@carbon/react";
 import { Renew } from "@carbon/react/icons";
 import { FormattedMessage, useIntl } from "react-intl";
-import { getFromOpenElisServer } from "../../utils/Utils";
 import { usePageAccessControl } from "../../../hooks/usePageAccessControl";
+import { useNotebookEntry } from "../../../hooks/useNotebookEntry";
 import config from "../../../config.json";
 import { NotificationContext } from "../../layout/Layout";
 import PageNavigation from "./PageNavigation";
@@ -70,30 +70,37 @@ const DEFAULT_BACTERIOLOGY_WORKFLOW_PAGES = [
  * @param {Object} props
  * @param {number} props.notebookId - The notebook template ID (will auto-create entry if needed)
  * @param {number} props.entryId - The notebook entry ID (direct entry access)
+ * @param {boolean} props.forceNewEntry - When true, create a new notebook_entry on load
  */
-function BacteriologyWorkflowTab({ notebookId, entryId: propEntryId }) {
+function BacteriologyWorkflowTab({
+  notebookId,
+  entryId: propEntryId,
+  forceNewEntry = false,
+}) {
   const componentMounted = useRef(false);
   const intl = useIntl();
   const { notificationVisible, setNotificationVisible } =
     useContext(NotificationContext);
 
-  const [loading, setLoading] = useState(true);
-  const [notebook, setNotebook] = useState(null);
-  const [entry, setEntry] = useState(null);
-  const [entryId, setEntryId] = useState(propEntryId);
-  const [pages, setPages] = useState([]);
+  const {
+    loading,
+    notebook,
+    entry,
+    entryId,
+    pages,
+    samples,
+    errorMessage,
+    isCreatingEntry,
+    refreshSamples,
+    loadEntryData,
+  } = useNotebookEntry(notebookId, propEntryId, componentMounted, {
+    forceNewEntry,
+  });
+
   const [pageProgress, setPageProgress] = useState({});
-  const [samples, setSamples] = useState([]);
-  const [errorMessage, setErrorMessage] = useState(null);
   const [syncing, setSyncing] = useState(false);
   const [syncMessage, setSyncMessage] = useState(null);
-  // Track whether we're creating a new entry vs viewing/editing existing
-  // This is determined after checking if an entry exists for the notebook
-  const [isCreatingEntry, setIsCreatingEntry] = useState(!propEntryId);
 
-  // Use shared hook for page access control
-  // isCreating: true when creating a new entry (bypasses page-level role restrictions)
-  // isCreating: false when viewing/editing existing entry (applies role restrictions)
   const { effectivePages, activePage, setActivePage, handlePageChange } =
     usePageAccessControl(pages, DEFAULT_BACTERIOLOGY_WORKFLOW_PAGES, 0, {
       isCreating: isCreatingEntry,
@@ -102,160 +109,10 @@ function BacteriologyWorkflowTab({ notebookId, entryId: propEntryId }) {
 
   useEffect(() => {
     componentMounted.current = true;
-    loadNotebookData();
-
     return () => {
       componentMounted.current = false;
     };
-  }, [notebookId, propEntryId]);
-
-  const loadNotebookData = () => {
-    if (!notebookId && !propEntryId) {
-      setLoading(false);
-      return;
-    }
-
-    setLoading(true);
-
-    if (propEntryId) {
-      loadEntryData(propEntryId);
-    } else if (notebookId) {
-      loadNotebookAndEntry(notebookId);
-    }
-  };
-
-  const loadEntryData = (eId) => {
-    let loadCount = 0;
-    const checkDone = () => {
-      loadCount++;
-      if (loadCount >= 2) {
-        setLoading(false);
-      }
-    };
-
-    getFromOpenElisServer(`/rest/notebook-entry/${eId}`, (response) => {
-      if (componentMounted.current && response) {
-        setEntry(response);
-        setEntryId(eId);
-        if (response.notebook) {
-          setNotebook(response.notebook);
-          getFromOpenElisServer(
-            `/rest/notebook/view/${response.notebook.id}`,
-            (nbResponse) => {
-              if (componentMounted.current && nbResponse) {
-                setPages(nbResponse.pages || []);
-              }
-            },
-          );
-        }
-      }
-      checkDone();
-    });
-
-    getFromOpenElisServer(`/rest/notebook-entry/${eId}/samples`, (response) => {
-      if (componentMounted.current && response) {
-        setSamples(response || []);
-      }
-      checkDone();
-    });
-  };
-
-  const loadNotebookAndEntry = (nbId) => {
-    getFromOpenElisServer(`/rest/notebook/view/${nbId}`, (nbResponse) => {
-      if (componentMounted.current && nbResponse) {
-        setNotebook(nbResponse);
-        setPages(nbResponse.pages || []);
-
-        getFromOpenElisServer(
-          `/rest/notebook-entry/by-notebook/${nbId}`,
-          (entriesResponse) => {
-            if (componentMounted.current) {
-              if (
-                entriesResponse &&
-                Array.isArray(entriesResponse) &&
-                entriesResponse.length > 0
-              ) {
-                // Use the first/most recent entry - this is an EXISTING entry
-                // so page-level role restrictions should apply
-                const existingEntry = entriesResponse[0];
-                setEntry(existingEntry);
-                setEntryId(existingEntry.id);
-                setIsCreatingEntry(false); // Viewing/editing existing entry
-
-                getFromOpenElisServer(
-                  `/rest/notebook-entry/${existingEntry.id}/samples`,
-                  (samplesResponse) => {
-                    if (componentMounted.current) {
-                      setSamples(
-                        Array.isArray(samplesResponse) ? samplesResponse : [],
-                      );
-                    }
-                    setLoading(false);
-                  },
-                );
-              } else {
-                // No entry exists - create one automatically
-                // This is a NEW entry, so page-level restrictions should NOT apply
-                setIsCreatingEntry(true); // Creating new entry
-                createEntryForNotebook(nbId);
-              }
-            }
-          },
-        );
-      } else {
-        setLoading(false);
-      }
-    });
-  };
-
-  const createEntryForNotebook = (nbId) => {
-    fetch(
-      `${config.serverBaseUrl}/rest/notebook-entry/create?notebookId=${nbId}`,
-      {
-        method: "POST",
-        credentials: "include",
-        headers: {
-          "Content-Type": "application/json",
-          "X-CSRF-Token": localStorage.getItem("CSRF"),
-        },
-      },
-    )
-      .then(async (response) => {
-        const text = await response.text();
-        let data = {};
-        try {
-          data = text ? JSON.parse(text) : {};
-        } catch (e) {
-          console.error("Failed to parse response as JSON:", e);
-        }
-        if (!response.ok) {
-          const errorMsg =
-            data.error || `HTTP ${response.status}: ${response.statusText}`;
-          throw new Error(errorMsg);
-        }
-        return data;
-      })
-      .then((data) => {
-        if (componentMounted.current) {
-          if (data && data.id) {
-            setEntry(data);
-            setEntryId(data.id);
-            setSamples([]);
-            setIsCreatingEntry(false); // Entry created - apply page restrictions
-          } else if (data && data.error) {
-            console.error("Entry creation error:", data.error);
-          }
-          setLoading(false);
-        }
-      })
-      .catch((error) => {
-        console.error("Failed to create notebook entry:", error.message);
-        if (componentMounted.current) {
-          setErrorMessage(error.message);
-          setLoading(false);
-        }
-      });
-  };
+  }, []);
 
   const getProgressForPage = (pageId) => {
     const progress = pageProgress[pageId];
@@ -266,17 +123,8 @@ function BacteriologyWorkflowTab({ notebookId, entryId: propEntryId }) {
   };
 
   const handleProgressUpdate = useCallback(() => {
-    if (entryId) {
-      getFromOpenElisServer(
-        `/rest/notebook-entry/${entryId}/samples`,
-        (response) => {
-          if (componentMounted.current && response) {
-            setSamples(response || []);
-          }
-        },
-      );
-    }
-  }, [entryId]);
+    refreshSamples();
+  }, [refreshSamples]);
 
   // Sync pages from template to instance (adds missing pages)
   const handleSyncPages = useCallback(() => {
@@ -311,7 +159,9 @@ function BacteriologyWorkflowTab({ notebookId, entryId: propEntryId }) {
               });
               // Reload the notebook data to get new pages
               setTimeout(() => {
-                loadNotebookData();
+                if (entryId) {
+                  loadEntryData(entryId);
+                }
                 setSyncMessage(null);
               }, 1500);
             } else {
@@ -347,7 +197,7 @@ function BacteriologyWorkflowTab({ notebookId, entryId: propEntryId }) {
           setSyncing(false);
         }
       });
-  }, [entryId, intl]);
+  }, [entryId, intl, loadEntryData]);
 
   // Render Bacteriology page-specific content based on page order
   const renderPageContent = (page) => {
@@ -476,7 +326,7 @@ function BacteriologyWorkflowTab({ notebookId, entryId: propEntryId }) {
     }
   };
 
-  if (loading) {
+  if (loading || isCreatingEntry) {
     return (
       <div style={{ padding: "2rem", textAlign: "center" }}>
         <Loading

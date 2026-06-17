@@ -175,12 +175,37 @@ public class NoteBookDisplayBean {
 
     private String workflowType;
 
+    /**
+     * notebook_entry.id when this tile is a workflow entry (not a legacy NoteBook
+     * row).
+     */
+    private Integer workflowEntryId;
+
+    /** Child lab instance id for workflow entries. */
+    private Integer instanceNotebookId;
+
     public String getWorkflowType() {
         return workflowType;
     }
 
     public void setWorkflowType(String workflowType) {
         this.workflowType = workflowType;
+    }
+
+    public Integer getWorkflowEntryId() {
+        return workflowEntryId;
+    }
+
+    public void setWorkflowEntryId(Integer workflowEntryId) {
+        this.workflowEntryId = workflowEntryId;
+    }
+
+    public Integer getInstanceNotebookId() {
+        return instanceNotebookId;
+    }
+
+    public void setInstanceNotebookId(Integer instanceNotebookId) {
+        this.instanceNotebookId = instanceNotebookId;
     }
 
 }

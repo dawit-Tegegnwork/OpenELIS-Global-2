@@ -107,10 +107,28 @@ const NoteBookEntryForm = () => {
   const { notificationVisible, setNotificationVisible, addNotification } =
     useContext(NotificationContext);
   const { userSessionDetails } = useContext(UserSessionDetailsContext);
-  const { hasAnyRole } = usePermissions();
+  const { hasAnyRole, hasRoleForCurrentLabUnit } = usePermissions();
 
   // Check if user can create/edit notebook templates
   const canEditTemplate = hasAnyRole(Permissions.CREATE_OR_EDIT_NOTEBOOK);
+
+  const resolveEntryAllowedRoles = (data) => {
+    if (!data?.allowedRoles) {
+      return [];
+    }
+    return Array.isArray(data.allowedRoles)
+      ? data.allowedRoles
+      : Array.from(data.allowedRoles);
+  };
+
+  const canEditInstance = hasRoleForCurrentLabUnit(
+    resolveEntryAllowedRoles(noteBookData).length > 0
+      ? resolveEntryAllowedRoles(noteBookData)
+      : Permissions.CREATE_OR_EDIT_NOTEBOOK_ENTRY,
+  );
+
+  const canEditNotebook =
+    noteBookData?.isTemplate === false ? canEditInstance : canEditTemplate;
 
   const [statuses, setStatuses] = useState([]);
   const [types, setTypes] = useState([]);
@@ -198,7 +216,8 @@ const NoteBookEntryForm = () => {
     }
     setIsSubmitting(true);
     noteBookForm.id = noteBookData.id;
-    noteBookForm.isTemplate = true;
+    noteBookForm.isTemplate =
+      mode === MODES.CREATE ? true : noteBookData.isTemplate !== false;
     noteBookForm.title = noteBookData.title;
     noteBookForm.type = noteBookData.type;
     noteBookForm.objective = noteBookData.objective;
@@ -1254,9 +1273,9 @@ const NoteBookEntryForm = () => {
                   noteBookData.analyzers.map((item, index) => (
                     <Tag
                       key={index}
-                      filter={canEditTemplate}
+                      filter={canEditNotebook}
                       onClose={() => {
-                        if (!canEditTemplate) return;
+                        if (!canEditNotebook) return;
                         var info = { ...noteBookData };
                         info["analyzers"].splice(index, 1);
                         setNoteBookData(info);
@@ -1280,9 +1299,9 @@ const NoteBookEntryForm = () => {
                   onClick={openTagModal}
                   kind="primary"
                   size="sm"
-                  disabled={!canEditTemplate}
+                  disabled={!canEditNotebook}
                   title={
-                    !canEditTemplate
+                    !canEditNotebook
                       ? intl.formatMessage({
                           id: "notebook.permission.edit.required",
                           defaultMessage:
@@ -1302,9 +1321,9 @@ const NoteBookEntryForm = () => {
                 {noteBookData.tags.map((tag, index) => (
                   <Tag
                     key={index}
-                    filter={canEditTemplate}
+                    filter={canEditNotebook}
                     onClose={() => {
-                      if (!canEditTemplate) return;
+                      if (!canEditNotebook) return;
                       handleRemoveTag(index);
                     }}
                   >
@@ -1326,7 +1345,7 @@ const NoteBookEntryForm = () => {
                   multiple
                   onAddFiles={handleAddFiles}
                   accept={[".pdf", ".png", ".jpg", ".txt"]}
-                  disabled={!canEditTemplate}
+                  disabled={!canEditNotebook}
                 />
                 {uploadedFiles.map((fileObj, index) => (
                   <FileUploaderItem
@@ -1365,9 +1384,9 @@ const NoteBookEntryForm = () => {
                             kind="danger--tertiary"
                             size="sm"
                             onClick={() => handleRemoveFile(index)}
-                            disabled={!canEditTemplate}
+                            disabled={!canEditNotebook}
                             title={
-                              !canEditTemplate
+                              !canEditNotebook
                                 ? intl.formatMessage({
                                     id: "notebook.permission.edit.required",
                                     defaultMessage:
@@ -1401,9 +1420,9 @@ const NoteBookEntryForm = () => {
                   onClick={openPageModal}
                   size="sm"
                   kind="primary"
-                  disabled={!canEditTemplate}
+                  disabled={!canEditNotebook}
                   title={
-                    !canEditTemplate
+                    !canEditNotebook
                       ? intl.formatMessage({
                           id: "notebook.permission.edit.required",
                           defaultMessage:
@@ -1625,9 +1644,9 @@ const NoteBookEntryForm = () => {
                               size="sm"
                               onClick={() => openEditPageModal(index)}
                               style={{ marginRight: "0.5rem" }}
-                              disabled={!canEditTemplate}
+                              disabled={!canEditNotebook}
                               title={
-                                !canEditTemplate
+                                !canEditNotebook
                                   ? intl.formatMessage({
                                       id: "notebook.permission.edit.required",
                                       defaultMessage:
@@ -1642,9 +1661,9 @@ const NoteBookEntryForm = () => {
                               kind="danger--tertiary"
                               size="sm"
                               onClick={() => handleRemovePage(index)}
-                              disabled={!canEditTemplate}
+                              disabled={!canEditNotebook}
                               title={
-                                !canEditTemplate
+                                !canEditNotebook
                                   ? intl.formatMessage({
                                       id: "notebook.permission.edit.required",
                                       defaultMessage:
@@ -2155,12 +2174,12 @@ const NoteBookEntryForm = () => {
               <Button
                 kind="primary"
                 disabled={
-                  !canEditTemplate ||
+                  !canEditNotebook ||
                   isSubmitting ||
                   (mode === MODES.CREATE && !isFormValid())
                 }
                 title={
-                  !canEditTemplate
+                  !canEditNotebook
                     ? intl.formatMessage({
                         id: "notebook.permission.edit.required",
                         defaultMessage:

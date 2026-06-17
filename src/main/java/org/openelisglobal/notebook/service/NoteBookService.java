@@ -23,6 +23,13 @@ public interface NoteBookService extends BaseObjectService<NoteBook, Integer> {
     List<NoteBook> filterNoteBookEntries(List<NoteBookStatus> statuses, List<String> types, List<String> tags,
             Date fromDate, Date toDate, Integer noteBookId, Boolean orphanOnly);
 
+    /**
+     * Dashboard entries including legacy NoteBook rows and workflow notebook_entry
+     * rows mapped to display beans.
+     */
+    List<NoteBookDisplayBean> filterDashboardEntries(List<NoteBookStatus> statuses, List<String> types,
+            List<String> tags, Date fromDate, Date toDate, Integer noteBookId, Boolean orphanOnly);
+
     List<NoteBook> filterNoteBooks(List<NoteBookStatus> statuses, List<String> types, List<String> tags, Date fromDate,
             Date toDate);
 

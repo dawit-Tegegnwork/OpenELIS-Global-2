@@ -133,15 +133,9 @@ const NotebookTreeView = ({
     );
   };
 
-  const handleEdit = (e, notebookId, isChildInstance) => {
+  const handleEdit = (e, notebookId) => {
     e.stopPropagation();
-    if (isChildInstance) {
-      window.location.href = `/NoteBookInstanceEditForm/${notebookId}?mode=edit`;
-      return;
-    }
-    if (canEditTemplate) {
-      window.location.href = `/NoteBookEntryForm/${notebookId}`;
-    }
+    window.location.href = `/NoteBookEntryForm/${notebookId}`;
   };
 
   if (loading) {
@@ -194,7 +188,7 @@ const NotebookTreeView = ({
                       id: "notebook.icon.edit",
                       defaultMessage: "Edit",
                     })}
-                    onClick={(e) => handleEdit(e, parent.id, false)}
+                    onClick={(e) => handleEdit(e, parent.id)}
                     className="tree-node-edit-btn"
                   />
                 )}
@@ -257,7 +251,7 @@ const NotebookTreeView = ({
                             id: "notebook.icon.edit",
                             defaultMessage: "Edit",
                           })}
-                          onClick={(e) => handleEdit(e, child.id, true)}
+                          onClick={(e) => handleEdit(e, child.id)}
                           className="tree-node-edit-btn"
                         />
                         <Document
