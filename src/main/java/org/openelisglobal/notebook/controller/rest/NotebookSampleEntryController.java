@@ -876,8 +876,17 @@ public class NotebookSampleEntryController extends BaseRestController {
                 if (npsData.containsKey("specimenSite")) {
                     sampleMap.put("specimenSite", npsData.get("specimenSite"));
                 }
-                if (npsData.containsKey("receivingStaff")) {
-                    sampleMap.put("receivingStaff", npsData.get("receivingStaff"));
+                if (npsData.containsKey("receivedBy")) {
+                    sampleMap.put("receivedBy", npsData.get("receivedBy"));
+                }
+                if (npsData.containsKey("projectName")) {
+                    sampleMap.put("projectName", npsData.get("projectName"));
+                }
+                if (npsData.containsKey("collectionSite")) {
+                    sampleMap.put("collectionSite", npsData.get("collectionSite"));
+                }
+                if (npsData.containsKey("sampleOrigin")) {
+                    sampleMap.put("sampleOrigin", npsData.get("sampleOrigin"));
                 }
             }
         } else {

@@ -262,8 +262,8 @@ public class BacteriologyManifestImportServiceImpl implements BacteriologyManife
             createdSamples.add(item);
             createdAccessionNumbers.add(parentSample.getAccessionNumber());
 
-            // Add sample to entry
-            notebookEntryService.addSample(entryId, item, sysUserId);
+            Map<String, Object> sampleData = buildManifestSampleData(row);
+            notebookEntryService.addSampleWithData(entryId, item, sampleData, sysUserId);
             sequenceNumber++;
         }
 
@@ -311,6 +311,62 @@ public class BacteriologyManifestImportServiceImpl implements BacteriologyManife
         result.sort((a, b) -> a.get("description").compareToIgnoreCase(b.get("description")));
 
         return result;
+    }
+
+    /**
+     * Build manifest metadata stored on NotebookPageSample for reception grid
+     * display.
+     */
+    private Map<String, Object> buildManifestSampleData(BacteriologyManifestRow row) {
+        Map<String, Object> data = new HashMap<>();
+
+        putIfPresent(data, "projectName", row.projectName());
+        putIfPresent(data, "studyId", row.studyId());
+        putIfPresent(data, "participantId", row.participantId());
+        putIfPresent(data, "barcode", row.barcode());
+        putIfPresent(data, "collectionSite", row.collectionSite());
+        putIfPresent(data, "sampleType", row.sampleType());
+        putIfPresent(data, "collectionDateTime", row.collectionDateTime());
+        putIfPresent(data, "sampleReceivedDate", row.sampleReceivedDate());
+        putIfPresent(data, "sampleArrivalTime", row.sampleArrivalTime());
+        putIfPresent(data, "receivedBy", row.receivedBy());
+        putIfPresent(data, "storageContainerType", row.storageContainerType());
+        putIfPresent(data, "storageTemperatureOnArrival", row.storageTemperatureOnArrival());
+        putIfPresent(data, "consentStatus", row.consentStatus());
+        putIfPresent(data, "crfStatus", row.crfStatus());
+        putIfPresent(data, "sampleOrigin", row.sampleOrigin());
+        putIfPresent(data, "sourceLocationFacility", row.sourceLocationFacility());
+
+        // Map to SampleGrid default column keys (Category, Source, Received Date)
+        if (row.sampleOrigin() != null && !row.sampleOrigin().isBlank()) {
+            data.put("sampleCategory", row.sampleOrigin().trim());
+        }
+        if (row.sourceLocationFacility() != null && !row.sourceLocationFacility().isBlank()) {
+            data.put("sourceFacility", row.sourceLocationFacility().trim());
+        }
+        String receivedDateTime = combineReceivedDateTime(row.sampleReceivedDate(), row.sampleArrivalTime());
+        if (receivedDateTime != null) {
+            data.put("receivedDateTime", receivedDateTime);
+        }
+
+        return data;
+    }
+
+    private void putIfPresent(Map<String, Object> data, String key, String value) {
+        if (value != null && !value.isBlank()) {
+            data.put(key, value.trim());
+        }
+    }
+
+    private String combineReceivedDateTime(String receivedDate, String arrivalTime) {
+        if (receivedDate == null || receivedDate.isBlank()) {
+            return null;
+        }
+        String date = receivedDate.trim();
+        if (arrivalTime != null && !arrivalTime.isBlank()) {
+            return date + " " + arrivalTime.trim();
+        }
+        return date;
     }
 
     /**
