@@ -1,4 +1,10 @@
-import React, { useState, useEffect, useRef, useCallback, useMemo } from "react";
+import React, {
+  useState,
+  useEffect,
+  useRef,
+  useCallback,
+  useMemo,
+} from "react";
 import {
   Grid,
   Column,
@@ -317,6 +323,7 @@ function BiorepositoryStorageAssignmentPage({
             biosafetyLevel: bioSample.biosafetyLevel,
             requiredTempMin: bioSample.requiredTempMin,
             requiredTempMax: bioSample.requiredTempMax,
+            barcode: bioSample.barcode || bioSample.externalId,
           };
         }
       });
@@ -328,12 +335,14 @@ function BiorepositoryStorageAssignmentPage({
           if (bioData) {
             return {
               ...sample,
+              barcode: bioData.barcode || sample.barcode,
+              externalId:
+                bioData.barcode || sample.externalId || sample.barcode,
               retentionPolicyName:
                 bioData.retentionPolicyName || sample.retentionPolicyName,
               retentionExpiryDate:
                 bioData.retentionExpiryDate || sample.retentionExpiryDate,
-              biosafetyLevel:
-                bioData.biosafetyLevel || sample.biosafetyLevel,
+              biosafetyLevel: bioData.biosafetyLevel || sample.biosafetyLevel,
             };
           }
           return sample;
@@ -354,13 +363,17 @@ function BiorepositoryStorageAssignmentPage({
 
   const transformPageSample = useCallback((sample) => {
     const normalizedStatus = deriveStoragePageStatus(sample);
+    const barcode =
+      sample.barcode || sample.data?.barcode || sample.externalId || null;
+    const displayId =
+      barcode ||
+      sample.accessionNumber ||
+      (sample.sampleItemId != null ? String(sample.sampleItemId) : "-");
     return {
       id: String(sample.id || sample.sampleItemId),
       sampleItemId: sample.sampleItemId,
-      externalId:
-        sample.externalId ||
-        sample.accessionNumber ||
-        (sample.sampleItemId != null ? String(sample.sampleItemId) : "-"),
+      barcode,
+      externalId: displayId,
       accessionNumber:
         sample.accessionNumber ||
         sample.externalId ||
@@ -423,7 +436,9 @@ function BiorepositoryStorageAssignmentPage({
         throw new Error(loadErrorMessage);
       }
 
-      const totalCount = Number(firstBatch.totalCount ?? firstBatch.samples.length);
+      const totalCount = Number(
+        firstBatch.totalCount ?? firstBatch.samples.length,
+      );
       const firstTransformed = firstBatch.samples.map(transformPageSample);
 
       if (!componentMounted.current) {
@@ -503,50 +518,76 @@ function BiorepositoryStorageAssignmentPage({
         setLoadProgress(null);
       }
     }
-  }, [
-    pageData?.id,
-    fetchBioSampleRetentionData,
-    transformPageSample,
-    intl,
-  ]);
+  }, [pageData?.id, fetchBioSampleRetentionData, transformPageSample, intl]);
+
+  const mergeBoxLayoutMaps = useCallback((serverLayout, routingLayout) => {
+    const merged = { ...(serverLayout || {}) };
+    Object.entries(routingLayout || {}).forEach(([coord, info]) => {
+      if (!merged[coord]) {
+        merged[coord] = info;
+      }
+    });
+    return merged;
+  }, []);
 
   // Load box occupancy from storage API
-  const loadBoxOccupancy = useCallback((boxId) => {
-    if (!boxId) return;
+  const loadBoxOccupancy = useCallback(
+    (boxId) => {
+      if (!boxId) {
+        return;
+      }
 
-    getFromOpenElisServer(
-      `/rest/storage/boxes/${boxId}/occupancy`,
-      (response) => {
-        if (componentMounted.current && response) {
+      getFromOpenElisServer(
+        `/rest/storage/boxes/${boxId}/occupancy`,
+        (response) => {
+          if (!componentMounted.current) {
+            return;
+          }
+          if (!response || response.error) {
+            setError(
+              intl.formatMessage({
+                id: "biorepository.storage.occupancyLoadError",
+                defaultMessage:
+                  "Could not load box occupancy. Check storage permissions or try again.",
+              }),
+            );
+            return;
+          }
           const occupiedCoordinates = response.occupiedCoordinates || {};
-          setBoxLayout(occupiedCoordinates);
-        }
-      },
-    );
-  }, []);
+          setBoxLayout((prev) => mergeBoxLayoutMaps(occupiedCoordinates, prev));
+        },
+      );
+    },
+    [intl, mergeBoxLayoutMaps],
+  );
+
+  const handleRefreshSamples = useCallback(() => {
+    loadPageSamples();
+    if (storageSelection.box?.id) {
+      setBoxLayout({});
+      loadBoxOccupancy(storageSelection.box.id);
+    }
+  }, [loadPageSamples, loadBoxOccupancy, storageSelection.box?.id]);
 
   // Handle storage hierarchy selection change
   const handleStorageSelectionChange = useCallback(
     (selection) => {
       setStorageSelection(selection);
       setWellAssignments({});
+      setBoxLayout({});
       if (selection.box?.id) {
         loadBoxOccupancy(selection.box.id);
-      } else {
-        setBoxLayout({});
       }
     },
     [loadBoxOccupancy],
   );
 
-  // Handle box layout loaded (from StorageHierarchySelector - fallback)
+  // Handle box layout loaded (from StorageHierarchySelector - merge routing wells)
   const handleBoxLayoutLoaded = useCallback(
     (wells) => {
-      if (Object.keys(boxLayout).length === 0) {
-        setBoxLayout(wells || {});
-      }
+      setBoxLayout((prev) => mergeBoxLayoutMaps(prev, wells || {}));
     },
-    [boxLayout],
+    [mergeBoxLayoutMaps],
   );
 
   // Handle well click from BoxLayoutViewer
@@ -560,7 +601,10 @@ function BiorepositoryStorageAssignmentPage({
               defaultMessage:
                 "Well {well} is already occupied by {sample}. Choose another position.",
             },
-            { well: wellCoord, sample: wellInfo.externalId || "a sample" },
+            {
+              well: wellCoord,
+              sample: wellInfo.externalId || wellInfo.barcode || "a sample",
+            },
           ),
         );
         return;
@@ -668,6 +712,10 @@ function BiorepositoryStorageAssignmentPage({
       .map((s) => s.sampleItemId)
       .filter(Boolean);
     fetchBioSampleData(sampleItemIds);
+
+    if (storageSelection.box?.id) {
+      loadBoxOccupancy(storageSelection.box.id);
+    }
   };
 
   const handleConfirmReassignment = () => {
@@ -731,7 +779,9 @@ function BiorepositoryStorageAssignmentPage({
         const sample = samples.find((s) => s.id === sampleId);
         combined[wellCoord] = {
           sampleItemId: sampleId,
-          externalId: sample?.externalId || sampleId,
+          externalId: sample?.barcode || sample?.externalId || sampleId,
+          barcode: sample?.barcode || sample?.externalId,
+          accessionNumber: sample?.accessionNumber,
           pending: true,
         };
       }
@@ -951,11 +1001,7 @@ function BiorepositoryStorageAssignmentPage({
 
     if (sample.status === "COMPLETED" && hasStorage) {
       return (
-        <Tag
-          type="green"
-          renderIcon={Checkmark}
-          title={storageLocation}
-        >
+        <Tag type="green" renderIcon={Checkmark} title={storageLocation}>
           {storageLocation} (
           <FormattedMessage
             id="notebook.status.sentToNext"
@@ -967,11 +1013,7 @@ function BiorepositoryStorageAssignmentPage({
     }
     if (hasStorage) {
       return (
-        <Tag
-          type="cyan"
-          renderIcon={Archive}
-          title={storageLocation}
-        >
+        <Tag type="cyan" renderIcon={Archive} title={storageLocation}>
           {storageLocation} (
           <FormattedMessage
             id="notebook.status.inProgress"
@@ -1120,7 +1162,7 @@ function BiorepositoryStorageAssignmentPage({
           kind="ghost"
           size="sm"
           renderIcon={Renew}
-          onClick={loadPageSamples}
+          onClick={handleRefreshSamples}
         >
           <FormattedMessage
             id="biorepository.storage.refresh"
@@ -1483,17 +1525,17 @@ function BiorepositoryStorageAssignmentPage({
                 </div>
 
                 <div id="storage-box-print-area">
-                <BoxLayoutViewer
-                  boxId={storageSelection.box.id}
-                  layout={getCombinedLayout()}
-                  rows={storageSelection.box.rows || 9}
-                  columns={storageSelection.box.columns || 9}
-                  positionSchemaHint={
-                    storageSelection.box.positionSchemaHint || "number-number"
-                  }
-                  showSampleIdInWell
-                  onWellClick={handleWellClick}
-                />
+                  <BoxLayoutViewer
+                    boxId={storageSelection.box.id}
+                    layout={getCombinedLayout()}
+                    rows={storageSelection.box.rows || 8}
+                    columns={storageSelection.box.columns || 12}
+                    positionSchemaHint={
+                      storageSelection.box.positionSchemaHint || "number-number"
+                    }
+                    showSampleIdInWell
+                    onWellClick={handleWellClick}
+                  />
                 </div>
 
                 <div

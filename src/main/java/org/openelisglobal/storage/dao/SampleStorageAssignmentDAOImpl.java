@@ -172,10 +172,11 @@ public class SampleStorageAssignmentDAOImpl extends BaseDAOImpl<SampleStorageAss
 
             // Use native SQL to join sample_storage_assignment with sample_item
             // to get the external_id (SampleItem uses HBM mapping, can't use HQL join)
-            String sql = "SELECT ssa.position_coordinate, ssa.sample_item_id, si.external_id "
+            String sql = "SELECT ssa.position_coordinate, ssa.sample_item_id, "
+                    + "COALESCE(NULLIF(TRIM(si.external_id), ''), s.accession_number) AS display_id "
                     + "FROM sample_storage_assignment ssa " + "LEFT JOIN sample_item si ON ssa.sample_item_id = si.id "
-                    + "WHERE ssa.location_type = 'box' " + "AND ssa.location_id = :boxId "
-                    + "AND ssa.position_coordinate IS NOT NULL";
+                    + "LEFT JOIN sample s ON si.samp_id = s.id " + "WHERE ssa.location_type = 'box' "
+                    + "AND ssa.location_id = :boxId " + "AND ssa.position_coordinate IS NOT NULL";
 
             @SuppressWarnings("unchecked")
             List<Object[]> rows = entityManager.unwrap(Session.class).createNativeQuery(sql)
@@ -189,7 +190,9 @@ public class SampleStorageAssignmentDAOImpl extends BaseDAOImpl<SampleStorageAss
                 if (positionCoordinate != null && sampleItemIdNum != null) {
                     java.util.Map<String, String> sampleInfo = new java.util.HashMap<>();
                     sampleInfo.put("sampleItemId", sampleItemIdNum.toString());
-                    sampleInfo.put("externalId", externalId != null ? externalId : "");
+                    String displayId = externalId != null ? externalId : "";
+                    sampleInfo.put("externalId", displayId);
+                    sampleInfo.put("barcode", displayId);
                     result.put(positionCoordinate, sampleInfo);
                 }
             }

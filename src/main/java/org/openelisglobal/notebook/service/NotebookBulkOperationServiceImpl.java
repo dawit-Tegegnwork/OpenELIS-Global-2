@@ -8,18 +8,19 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import org.openelisglobal.biorepository.service.BioSampleService;
+import org.openelisglobal.biorepository.valueholder.BioSample;
+import org.openelisglobal.biorepository.valueholder.Shipment.DocumentationStatus;
 import org.openelisglobal.common.log.LogEvent;
 import org.openelisglobal.inventory.service.InventoryManagementService;
 import org.openelisglobal.notebook.valueholder.NoteBookPage;
 import org.openelisglobal.notebook.valueholder.NotebookPageSample;
 import org.openelisglobal.notebook.valueholder.NotebookPageSample.Status;
-import org.openelisglobal.biorepository.service.BioSampleService;
-import org.openelisglobal.biorepository.valueholder.BioSample;
-import org.openelisglobal.biorepository.valueholder.Shipment.DocumentationStatus;
 import org.openelisglobal.sampleitem.service.SampleItemService;
 import org.openelisglobal.sampleitem.valueholder.SampleItem;
 import org.openelisglobal.storage.dao.StorageBoxDAO;
 import org.openelisglobal.storage.service.SampleStorageService;
+import org.openelisglobal.storage.util.StorageCoordinateNormalizer;
 import org.openelisglobal.storage.valueholder.SampleStorageAssignment;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
@@ -1061,10 +1062,17 @@ public class NotebookBulkOperationServiceImpl implements NotebookBulkOperationSe
             return result;
         }
 
+        org.openelisglobal.storage.valueholder.StorageBox storageBox = storageBoxDAO.get(boxId).orElse(null);
+        String positionHint = storageBox != null ? storageBox.getPositionSchemaHint() : null;
+        Integer boxColumns = storageBox != null ? storageBox.getColumns() : null;
+
         // Process each sample with its specific well assignment
         for (Map.Entry<String, String> entry : wellAssignments.entrySet()) {
             String sampleIdStr = entry.getKey();
             String wellCoordinate = entry.getValue();
+            if (storageBox != null) {
+                wellCoordinate = StorageCoordinateNormalizer.normalize(wellCoordinate, positionHint, boxColumns);
+            }
 
             try {
                 Integer sampleId = Integer.parseInt(sampleIdStr);
