@@ -15,6 +15,9 @@ describe("biorepositoryStorageHelpers", () => {
       }),
     ).toBe(true);
     expect(hasStorageLocation({ storagePath: "Room > Device" })).toBe(true);
+    expect(hasStorageLocation({ storageWell: "A1", storageBox: "Box 1" })).toBe(
+      true,
+    );
     expect(hasStorageLocation({ status: "PENDING" })).toBe(false);
   });
 
@@ -73,7 +76,12 @@ describe("biorepositoryStorageHelpers", () => {
   test("findStorageAssignmentPage prefers storage_assign pageKey over order", () => {
     const pages = [
       { id: 30, order: 2, pageKey: "shipment_reception", title: "Shipment" },
-      { id: 31, order: 7, pageKey: "storage_assign", title: "Storage Assignment" },
+      {
+        id: 31,
+        order: 7,
+        pageKey: "storage_assign",
+        title: "Storage Assignment",
+      },
     ];
     expect(findStorageAssignmentPage(pages)?.id).toBe(31);
   });
@@ -86,7 +94,9 @@ describe("biorepositoryStorageHelpers", () => {
   test("buildBiorepositoryStorageUrl adds notebook scope and biorepository flag", () => {
     expect(
       buildBiorepositoryStorageUrl("/rest/storage/rooms?status=active", 23),
-    ).toBe("/rest/storage/rooms?status=active&biorepositoryOnly=true&notebookId=23");
+    ).toBe(
+      "/rest/storage/rooms?status=active&biorepositoryOnly=true&notebookId=23",
+    );
     expect(buildBiorepositoryStorageUrl("/rest/storage/devices", null)).toBe(
       "/rest/storage/devices",
     );

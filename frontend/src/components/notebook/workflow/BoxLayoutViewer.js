@@ -5,7 +5,7 @@ import PropTypes from "prop-types";
 import {
   getStorageCoordinateLabel,
   getRowHeaderLabel,
-  findLayoutEntryForCell,
+  resolveOccupancyAtCell,
   countOccupiedCells,
 } from "../../../utils/storagePositionUtils";
 import "./BoxLayoutViewer.css";
@@ -30,8 +30,32 @@ function BoxLayoutViewer({
   const getWellCoord = (rowIdx, colIdx) =>
     getStorageCoordinateLabel(rowIdx, colIdx, columns, hint);
 
-  const getWellInfo = (rowIdx, colIdx) =>
-    findLayoutEntryForCell(layout, rowIdx, colIdx, columns, hint) || null;
+  const getWellInfo = (rowIdx, colIdx) => {
+    const coordinate = getWellCoord(rowIdx, colIdx);
+    return (
+      resolveOccupancyAtCell(
+        layout,
+        coordinate,
+        rowIdx,
+        colIdx,
+        columns,
+        hint,
+      ) || null
+    );
+  };
+
+  const getWellDisplayId = (info) => {
+    if (!info) {
+      return "";
+    }
+    const label = info.externalId || info.barcode || info.sampleItemId || "";
+    if (!label) {
+      return "•";
+    }
+    return String(label).length > 8
+      ? `${String(label).slice(0, 7)}…`
+      : String(label);
+  };
 
   const isOccupied = (rowIdx, colIdx) => !!getWellInfo(rowIdx, colIdx);
 
@@ -59,8 +83,16 @@ function BoxLayoutViewer({
         <div>
           <strong>{wellCoord}</strong>
         </div>
-        <div>Sample ID: {info.sampleItemId}</div>
-        {info.externalId && <div>External: {info.externalId}</div>}
+        <div>
+          Sample ID:{" "}
+          {info.externalId || info.barcode || info.sampleItemId || "-"}
+        </div>
+        {info.accessionNumber && <div>Accession: {info.accessionNumber}</div>}
+        {info.sampleItemId &&
+          (info.externalId || info.barcode) &&
+          info.sampleItemId !== (info.externalId || info.barcode) && (
+            <div>Internal ID: {info.sampleItemId}</div>
+          )}
         {info.destinationType && (
           <div>Destination: {info.destinationType.replace("_", " ")}</div>
         )}
@@ -139,9 +171,7 @@ function BoxLayoutViewer({
                   >
                     {showSampleIdInWell && occupied ? (
                       <span className="well-sample-id">
-                        {getWellInfo(rowIdx, colIndex)?.externalId ||
-                          getWellInfo(rowIdx, colIndex)?.sampleItemId ||
-                          "•"}
+                        {getWellDisplayId(getWellInfo(rowIdx, colIndex))}
                       </span>
                     ) : (
                       <div className="well-dot"></div>

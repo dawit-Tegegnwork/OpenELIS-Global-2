@@ -20,10 +20,10 @@ import org.openelisglobal.common.rest.BaseRestController;
 import org.openelisglobal.department.service.DepartmentIsolationService;
 import org.openelisglobal.login.dao.UserModuleService;
 import org.openelisglobal.login.valueholder.UserSessionData;
+import org.openelisglobal.notebook.bean.NoteBookDisplayBean;
 import org.openelisglobal.notebook.service.NoteBookService;
 import org.openelisglobal.notebook.service.NotebookDepartmentScopeService;
 import org.openelisglobal.notebook.service.NotebookSecurityService;
-import org.openelisglobal.notebook.bean.NoteBookDisplayBean;
 import org.openelisglobal.notebook.valueholder.NoteBook;
 import org.openelisglobal.rbac.RbacAction;
 import org.openelisglobal.rbac.RbacPermissionService;
@@ -38,6 +38,7 @@ import org.openelisglobal.storage.service.DeletionValidationResult;
 import org.openelisglobal.storage.service.StorageDashboardService;
 import org.openelisglobal.storage.service.StorageLocationService;
 import org.openelisglobal.storage.service.StorageSearchService;
+import org.openelisglobal.storage.util.StorageCoordinateNormalizer;
 import org.openelisglobal.storage.valueholder.*;
 import org.openelisglobal.test.service.TestSectionService;
 import org.openelisglobal.test.valueholder.TestSection;
@@ -157,9 +158,8 @@ public class StorageLocationRestController extends BaseRestController {
             TestSection linkedDepartment = selectPrimaryLinkedDepartment(template, title);
             Integer linkedDepartmentId = parseDepartmentId(linkedDepartment);
             if (linkedDepartmentId != null) {
-                departments.putIfAbsent(linkedDepartmentId, title != null && !title.isBlank()
-                        ? title.trim()
-                        : resolveTestSectionLabel(linkedDepartment));
+                departments.putIfAbsent(linkedDepartmentId,
+                        title != null && !title.isBlank() ? title.trim() : resolveTestSectionLabel(linkedDepartment));
                 continue;
             }
             TestSection exactMatch = resolveTestSectionByTemplateTitle(title);
@@ -175,8 +175,8 @@ public class StorageLocationRestController extends BaseRestController {
         if (template == null || template.getDepartments() == null || template.getDepartments().isEmpty()) {
             return null;
         }
-        List<TestSection> linkedDepartments = template.getDepartments().stream().filter(Objects::nonNull)
-                .sorted((left, right) -> resolveTestSectionLabel(left).compareToIgnoreCase(resolveTestSectionLabel(right)))
+        List<TestSection> linkedDepartments = template.getDepartments().stream().filter(Objects::nonNull).sorted(
+                (left, right) -> resolveTestSectionLabel(left).compareToIgnoreCase(resolveTestSectionLabel(right)))
                 .toList();
         for (TestSection department : linkedDepartments) {
             if (templateTitleMatchesDepartment(notebookTitle, department)) {
@@ -199,8 +199,8 @@ public class StorageLocationRestController extends BaseRestController {
         if (activeSections == null || activeSections.isEmpty()) {
             return null;
         }
-        return activeSections.stream().filter(section -> templateTitleMatchesDepartment(notebookTitle, section)).findFirst()
-                .orElse(null);
+        return activeSections.stream().filter(section -> templateTitleMatchesDepartment(notebookTitle, section))
+                .findFirst().orElse(null);
     }
 
     private Integer parseDepartmentId(TestSection department) {
@@ -252,7 +252,8 @@ public class StorageLocationRestController extends BaseRestController {
         return sections;
     }
 
-    private List<Map<String, String>> buildDepartmentRows(List<TestSection> sections, Map<Integer, String> workflowDepartments) {
+    private List<Map<String, String>> buildDepartmentRows(List<TestSection> sections,
+            Map<Integer, String> workflowDepartments) {
         if (sections == null || sections.isEmpty()) {
             return List.of();
         }
@@ -368,8 +369,7 @@ public class StorageLocationRestController extends BaseRestController {
             if (departmentId == null) {
                 Set<Integer> selectable = departmentIsolationService.getSelectableUserTestSectionIds(request);
                 if (selectable.isEmpty()) {
-                    return ResponseEntity.status(HttpStatus.FORBIDDEN)
-                            .body(Map.of("error", "select department first"));
+                    return ResponseEntity.status(HttpStatus.FORBIDDEN).body(Map.of("error", "select department first"));
                 }
                 return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(Map.of("error", "select department first"));
             }
@@ -1401,8 +1401,7 @@ public class StorageLocationRestController extends BaseRestController {
     public ResponseEntity<List<Map<String, Object>>> getRacks(@RequestParam(required = false) String shelfId,
             @RequestParam(required = false) String deviceId, @RequestParam(required = false) String roomId,
             @RequestParam(required = false) String status, @RequestParam(required = false) Boolean biorepositoryOnly,
-            @RequestParam(required = false) Integer notebookId,
-            HttpServletRequest request) {
+            @RequestParam(required = false) Integer notebookId, HttpServletRequest request) {
         try {
             List<Map<String, Object>> response;
             if (shelfId != null || deviceId != null || roomId != null || status != null) {
@@ -1741,8 +1740,7 @@ public class StorageLocationRestController extends BaseRestController {
     public ResponseEntity<List<StorageBoxResponse>> getBoxes(@RequestParam(required = false) String rackId,
             @RequestParam(required = false) Integer shelfId, @RequestParam(required = false) Boolean active,
             @RequestParam(required = false) Boolean occupied, @RequestParam(required = false) Boolean biorepositoryOnly,
-            @RequestParam(required = false) Integer notebookId,
-            HttpServletRequest request) {
+            @RequestParam(required = false) Integer notebookId, HttpServletRequest request) {
         try {
             List<StorageBox> boxes;
             if (rackId != null) {
@@ -1947,8 +1945,8 @@ public class StorageLocationRestController extends BaseRestController {
                 return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
             }
 
-            Map<String, Map<String, String>> occupiedCoordinates = sampleStorageAssignmentDAO
-                    .getOccupiedCoordinatesWithSampleInfo(boxId);
+            Map<String, Map<String, String>> occupiedCoordinates = normalizeOccupiedCoordinates(
+                    sampleStorageAssignmentDAO.getOccupiedCoordinatesWithSampleInfo(boxId), box);
 
             int totalCapacity = box.getCapacity() != null ? box.getCapacity()
                     : (box.getRows() != null ? box.getRows() : 8) * (box.getColumns() != null ? box.getColumns() : 12);
@@ -1976,6 +1974,31 @@ public class StorageLocationRestController extends BaseRestController {
     }
 
     // ========== Helper Methods ==========
+
+    private Map<String, Map<String, String>> normalizeOccupiedCoordinates(
+            Map<String, Map<String, String>> occupiedCoordinates, StorageBox box) {
+        if (occupiedCoordinates == null || occupiedCoordinates.isEmpty()) {
+            return occupiedCoordinates != null ? occupiedCoordinates : Collections.emptyMap();
+        }
+        String hint = box != null ? box.getPositionSchemaHint() : null;
+        Integer columns = box != null ? box.getColumns() : null;
+        Map<String, Map<String, String>> normalized = new HashMap<>();
+        for (Map.Entry<String, Map<String, String>> entry : occupiedCoordinates.entrySet()) {
+            String coord = StorageCoordinateNormalizer.normalize(entry.getKey(), hint, columns);
+            Map<String, String> info = new HashMap<>(entry.getValue());
+            String externalId = info.get("externalId");
+            if (externalId == null || externalId.trim().isEmpty()) {
+                String barcode = info.get("barcode");
+                if (barcode != null && !barcode.trim().isEmpty()) {
+                    info.put("externalId", barcode.trim());
+                }
+            } else {
+                info.putIfAbsent("barcode", externalId.trim());
+            }
+            normalized.put(coord, info);
+        }
+        return normalized;
+    }
 
     private void filterLocationMapsByDepartment(List<Map<String, Object>> maps, HttpServletRequest request) {
         if (departmentIsolationService.hasUnrestrictedDepartmentAccess(request)) {
@@ -2431,8 +2454,8 @@ public class StorageLocationRestController extends BaseRestController {
         response.setCode(box.getCode());
         response.setActive(box.getActive());
 
-        Map<String, Map<String, String>> occupiedCoordinatesMap = sampleStorageAssignmentDAO
-                .getOccupiedCoordinatesWithSampleInfo(box.getId());
+        Map<String, Map<String, String>> occupiedCoordinatesMap = normalizeOccupiedCoordinates(
+                sampleStorageAssignmentDAO.getOccupiedCoordinatesWithSampleInfo(box.getId()), box);
         response.setOccupied(!occupiedCoordinatesMap.isEmpty());
         response.setOccupiedCoordinates(occupiedCoordinatesMap);
         response.setFhirUuid(box.getFhirUuidAsString());
