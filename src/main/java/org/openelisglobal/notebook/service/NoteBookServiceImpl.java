@@ -18,12 +18,16 @@ import org.hibernate.Hibernate;
 import org.openelisglobal.analysis.service.AnalysisService;
 import org.openelisglobal.analysis.valueholder.Analysis;
 import org.openelisglobal.analyzer.service.AnalyzerService;
+import org.openelisglobal.common.action.IActionConstants;
 import org.openelisglobal.common.dao.BaseDAO;
 import org.openelisglobal.common.log.LogEvent;
 import org.openelisglobal.common.service.AuditableBaseObjectServiceImpl;
 import org.openelisglobal.common.util.DateUtil;
 import org.openelisglobal.common.util.IdValuePair;
 import org.openelisglobal.dictionary.service.DictionaryService;
+import org.openelisglobal.dictionary.valueholder.Dictionary;
+import org.openelisglobal.dictionarycategory.service.DictionaryCategoryService;
+import org.openelisglobal.dictionarycategory.valueholder.DictionaryCategory;
 import org.openelisglobal.notebook.bean.NoteBookDisplayBean;
 import org.openelisglobal.notebook.bean.NoteBookFullDisplayBean;
 import org.openelisglobal.notebook.bean.NotebookHierarchyDTO;
@@ -87,6 +91,9 @@ public class NoteBookServiceImpl extends AuditableBaseObjectServiceImpl<NoteBook
 
     @Autowired
     private DictionaryService dictionaryService;
+
+    @Autowired
+    private DictionaryCategoryService dictionaryCategoryService;
 
     @Autowired
     private OrganizationService organizationService;
@@ -856,7 +863,12 @@ public class NoteBookServiceImpl extends AuditableBaseObjectServiceImpl<NoteBook
         if (!GenericValidator.isBlankOrNull(form.getTitle())) {
             noteBook.setTitle(form.getTitle());
         }
-        if (form.getType() != null) {
+        if (!GenericValidator.isBlankOrNull(form.getTypeName())) {
+            Dictionary experimentType = resolveExperimentTypeDictionary(form.getTypeName().trim());
+            if (experimentType != null) {
+                noteBook.setType(experimentType);
+            }
+        } else if (form.getType() != null) {
             noteBook.setType(dictionaryService.get(form.getType().toString()));
         }
         if (form.getTags() != null && !form.getTags().isEmpty()) {
@@ -2370,6 +2382,34 @@ public class NoteBookServiceImpl extends AuditableBaseObjectServiceImpl<NoteBook
             return null;
         }
         return PathologyWorkflowTypeConfig.canonicalStageOrder(page.getTitle(), page.getOrder());
+    }
+
+    private Dictionary resolveExperimentTypeDictionary(String typeName) {
+        if (GenericValidator.isBlankOrNull(typeName)) {
+            return null;
+        }
+
+        String trimmed = typeName.trim();
+        Dictionary existing = dictionaryService.getDictionaryByDictEntry(trimmed);
+        if (existing != null) {
+            return existing;
+        }
+
+        DictionaryCategory category = dictionaryCategoryService.getDictionaryCategoryByName("notebook_experiment_type");
+        if (category == null) {
+            LogEvent.logWarn(this.getClass().getSimpleName(), "resolveExperimentTypeDictionary",
+                    "notebook_experiment_type category not found for type: " + trimmed);
+            return null;
+        }
+
+        Dictionary newEntry = new Dictionary();
+        newEntry.setDictEntry(trimmed);
+        newEntry.setLocalAbbreviation(trimmed);
+        newEntry.setIsActive(IActionConstants.YES);
+        newEntry.setDictionaryCategory(category);
+        String id = dictionaryService.insert(newEntry);
+        newEntry.setId(id);
+        return newEntry;
     }
 
 }

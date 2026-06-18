@@ -133,7 +133,6 @@ const NoteBookEntryForm = () => {
     noteBookData?.isTemplate === false ? canEditInstance : canEditTemplate;
 
   const [statuses, setStatuses] = useState([]);
-  const [types, setTypes] = useState([]);
   const [technicianUsers, setTechnicianUsers] = useState([]);
   const [questionnaires, setQuestionnaires] = useState([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -169,10 +168,12 @@ const NoteBookEntryForm = () => {
   const [availableRoles, setAvailableRoles] = useState([]);
 
   const isFormValid = () => {
+    const experimentType =
+      (noteBookData.typeName || "").trim() ||
+      (typeof noteBookData.type === "string" ? noteBookData.type.trim() : "");
     return (
       noteBookData.title?.trim() !== "" &&
-      noteBookData.type !== null &&
-      noteBookData.type !== "" &&
+      experimentType !== "" &&
       noteBookData.objective?.trim() !== ""
     );
   };
@@ -193,7 +194,7 @@ const NoteBookEntryForm = () => {
         return;
       }
 
-      if (!noteBookData.type) {
+      if (!(noteBookData.typeName || "").trim()) {
         addNotification({
           kind: NotificationKinds.error,
           title: intl.formatMessage({ id: "notification.title" }),
@@ -220,6 +221,7 @@ const NoteBookEntryForm = () => {
     noteBookForm.isTemplate =
       mode === MODES.CREATE ? true : noteBookData.isTemplate !== false;
     noteBookForm.title = noteBookData.title;
+    noteBookForm.typeName = (noteBookData.typeName || "").trim();
     noteBookForm.type = noteBookData.type;
     noteBookForm.objective = noteBookData.objective;
     noteBookForm.protocol = noteBookData.protocol;
@@ -695,7 +697,10 @@ const NoteBookEntryForm = () => {
   const loadInitialData = (data) => {
     if (componentMounted.current) {
       if (data && data.id) {
-        setNoteBookData(data);
+        setNoteBookData({
+          ...data,
+          typeName: data.typeName || "",
+        });
         // Load comments from backend (with proper id and author)
         if (data.comments && Array.isArray(data.comments)) {
           setComments(
@@ -768,7 +773,6 @@ const NoteBookEntryForm = () => {
   useEffect(() => {
     componentMounted.current = true;
     getFromOpenElisServer("/rest/displayList/NOTEBOOK_STATUS", setStatuses);
-    getFromOpenElisServer("/rest/displayList/NOTEBOOK_EXPT_TYPE", setTypes);
     getFromOpenElisServer("/rest/displayList/ALL_TESTS", setAllTests);
     getFromOpenElisServer("/rest/users", setTechnicianUsers);
     getFromOpenElisServer("/rest/user-sample-types", setSampleTypes);
@@ -1075,7 +1079,7 @@ const NoteBookEntryForm = () => {
             {/* Experiment Details */}
             <Grid fullWidth={true} className="gridBoundary">
               <Column lg={8} md={8} sm={4}>
-                <Select
+                <TextInput
                   id="experimenttype"
                   name="experimenttype"
                   labelText={
@@ -1086,25 +1090,18 @@ const NoteBookEntryForm = () => {
                       <span className="requiredlabel">*</span>
                     </>
                   }
-                  value={noteBookData.type || ""}
-                  onChange={(event) => {
+                  placeholder={intl.formatMessage({
+                    id: "notebook.label.experimentType",
+                  })}
+                  value={noteBookData.typeName || ""}
+                  onChange={(e) => {
                     setNoteBookData({
                       ...noteBookData,
-                      type: event.target.value,
+                      typeName: e.target.value,
                     });
                   }}
-                >
-                  <SelectItem />
-                  {types.map((type, index) => {
-                    return (
-                      <SelectItem
-                        key={index}
-                        text={type.value}
-                        value={type.id}
-                      />
-                    );
-                  })}
-                </Select>
+                  disabled={!canEditNotebook}
+                />
               </Column>
               <Column lg={8} md={8} sm={4}>
                 <TextInput
