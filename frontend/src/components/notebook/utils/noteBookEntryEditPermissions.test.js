@@ -1,0 +1,86 @@
+import {
+  canEditNotebookEntry,
+  getNotebookEntrySaveDisabledReason,
+  isPathologyWorkflowType,
+} from "./noteBookEntryEditPermissions";
+import { Roles } from "../../../constants/roles";
+
+describe("noteBookEntryEditPermissions", () => {
+  const labTechRoleCheck = (roles) =>
+    roles.includes(Roles.LABORATORY_TECHNICIAN);
+
+  const pathologyPersonaCheck = (personas) =>
+    personas.includes(Roles.LABORATORY_TECHNICIAN);
+
+  test("Laboratory Technician on pathology workflow can edit entry", () => {
+    expect(
+      canEditNotebookEntry({
+        hasRoleForCurrentLabUnit: () => false,
+        hasPersonaForActiveDepartment: pathologyPersonaCheck,
+        templateAllowedRoles: ["Technician"],
+        userId: 10,
+        creatorId: 99,
+        technicianId: 88,
+        workflowType: "histopathology_biopsy_tissue",
+      }),
+    ).toBe(true);
+  });
+
+  test("Creator bypass allows edit without template role", () => {
+    expect(
+      canEditNotebookEntry({
+        hasRoleForCurrentLabUnit: () => false,
+        hasPersonaForActiveDepartment: () => false,
+        templateAllowedRoles: ["Supervisor"],
+        userId: 42,
+        creatorId: 42,
+        technicianId: null,
+        workflowType: "medlab",
+      }),
+    ).toBe(true);
+  });
+
+  test("Technician bypass allows edit without template role", () => {
+    expect(
+      canEditNotebookEntry({
+        hasRoleForCurrentLabUnit: () => false,
+        hasPersonaForActiveDepartment: () => false,
+        templateAllowedRoles: ["Supervisor"],
+        userId: 7,
+        creatorId: 1,
+        technicianId: 7,
+        workflowType: "medlab",
+      }),
+    ).toBe(true);
+  });
+
+  test("Fallback CREATE_OR_EDIT_NOTEBOOK_ENTRY roles grant edit when template has no roles", () => {
+    expect(
+      canEditNotebookEntry({
+        hasRoleForCurrentLabUnit: labTechRoleCheck,
+        hasPersonaForActiveDepartment: () => false,
+        templateAllowedRoles: [],
+        userId: 10,
+        workflowType: "medlab",
+      }),
+    ).toBe(true);
+  });
+
+  test("isPathologyWorkflowType recognizes pathology variants", () => {
+    expect(isPathologyWorkflowType("fnac")).toBe(true);
+    expect(isPathologyWorkflowType("medlab")).toBe(false);
+  });
+
+  test("getNotebookEntrySaveDisabledReason explains view mode", () => {
+    const intl = {
+      formatMessage: ({ defaultMessage }) => defaultMessage,
+    };
+    expect(
+      getNotebookEntrySaveDisabledReason({
+        intl,
+        canEditEntry: true,
+        isViewMode: true,
+      }),
+    ).toBe("Open with Edit (not View) to save changes");
+  });
+});

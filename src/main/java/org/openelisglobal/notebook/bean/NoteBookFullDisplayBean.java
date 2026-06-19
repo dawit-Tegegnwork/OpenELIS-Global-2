@@ -18,6 +18,7 @@ public class NoteBookFullDisplayBean extends NoteBookDisplayBean {
     private List<SampleDisplayBean> samples;
     private String technicianName;
     private String creatorName;
+    private Integer creatorId;
     private Integer templateId; // Parent template ID (for instances only)
 
     public String getProtocol() {
@@ -106,6 +107,14 @@ public class NoteBookFullDisplayBean extends NoteBookDisplayBean {
 
     public void setCreatorName(String creatorName) {
         this.creatorName = creatorName;
+    }
+
+    public Integer getCreatorId() {
+        return creatorId;
+    }
+
+    public void setCreatorId(Integer creatorId) {
+        this.creatorId = creatorId;
     }
 
     private java.util.Set<org.openelisglobal.organization.valueholder.Organization> organizations;

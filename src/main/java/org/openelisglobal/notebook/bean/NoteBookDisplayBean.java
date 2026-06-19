@@ -17,6 +17,7 @@ public class NoteBookDisplayBean {
     private Boolean isTemplate;
     private Integer entriesCount;
     private Integer technicianId;
+    private Integer creatorId;
     private UUID questionnaireFhirUuid;
     private Integer entryNumber;
     private String notebookName;
@@ -113,6 +114,14 @@ public class NoteBookDisplayBean {
 
     public void setTechnicianId(Integer technicianId) {
         this.technicianId = technicianId;
+    }
+
+    public Integer getCreatorId() {
+        return creatorId;
+    }
+
+    public void setCreatorId(Integer creatorId) {
+        this.creatorId = creatorId;
     }
 
     public Integer getEntryNumber() {

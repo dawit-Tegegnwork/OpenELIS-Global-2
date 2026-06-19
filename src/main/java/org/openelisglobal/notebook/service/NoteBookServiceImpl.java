@@ -305,6 +305,9 @@ public class NoteBookServiceImpl extends AuditableBaseObjectServiceImpl<NoteBook
         if (entry.getTechnician() != null) {
             displayBean.setTechnicianId(Integer.valueOf(entry.getTechnician().getId()));
         }
+        if (entry.getCreator() != null) {
+            displayBean.setCreatorId(Integer.valueOf(entry.getCreator().getId()));
+        }
 
         if (instance.getType() != null) {
             displayBean.setType(Integer.valueOf(instance.getType().getId()));
@@ -539,6 +542,9 @@ public class NoteBookServiceImpl extends AuditableBaseObjectServiceImpl<NoteBook
             if (noteBook.getTechnician() != null) {
                 displayBean.setTechnicianId(Integer.valueOf(noteBook.getTechnician().getId()));
             }
+            if (noteBook.getCreator() != null) {
+                displayBean.setCreatorId(Integer.valueOf(noteBook.getCreator().getId()));
+            }
             // Handle type - it's now a Dictionary entity
             if (noteBook.getType() != null) {
                 displayBean.setType(Integer.valueOf(noteBook.getType().getId()));
@@ -757,6 +763,7 @@ public class NoteBookServiceImpl extends AuditableBaseObjectServiceImpl<NoteBook
             }
             if (noteBook.getCreator() != null) {
                 fullDisplayBean.setCreatorName(noteBook.getCreator().getDisplayName());
+                fullDisplayBean.setCreatorId(Integer.valueOf(noteBook.getCreator().getId()));
             }
             fullDisplayBean.setIsTemplate(noteBook.getIsTemplate());
             fullDisplayBean.setEntriesCount(noteBook.getEntries().size());

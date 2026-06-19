@@ -24,6 +24,7 @@ import "../pathology/PathologyDashboard.css";
 import PageBreadCrumb from "../common/PageBreadCrumb";
 import { usePermissions } from "../../hooks/usePermissions";
 import { Permissions } from "../../constants/roles";
+import { canEditNotebookEntry } from "./utils/noteBookEntryEditPermissions";
 import CustomDatePicker from "../common/CustomDatePicker";
 import {
   Document,
@@ -46,8 +47,31 @@ function NoteBookDashBoard() {
   const { notificationVisible, addNotification, setNotificationVisible } =
     useContext(NotificationContext);
   const { userSessionDetails } = useContext(UserSessionDetailsContext);
-  const { hasRoleForCurrentLabUnit, hasAnyRole } = usePermissions();
+  const {
+    hasRoleForCurrentLabUnit,
+    hasAnyRole,
+    hasPersonaForActiveDepartment,
+  } = usePermissions();
   const canEditTemplate = hasAnyRole(Permissions.CREATE_OR_EDIT_NOTEBOOK);
+
+  const intl = useIntl();
+
+  const canEditDashboardEntry = (entry) => {
+    const entryRoles = entry?.allowedRoles
+      ? Array.isArray(entry.allowedRoles)
+        ? entry.allowedRoles
+        : Array.from(entry.allowedRoles)
+      : [];
+    return canEditNotebookEntry({
+      hasRoleForCurrentLabUnit,
+      hasPersonaForActiveDepartment,
+      templateAllowedRoles: entryRoles,
+      userId: userSessionDetails?.userId,
+      creatorId: entry?.creatorId,
+      technicianId: entry?.technicianId,
+      workflowType: entry?.workflowType,
+    });
+  };
 
   const [statuses, setStatuses] = useState([]);
   const [noteBookEntries, setNoteBookEntries] = useState([]);
@@ -72,7 +96,6 @@ function NoteBookDashBoard() {
     finalized: 0,
   });
   const [loading, setLoading] = useState(true);
-  const intl = useIntl();
 
   useEffect(() => {
     const notice = sessionStorage.getItem("notebookDashboardNotice");
@@ -647,31 +670,7 @@ function NoteBookDashBoard() {
                             <Button
                               kind="secondary"
                               size="sm"
-                              disabled={(() => {
-                                // Check if user has any of the entry's allowedRoles (from template)
-                                const entryRoles = entry.allowedRoles
-                                  ? Array.isArray(entry.allowedRoles)
-                                    ? entry.allowedRoles
-                                    : Array.from(entry.allowedRoles)
-                                  : [];
-                                // User has required role = enabled
-                                if (
-                                  entryRoles.length === 0 ||
-                                  hasRoleForCurrentLabUnit(entryRoles)
-                                ) {
-                                  return false;
-                                }
-                                // User is the assigned technician = enabled
-                                if (
-                                  entry.technicianId != null &&
-                                  userSessionDetails.userId ==
-                                    entry.technicianId
-                                ) {
-                                  return false;
-                                }
-                                // Otherwise disabled
-                                return true;
-                              })()}
+                              disabled={!canEditDashboardEntry(entry)}
                               onClick={() => openNoteBookInstanceView(entry)}
                             >
                               <View size={13} />
@@ -683,56 +682,16 @@ function NoteBookDashBoard() {
                               <Button
                                 kind="primary"
                                 size="sm"
-                                disabled={(() => {
-                                  // Check if user has any of the entry's allowedRoles (from template)
-                                  const entryRoles = entry.allowedRoles
-                                    ? Array.isArray(entry.allowedRoles)
-                                      ? entry.allowedRoles
-                                      : Array.from(entry.allowedRoles)
-                                    : [];
-                                  // User has required role = enabled
-                                  if (
-                                    entryRoles.length === 0 ||
-                                    hasRoleForCurrentLabUnit(entryRoles)
-                                  ) {
-                                    return false;
-                                  }
-                                  // User is the assigned technician = enabled
-                                  if (
-                                    entry.technicianId != null &&
-                                    userSessionDetails.userId ==
-                                      entry.technicianId
-                                  ) {
-                                    return false;
-                                  }
-                                  // Otherwise disabled
-                                  return true;
-                                })()}
-                                title={(() => {
-                                  const entryRoles = entry.allowedRoles
-                                    ? Array.isArray(entry.allowedRoles)
-                                      ? entry.allowedRoles
-                                      : Array.from(entry.allowedRoles)
-                                    : [];
-                                  if (
-                                    entryRoles.length === 0 ||
-                                    hasRoleForCurrentLabUnit(entryRoles)
-                                  ) {
-                                    return undefined;
-                                  }
-                                  if (
-                                    entry.technicianId != null &&
-                                    userSessionDetails.userId ==
-                                      entry.technicianId
-                                  ) {
-                                    return undefined;
-                                  }
-                                  return intl.formatMessage({
-                                    id: "notebook.permission.entry.edit.required",
-                                    defaultMessage:
-                                      "You need permission to create or edit notebook entries",
-                                  });
-                                })()}
+                                disabled={!canEditDashboardEntry(entry)}
+                                title={
+                                  !canEditDashboardEntry(entry)
+                                    ? intl.formatMessage({
+                                        id: "notebook.permission.entry.edit.required",
+                                        defaultMessage:
+                                          "You need permission to create or edit notebook entries",
+                                      })
+                                    : undefined
+                                }
                                 onClick={() => openNoteBookInstanceEdit(entry)}
                               >
                                 <Edit size={13} />
