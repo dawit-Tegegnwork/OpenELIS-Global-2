@@ -1,6 +1,11 @@
 # AHRI Go-Live Runbook
 
-Production target: `192.168.25.25` (`clinlims` database, `openelisglobal-database` container).
+| Environment | Host | App dir |
+|-------------|------|---------|
+| **Test** | `192.168.176.127` | `/opt/OpenELIS-Docker` |
+| **Production** | `192.168.25.25` | `/opt/OpenELIS-Docker` |
+
+Deploy to **test first**, smoke-test, then production (`clinlims` database, `openelisglobal-database` container).
 
 Reference data: `AHRI-20260525T055818Z-3-001.zip` (especially `AHRI/Biorepository/sampledata.xlsx`).
 
@@ -14,9 +19,29 @@ Reference data: `AHRI-20260525T055818Z-3-001.zip` (especially `AHRI/Biorepositor
 
 ## M1 — Storage visibility deploy
 
+**From dev machine** (SSH key + GHCR PAT with `read:packages`):
+
 ```bash
+export GHCR_READ_USER=your_github_username
+export GHCR_READ_TOKEN=ghp_...   # classic PAT, read:packages
+
+# Test server first
+./scripts/deploy-release.sh v2026.06.18.05 192.168.176.127
+
+# After smoke test, production
 ./scripts/deploy-release.sh v2026.06.18.05 192.168.25.25
 ```
+
+**On the server directly** (when SSH from dev machine is unavailable):
+
+```bash
+cd /opt/OpenELIS-Docker
+export GHCR_READ_USER=your_github_username
+export GHCR_READ_TOKEN=ghp_...
+sudo -E bash deploy-release-on-server.sh v2026.06.18.05
+```
+
+Copy `scripts/deploy-release-on-server.sh` to the host first if it is not already there.
 
 If Liquibase lock sticks after restart:
 
