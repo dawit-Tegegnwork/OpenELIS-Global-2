@@ -168,6 +168,10 @@ export const Permissions = {
     Roles.SUPERVISOR,
     Roles.TECHNICIAN,
     Roles.RESULTS,
+    Roles.LABORATORY_TECHNICIAN,
+    Roles.JUNIOR_RESEARCHER,
+    Roles.SENIOR_RESEARCHER,
+    Roles.LAB_MANAGER,
   ],
 
   // @deprecated Use CREATE_OR_EDIT_NOTEBOOK_ENTRY instead
@@ -177,6 +181,10 @@ export const Permissions = {
     Roles.SUPERVISOR,
     Roles.TECHNICIAN,
     Roles.RESULTS,
+    Roles.LABORATORY_TECHNICIAN,
+    Roles.JUNIOR_RESEARCHER,
+    Roles.SENIOR_RESEARCHER,
+    Roles.LAB_MANAGER,
   ],
 
   // Can approve/lock/finalize notebook entries (SRS lab personas)
@@ -334,7 +342,11 @@ export const Permissions = {
   ],
 
   // Can view audit trail
-  VIEW_AUDIT_TRAIL: [Roles.GLOBAL_ADMIN, Roles.AUDIT_TRAIL, Roles.IT_SUPPORT_STAFF],
+  VIEW_AUDIT_TRAIL: [
+    Roles.GLOBAL_ADMIN,
+    Roles.AUDIT_TRAIL,
+    Roles.IT_SUPPORT_STAFF,
+  ],
 
   // Full system administration
   SYSTEM_ADMIN: [Roles.GLOBAL_ADMIN, Roles.SYSTEM_ADMIN],

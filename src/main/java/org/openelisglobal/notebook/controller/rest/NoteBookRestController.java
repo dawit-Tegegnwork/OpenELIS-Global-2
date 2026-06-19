@@ -372,7 +372,11 @@ public class NoteBookRestController extends BaseRestController {
             }
         }
 
-        if (!hasNotebookEditRbac(request)) {
+        // Entry updates: entry-level canEdit (template role, creator, technician) is
+        // sufficient.
+        // Template updates still require sample-processing RBAC in addition to admin
+        // canEdit.
+        if (Boolean.TRUE.equals(notebook.getIsTemplate()) && !hasNotebookEditRbac(request)) {
             return ResponseEntity.status(403).body(Map.of("error", "Insufficient permission to update notebook data"));
         }
 

@@ -22,14 +22,24 @@ import {
   Tile,
 } from "@carbon/react";
 import { Add, Checkmark, Launch } from "@carbon/react/icons";
-import { useCallback, useContext, useEffect, useRef, useState } from "react";
+import {
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { FormattedMessage, useIntl } from "react-intl";
 import { useParams } from "react-router-dom";
-import { Permissions } from "../../constants/roles";
 import { usePermissions } from "../../hooks/usePermissions";
 import UserSessionDetailsContext from "../../UserSessionDetailsContext";
 import { AlertDialog, NotificationKinds } from "../common/CustomNotification";
 import PageBreadCrumb from "../common/PageBreadCrumb";
+import {
+  canEditNotebookEntry,
+  getNotebookEntrySaveDisabledReason,
+} from "./utils/noteBookEntryEditPermissions";
 import {
   NoteBookFormValues,
   NoteBookInitialData,
@@ -173,18 +183,11 @@ const NoteBookInstanceEntryForm = () => {
   const { notificationVisible, setNotificationVisible, addNotification } =
     useContext(NotificationContext);
   const { userSessionDetails } = useContext(UserSessionDetailsContext);
-  const { hasRoleForCurrentLabUnit } = usePermissions();
+  const { hasRoleForCurrentLabUnit, hasPersonaForActiveDepartment } =
+    usePermissions();
 
   // Template's allowed roles - will be set when template data is loaded
   const [templateAllowedRoles, setTemplateAllowedRoles] = useState([]);
-
-  // Check if user can create/edit notebook entries for this specific template
-  // Uses the template's allowedRoles if available, otherwise falls back to generic permissions
-  const canEditEntry = hasRoleForCurrentLabUnit(
-    templateAllowedRoles.length > 0
-      ? templateAllowedRoles
-      : Permissions.CREATE_OR_EDIT_NOTEBOOK_ENTRY,
-  );
 
   const [statuses, setStatuses] = useState([]);
   const [types, setTypes] = useState([]);
@@ -209,6 +212,28 @@ const NoteBookInstanceEntryForm = () => {
   const [questionnaires, setQuestionnaires] = useState([]);
   const [projectTags, setProjectTags] = useState([]); // Template tags (for display only)
   const [projectFiles, setProjectFiles] = useState([]); // Template files (for display only)
+
+  const canEditEntry = useMemo(
+    () =>
+      canEditNotebookEntry({
+        hasRoleForCurrentLabUnit,
+        hasPersonaForActiveDepartment,
+        templateAllowedRoles,
+        userId: userSessionDetails?.userId,
+        creatorId: noteBookData.creatorId,
+        technicianId: noteBookData.technicianId,
+        workflowType: noteBookData.workflowType,
+      }),
+    [
+      hasRoleForCurrentLabUnit,
+      hasPersonaForActiveDepartment,
+      templateAllowedRoles,
+      userSessionDetails?.userId,
+      noteBookData.creatorId,
+      noteBookData.technicianId,
+      noteBookData.workflowType,
+    ],
+  );
 
   const handleSubmit = () => {
     if (isSubmitting) {
@@ -563,22 +588,22 @@ const NoteBookInstanceEntryForm = () => {
   // Check if user is authorized to create entries for this notebook
   // Uses role-based permission checking: Global Roles → AllLabUnits → Specific Lab Unit
   // @param {Set|Array} allowedRoles - The template's specific allowedRoles
-  const checkAuthorization = (allowedRoles) => {
-    // Convert Set to Array if needed
+  const checkAuthorization = (allowedRoles, entryContext = {}) => {
     const rolesArray = allowedRoles
       ? Array.isArray(allowedRoles)
         ? allowedRoles
         : Array.from(allowedRoles)
       : [];
 
-    // Check if user has any of the notebook's specific allowedRoles
-    // hasRoleForCurrentLabUnit checks:
-    // 1. Global Admin (always allowed)
-    // 2. Global roles (userSessionDetails.roles)
-    // 3. AllLabUnits roles (userSessionDetails.userLabRolesMap["AllLabUnits"])
-    // 4. Specific lab unit roles (userSessionDetails.userLabRolesMap[loginLabUnit])
-    const hasAccess =
-      rolesArray.length === 0 || hasRoleForCurrentLabUnit(rolesArray);
+    const hasAccess = canEditNotebookEntry({
+      hasRoleForCurrentLabUnit,
+      hasPersonaForActiveDepartment,
+      templateAllowedRoles: rolesArray,
+      userId: userSessionDetails?.userId,
+      creatorId: entryContext.creatorId,
+      technicianId: entryContext.technicianId,
+      workflowType: entryContext.workflowType,
+    });
 
     if (!hasAccess) {
       addNotification({
@@ -610,7 +635,9 @@ const NoteBookInstanceEntryForm = () => {
         );
 
         // Check authorization using template's specific allowedRoles
-        if (!checkAuthorization(allowedRoles)) {
+        if (
+          !checkAuthorization(allowedRoles, { workflowType: data.workflowType })
+        ) {
           setLoading(false);
           return;
         }
@@ -662,7 +689,13 @@ const NoteBookInstanceEntryForm = () => {
               );
 
               // Check authorization using template's specific allowedRoles
-              if (!checkAuthorization(allowedRoles)) {
+              if (
+                !checkAuthorization(allowedRoles, {
+                  creatorId: data.creatorId,
+                  technicianId: data.technicianId,
+                  workflowType: data.workflowType,
+                })
+              ) {
                 setLoading(false);
                 return;
               }
@@ -711,8 +744,10 @@ const NoteBookInstanceEntryForm = () => {
                 protocol: templateData.protocol,
                 content: templateData.content,
                 questionnaireFhirUuid: templateData.questionnaireFhirUuid,
-                technicianId: templateData.technicianId,
-                technicianName: templateData.technicianName,
+                technicianId: data.technicianId ?? templateData.technicianId,
+                technicianName:
+                  data.technicianName || templateData.technicianName,
+                creatorId: data.creatorId,
                 // Keep instance-specific properties
                 id: data.id,
                 status: data.status,
@@ -748,7 +783,14 @@ const NoteBookInstanceEntryForm = () => {
           );
 
           // Check authorization - if no allowedRoles, fall back to generic permissions
-          if (allowedRoles.length > 0 && !checkAuthorization(allowedRoles)) {
+          if (
+            allowedRoles.length > 0 &&
+            !checkAuthorization(allowedRoles, {
+              creatorId: data.creatorId,
+              technicianId: data.technicianId,
+              workflowType: data.workflowType,
+            })
+          ) {
             setLoading(false);
             return;
           }
@@ -826,6 +868,26 @@ const NoteBookInstanceEntryForm = () => {
         </Column>
       </Grid>
       {notificationVisible === true ? <AlertDialog /> : ""}
+      {isViewMode && canEditEntry && (
+        <Grid fullWidth={true}>
+          <Column lg={16} md={8} sm={4}>
+            <InlineNotification
+              kind="info"
+              lowContrast
+              hideCloseButton
+              subtitle={intl.formatMessage({
+                id: "notebook.permission.entry.viewMode.banner",
+                defaultMessage:
+                  "Read-only — click Edit on the dashboard to change workflow type and save.",
+              })}
+              title={intl.formatMessage({
+                id: "notebook.permission.entry.viewMode.title",
+                defaultMessage: "View mode",
+              })}
+            />
+          </Column>
+        </Grid>
+      )}
       {loading && <Loading></Loading>}
       <Grid fullWidth={true} className="orderLegendBody">
         {/* Status & Metadata Section */}
@@ -1826,15 +1888,11 @@ const NoteBookInstanceEntryForm = () => {
               <Button
                 kind="primary"
                 disabled={!canEditEntry || isSubmitting || isViewMode}
-                title={
-                  !canEditEntry
-                    ? intl.formatMessage({
-                        id: "notebook.permission.entry.edit.required",
-                        defaultMessage:
-                          "You need permission to create or edit notebook entries",
-                      })
-                    : undefined
-                }
+                title={getNotebookEntrySaveDisabledReason({
+                  intl,
+                  canEditEntry,
+                  isViewMode,
+                })}
                 onClick={() => handleSubmit()}
               >
                 <FormattedMessage id="label.button.save" />
