@@ -47,6 +47,12 @@ import {
   PAGE_SAMPLES_BATCH_SIZE,
 } from "./biorepositoryStorageHelpers";
 import { formatBiorepositoryLocationLevel } from "./biorepositoryDisplayHelpers";
+import BioSampleDetailModal from "./BioSampleDetailModal";
+import {
+  buildReceptionTableColumns,
+  extractLabId,
+  sortBioSamplesByManifestSno,
+} from "./biorepositoryExcelColumns";
 import "../../workflow/NotebookWorkflow.css";
 
 /**
@@ -199,6 +205,8 @@ function BiorepositoryStorageAssignmentPage({
   const [confirmReassignModalOpen, setConfirmReassignModalOpen] =
     useState(false);
   const [samplesToReassign, setSamplesToReassign] = useState([]);
+  const [detailModalOpen, setDetailModalOpen] = useState(false);
+  const [selectedDetailSample, setSelectedDetailSample] = useState(null);
 
   /**
    * Validate storage condition against sample temperature requirements.
@@ -323,30 +331,52 @@ function BiorepositoryStorageAssignmentPage({
             biosafetyLevel: bioSample.biosafetyLevel,
             requiredTempMin: bioSample.requiredTempMin,
             requiredTempMax: bioSample.requiredTempMax,
-            barcode: bioSample.barcode || bioSample.externalId,
+            manifestSno: bioSample.manifestSno,
+            externalId: bioSample.externalId,
+            specialHandling: bioSample.specialHandling,
+            originLab: bioSample.originLab,
+            projectId: bioSample.projectId,
+            receiptDate: bioSample.receiptDate,
+            arrivalCondition: bioSample.arrivalCondition,
+            collectionDate: bioSample.collectionDate,
+            barcode: bioSample.barcode,
+            sampleType: bioSample.sampleType,
+            workflowStatus: bioSample.workflowStatus,
+            accessionNumber: bioSample.accessionNumber,
+            bioSampleRecord: bioSample,
           };
         }
       });
 
       setBioSampleData((prev) => ({ ...prev, ...bioSampleMap }));
       setSamples((prevSamples) =>
-        prevSamples.map((sample) => {
-          const bioData = bioSampleMap[sample.sampleItemId];
-          if (bioData) {
-            return {
-              ...sample,
-              barcode: bioData.barcode || sample.barcode,
-              externalId:
-                bioData.barcode || sample.externalId || sample.barcode,
-              retentionPolicyName:
-                bioData.retentionPolicyName || sample.retentionPolicyName,
-              retentionExpiryDate:
-                bioData.retentionExpiryDate || sample.retentionExpiryDate,
-              biosafetyLevel: bioData.biosafetyLevel || sample.biosafetyLevel,
-            };
-          }
-          return sample;
-        }),
+        sortBioSamplesByManifestSno(
+          prevSamples.map((sample) => {
+            const bioData = bioSampleMap[sample.sampleItemId];
+            if (bioData) {
+              return {
+                ...sample,
+                retentionPolicyName:
+                  bioData.retentionPolicyName || sample.retentionPolicyName,
+                retentionExpiryDate:
+                  bioData.retentionExpiryDate || sample.retentionExpiryDate,
+                biosafetyLevel: bioData.biosafetyLevel || sample.biosafetyLevel,
+                manifestSno: bioData.manifestSno ?? sample.manifestSno,
+                externalId:
+                  bioData.externalId ||
+                  extractLabId(bioData) ||
+                  sample.externalId,
+                barcode: bioData.barcode || sample.barcode,
+                projectId: bioData.projectId || sample.projectId,
+                originLab: bioData.originLab || sample.originLab,
+                receiptDate: bioData.receiptDate || sample.receiptDate,
+                bioSampleRecord:
+                  bioData.bioSampleRecord || sample.bioSampleRecord,
+              };
+            }
+            return sample;
+          }),
+        ),
       );
     };
 
@@ -363,28 +393,32 @@ function BiorepositoryStorageAssignmentPage({
 
   const transformPageSample = useCallback((sample) => {
     const normalizedStatus = deriveStoragePageStatus(sample);
-    const barcode =
-      sample.barcode || sample.data?.barcode || sample.externalId || null;
-    const displayId =
-      barcode ||
-      sample.accessionNumber ||
-      (sample.sampleItemId != null ? String(sample.sampleItemId) : "-");
+    const labId =
+      sample.externalId || extractLabId(sample) || sample.accessionNumber || "";
     return {
       id: String(sample.id || sample.sampleItemId),
       sampleItemId: sample.sampleItemId,
-      barcode,
-      externalId: displayId,
+      manifestSno: sample.manifestSno ?? null,
+      barcode: sample.barcode || sample.externalId || "-",
+      externalId:
+        labId ||
+        (sample.sampleItemId != null ? String(sample.sampleItemId) : "-"),
       accessionNumber:
         sample.accessionNumber ||
         sample.externalId ||
         (sample.sampleItemId != null ? String(sample.sampleItemId) : "-"),
       sampleType: sample.sampleType || sample.typeOfSample?.description || "-",
       collectionDate: sample.collectionDate,
+      receiptDate: sample.receiptDate
+        ? new Date(sample.receiptDate).toLocaleDateString()
+        : "-",
+      projectId: sample.projectId || sample.data?.projectId || "-",
+      originLab: sample.originLab || sample.data?.originLab || "-",
+      workflowStatus: sample.workflowStatus || normalizedStatus,
       status: normalizedStatus,
       pageStatus: normalizedStatus,
       biosafetyLevel: sample.data?.biosafetyLevel || sample.biosafetyLevel,
       projectName: sample.data?.projectName || sample.projectName,
-      originLab: sample.data?.originLab || sample.originLab,
       storageRoom: sample.data?.storageRoom || sample.storageRoom,
       storageFreezer: sample.data?.storageFreezer || sample.storageFreezer,
       storageShelf: sample.data?.storageShelf || sample.storageShelf,
@@ -446,7 +480,7 @@ function BiorepositoryStorageAssignmentPage({
       }
 
       setTotalSampleCount(totalCount);
-      setSamples(firstTransformed);
+      setSamples(sortBioSamplesByManifestSno(firstTransformed));
       setLoadProgress({
         loaded: firstTransformed.length,
         total: totalCount,
@@ -495,7 +529,9 @@ function BiorepositoryStorageAssignmentPage({
         }
 
         offset += transformedBatch.length;
-        setSamples((prev) => [...prev, ...transformedBatch]);
+        setSamples((prev) =>
+          sortBioSamplesByManifestSno([...prev, ...transformedBatch]),
+        );
         setLoadProgress({ loaded: offset, total: totalCount });
 
         const batchIds = transformedBatch
@@ -520,74 +556,43 @@ function BiorepositoryStorageAssignmentPage({
     }
   }, [pageData?.id, fetchBioSampleRetentionData, transformPageSample, intl]);
 
-  const mergeBoxLayoutMaps = useCallback((serverLayout, routingLayout) => {
-    const merged = { ...(serverLayout || {}) };
-    Object.entries(routingLayout || {}).forEach(([coord, info]) => {
-      if (!merged[coord]) {
-        merged[coord] = info;
-      }
-    });
-    return merged;
-  }, []);
-
   // Load box occupancy from storage API
-  const loadBoxOccupancy = useCallback(
-    (boxId) => {
-      if (!boxId) {
-        return;
-      }
+  const loadBoxOccupancy = useCallback((boxId) => {
+    if (!boxId) return;
 
-      getFromOpenElisServer(
-        `/rest/storage/boxes/${boxId}/occupancy`,
-        (response) => {
-          if (!componentMounted.current) {
-            return;
-          }
-          if (!response || response.error) {
-            setError(
-              intl.formatMessage({
-                id: "biorepository.storage.occupancyLoadError",
-                defaultMessage:
-                  "Could not load box occupancy. Check storage permissions or try again.",
-              }),
-            );
-            return;
-          }
+    getFromOpenElisServer(
+      `/rest/storage/boxes/${boxId}/occupancy`,
+      (response) => {
+        if (componentMounted.current && response) {
           const occupiedCoordinates = response.occupiedCoordinates || {};
-          setBoxLayout((prev) => mergeBoxLayoutMaps(occupiedCoordinates, prev));
-        },
-      );
-    },
-    [intl, mergeBoxLayoutMaps],
-  );
-
-  const handleRefreshSamples = useCallback(() => {
-    loadPageSamples();
-    if (storageSelection.box?.id) {
-      setBoxLayout({});
-      loadBoxOccupancy(storageSelection.box.id);
-    }
-  }, [loadPageSamples, loadBoxOccupancy, storageSelection.box?.id]);
+          setBoxLayout(occupiedCoordinates);
+        }
+      },
+    );
+  }, []);
 
   // Handle storage hierarchy selection change
   const handleStorageSelectionChange = useCallback(
     (selection) => {
       setStorageSelection(selection);
       setWellAssignments({});
-      setBoxLayout({});
       if (selection.box?.id) {
         loadBoxOccupancy(selection.box.id);
+      } else {
+        setBoxLayout({});
       }
     },
     [loadBoxOccupancy],
   );
 
-  // Handle box layout loaded (from StorageHierarchySelector - merge routing wells)
+  // Handle box layout loaded (from StorageHierarchySelector - fallback)
   const handleBoxLayoutLoaded = useCallback(
     (wells) => {
-      setBoxLayout((prev) => mergeBoxLayoutMaps(prev, wells || {}));
+      if (Object.keys(boxLayout).length === 0) {
+        setBoxLayout(wells || {});
+      }
     },
-    [mergeBoxLayoutMaps],
+    [boxLayout],
   );
 
   // Handle well click from BoxLayoutViewer
@@ -601,10 +606,7 @@ function BiorepositoryStorageAssignmentPage({
               defaultMessage:
                 "Well {well} is already occupied by {sample}. Choose another position.",
             },
-            {
-              well: wellCoord,
-              sample: wellInfo.externalId || wellInfo.barcode || "a sample",
-            },
+            { well: wellCoord, sample: wellInfo.externalId || "a sample" },
           ),
         );
         return;
@@ -712,10 +714,6 @@ function BiorepositoryStorageAssignmentPage({
       .map((s) => s.sampleItemId)
       .filter(Boolean);
     fetchBioSampleData(sampleItemIds);
-
-    if (storageSelection.box?.id) {
-      loadBoxOccupancy(storageSelection.box.id);
-    }
   };
 
   const handleConfirmReassignment = () => {
@@ -779,9 +777,7 @@ function BiorepositoryStorageAssignmentPage({
         const sample = samples.find((s) => s.id === sampleId);
         combined[wellCoord] = {
           sampleItemId: sampleId,
-          externalId: sample?.barcode || sample?.externalId || sampleId,
-          barcode: sample?.barcode || sample?.externalId,
-          accessionNumber: sample?.accessionNumber,
+          externalId: sample?.externalId || sampleId,
           pending: true,
         };
       }
@@ -1063,6 +1059,58 @@ function BiorepositoryStorageAssignmentPage({
     }
   };
 
+  const storageSampleColumns = useMemo(() => {
+    const baseColumns = buildReceptionTableColumns(intl).filter(
+      (column) => !["actions", "workflowStatus"].includes(column.key),
+    );
+    return [
+      ...baseColumns,
+      {
+        key: "storage",
+        header: intl.formatMessage({
+          id: "biorepository.column.storage",
+          defaultMessage: "Storage Location",
+        }),
+        render: (value, row) => (
+          <div style={{ display: "flex", gap: "4px", alignItems: "center" }}>
+            {getStorageTag(row)}
+            {getConditionTag(row)}
+          </div>
+        ),
+      },
+      {
+        key: "assignedBy",
+        header: intl.formatMessage({
+          id: "biorepository.column.assignedBy",
+          defaultMessage: "Assigned By",
+        }),
+      },
+      {
+        key: "retentionPolicyName",
+        header: intl.formatMessage({
+          id: "biorepository.column.retentionPolicy",
+          defaultMessage: "Retention Policy",
+        }),
+        render: (value) => value || "-",
+      },
+      {
+        key: "retentionExpiryDate",
+        header: intl.formatMessage({
+          id: "biorepository.column.retentionExpiry",
+          defaultMessage: "Expiry Date",
+        }),
+        render: (value) => (value ? new Date(value).toLocaleDateString() : "-"),
+      },
+      {
+        key: "status",
+        header: intl.formatMessage({
+          id: "biorepository.column.status",
+          defaultMessage: "Status",
+        }),
+      },
+    ];
+  }, [intl]);
+
   // Check if page has real ID
   const hasRealPageId =
     pageData?.id && !String(pageData.id).startsWith("default-");
@@ -1162,7 +1210,7 @@ function BiorepositoryStorageAssignmentPage({
           kind="ghost"
           size="sm"
           renderIcon={Renew}
-          onClick={handleRefreshSamples}
+          onClick={loadPageSamples}
         >
           <FormattedMessage
             id="biorepository.storage.refresh"
@@ -1202,87 +1250,15 @@ function BiorepositoryStorageAssignmentPage({
           samples={samples}
           selectedIds={selectedSampleIds}
           onSelectionChange={setSelectedSampleIds}
+          onSampleClick={(sample) => {
+            setSelectedDetailSample(sample.bioSampleRecord || sample);
+            setDetailModalOpen(true);
+          }}
           statusFilter={statusFilter}
           onStatusFilterChange={setStatusFilter}
           showSelection={true}
           loading={loading}
-          columns={[
-            {
-              key: "externalId",
-              header: intl.formatMessage({
-                id: "biorepository.column.externalId",
-                defaultMessage: "Barcode/ID",
-              }),
-            },
-            {
-              key: "sampleType",
-              header: intl.formatMessage({
-                id: "biorepository.column.sampleType",
-                defaultMessage: "Sample Type",
-              }),
-            },
-            {
-              key: "biosafetyLevel",
-              header: intl.formatMessage({
-                id: "biorepository.column.biosafetyLevel",
-                defaultMessage: "BSL",
-              }),
-              render: (value) =>
-                value ? (
-                  <Tag type={getBiosafetyBadgeType(value)} size="sm">
-                    {value}
-                  </Tag>
-                ) : (
-                  "-"
-                ),
-            },
-            {
-              key: "storage",
-              header: intl.formatMessage({
-                id: "biorepository.column.storage",
-                defaultMessage: "Storage Location",
-              }),
-              render: (value, row) => (
-                <div
-                  style={{ display: "flex", gap: "4px", alignItems: "center" }}
-                >
-                  {getStorageTag(row)}
-                  {getConditionTag(row)}
-                </div>
-              ),
-            },
-            {
-              key: "assignedBy",
-              header: intl.formatMessage({
-                id: "biorepository.column.assignedBy",
-                defaultMessage: "Assigned By",
-              }),
-            },
-            {
-              key: "retentionPolicyName",
-              header: intl.formatMessage({
-                id: "biorepository.column.retentionPolicy",
-                defaultMessage: "Retention Policy",
-              }),
-              render: (value) => value || "-",
-            },
-            {
-              key: "retentionExpiryDate",
-              header: intl.formatMessage({
-                id: "biorepository.column.retentionExpiry",
-                defaultMessage: "Expiry Date",
-              }),
-              render: (value) =>
-                value ? new Date(value).toLocaleDateString() : "-",
-            },
-            {
-              key: "status",
-              header: intl.formatMessage({
-                id: "biorepository.column.status",
-                defaultMessage: "Status",
-              }),
-            },
-          ]}
+          columns={storageSampleColumns}
         />
       </div>
 
@@ -1528,8 +1504,8 @@ function BiorepositoryStorageAssignmentPage({
                   <BoxLayoutViewer
                     boxId={storageSelection.box.id}
                     layout={getCombinedLayout()}
-                    rows={storageSelection.box.rows || 8}
-                    columns={storageSelection.box.columns || 12}
+                    rows={storageSelection.box.rows || 9}
+                    columns={storageSelection.box.columns || 9}
                     positionSchemaHint={
                       storageSelection.box.positionSchemaHint || "number-number"
                     }
@@ -1632,6 +1608,15 @@ function BiorepositoryStorageAssignmentPage({
           </div>
         </div>
       </Modal>
+
+      <BioSampleDetailModal
+        open={detailModalOpen}
+        sample={selectedDetailSample}
+        onClose={() => {
+          setDetailModalOpen(false);
+          setSelectedDetailSample(null);
+        }}
+      />
     </div>
   );
 }
