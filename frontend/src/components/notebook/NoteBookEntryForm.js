@@ -93,7 +93,7 @@ const isCtdOrderTypesNotebook = (notebook, departments = []) => {
     return true;
   }
   const depts = departments.length ? departments : notebook?.departments || [];
-  return depts.some((dept) => {
+  const deptMatch = depts.some((dept) => {
     const name = String(dept?.value || dept?.name || dept?.label || "")
       .trim()
       .toLowerCase();
@@ -103,6 +103,20 @@ const isCtdOrderTypesNotebook = (notebook, departments = []) => {
       name.includes("medical laboratory")
     );
   });
+  if (deptMatch) {
+    return true;
+  }
+
+  // Fallback to keyword matching for CTD instances where workflowType/departments
+  // can be missing in the API response.
+  const text = String(
+    notebook?.protocol ||
+      notebook?.title ||
+      notebook?.objective ||
+      notebook?.content ||
+      "",
+  ).toLowerCase();
+  return /\bctd\b/i.test(text);
 };
 
 const NoteBookEntryForm = () => {

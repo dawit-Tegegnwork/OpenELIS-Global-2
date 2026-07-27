@@ -102,7 +102,7 @@ const isCtdOrderTypesNotebook = (notebook, departments = []) => {
     return true;
   }
   const depts = departments.length ? departments : notebook?.departments || [];
-  return depts.some((dept) => {
+  const deptMatch = depts.some((dept) => {
     const name = String(dept?.value || dept?.name || dept?.label || "")
       .trim()
       .toLowerCase();
@@ -112,6 +112,22 @@ const isCtdOrderTypesNotebook = (notebook, departments = []) => {
       name.includes("medical laboratory")
     );
   });
+  if (deptMatch) {
+    return true;
+  }
+
+  // Some CTD instances/templates arrive from the API without workflowType
+  // and without resolved departments. Fallback to keyword matching.
+  const text = String(
+    notebook?.protocol ||
+      notebook?.title ||
+      notebook?.objective ||
+      notebook?.content ||
+      "",
+  ).toLowerCase();
+
+  // Match CTD as a standalone word to reduce false positives.
+  return /\bctd\b/i.test(text);
 };
 
 const isBiorepositoryNotebook = (notebook) =>
