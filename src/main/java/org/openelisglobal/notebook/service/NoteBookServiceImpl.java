@@ -806,8 +806,16 @@ public class NoteBookServiceImpl extends AuditableBaseObjectServiceImpl<NoteBook
                     Hibernate.initialize(parentTemplate.getAllowedRoles());
                     fullDisplayBean.setAllowedRoles(parentTemplate.getAllowedRoles());
 
-                    Hibernate.initialize(parentTemplate.getAllowedTestIds());
-                    fullDisplayBean.setAllowedTestIds(new java.util.HashSet<>(parentTemplate.getAllowedTestIds()));
+                    // Prefer this entry's saved order-type filter; fall back to parent
+                    // template only when the entry has none configured.
+                    Hibernate.initialize(noteBook.getAllowedTestIds());
+                    java.util.Set<Integer> allowedTests = new java.util.HashSet<>(
+                            noteBook.getAllowedTestIds());
+                    if (allowedTests.isEmpty()) {
+                        Hibernate.initialize(parentTemplate.getAllowedTestIds());
+                        allowedTests = new java.util.HashSet<>(parentTemplate.getAllowedTestIds());
+                    }
+                    fullDisplayBean.setAllowedTestIds(allowedTests);
                 } else {
                     // Fallback to own settings
                     Hibernate.initialize(noteBook.getOrganizations());
